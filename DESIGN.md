@@ -263,6 +263,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先做最小 root-level 类型流校验，不引入表达式绑定语法，保持语法面稳定。
 
+### 2026-02-07 - Phase 6.5：Workflow Output 显式绑定语法（`= symbol`）
+
+- **变更内容**：为 output 字段增加可选显式来源绑定 `field: Type = symbol.path;`；语义层新增绑定符号可达性与类型一致性校验。
+- **变更理由**：将 output 合同从“按类型猜测映射”推进到“声明式绑定”，提高 AI 与人类对数据流意图的可读性和可验证性。
+- **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先支持 root symbol 与保守 member-path warning，不一次性引入复杂投影类型系统。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

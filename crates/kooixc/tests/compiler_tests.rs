@@ -702,6 +702,96 @@ output {
 }
 
 #[test]
+fn accepts_workflow_output_contract_with_explicit_source_binding() {
+    let source = r#"
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer = s1;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("output field 'result'")
+    }));
+}
+
+#[test]
+fn rejects_workflow_output_binding_to_unknown_symbol() {
+    let source = r#"
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer = ghost;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("binds to 'ghost' but symbol is not available")
+    }));
+}
+
+#[test]
+fn rejects_workflow_output_binding_type_mismatch() {
+    let source = r#"
+fn summarize(input: Query) -> Summary;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: summarize(input);
+}
+output {
+  result: Answer = s1;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("binds 's1' as 'Summary' but declared type is 'Answer'")
+    }));
+}
+
+#[test]
+fn warns_on_workflow_output_binding_member_access_until_supported() {
+    let source = r#"
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer = s1.value;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("output field 'result' binds 's1.value' with member access")
+    }));
+}
+
+#[test]
 fn rejects_workflow_requires_without_top_level_capability() {
     let source = r#"
 workflow flow() -> Unit

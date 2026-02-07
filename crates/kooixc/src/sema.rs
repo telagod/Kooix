@@ -948,18 +948,67 @@ fn validate_workflow_output_contract(
             ));
         }
 
-        let has_matching_source = available_symbols
-            .values()
-            .any(|symbol_type| types_compatible_for_workflow_call(&field.ty, symbol_type));
+        match &field.source {
+            Some(source) => {
+                let Some(root) = source.first() else {
+                    continue;
+                };
 
-        if !has_matching_source {
-            diagnostics.push(Diagnostic::warning(
-                format!(
-                    "workflow '{}' output field '{}' has type '{}' but no matching source symbol exists in workflow scope",
-                    workflow.name, field.name, field.ty
-                ),
-                workflow.span,
-            ));
+                let Some(source_type) = available_symbols.get(root) else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "workflow '{}' output field '{}' binds to '{}' but symbol is not available in workflow scope (params + previous step ids)",
+                            workflow.name,
+                            field.name,
+                            format_workflow_call_path(source)
+                        ),
+                        workflow.span,
+                    ));
+                    continue;
+                };
+
+                if source.len() > 1 {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' output field '{}' binds '{}' with member access; static type-flow for member paths is not implemented yet",
+                            workflow.name,
+                            field.name,
+                            format_workflow_call_path(source),
+                        ),
+                        workflow.span,
+                    ));
+                    continue;
+                }
+
+                if !types_compatible_for_workflow_call(&field.ty, source_type) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "workflow '{}' output field '{}' binds '{}' as '{}' but declared type is '{}'",
+                            workflow.name,
+                            field.name,
+                            root,
+                            source_type,
+                            field.ty
+                        ),
+                        workflow.span,
+                    ));
+                }
+            }
+            None => {
+                let has_matching_source = available_symbols
+                    .values()
+                    .any(|symbol_type| types_compatible_for_workflow_call(&field.ty, symbol_type));
+
+                if !has_matching_source {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' output field '{}' has type '{}' but no matching source symbol exists in workflow scope",
+                            workflow.name, field.name, field.ty
+                        ),
+                        workflow.span,
+                    ));
+                }
+            }
         }
     }
 

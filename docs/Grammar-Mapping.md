@@ -116,14 +116,14 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
   - Parser subset:
     - supports `intent`, `requires`, mandatory `steps`
     - supports step: `id: call(...) [ensures [...]] [on_fail -> action(...)] ;`
-    - supports optional `output { field: Type; ... }` and `evidence`
+    - supports optional `output { field: Type [= symbol.path]; ... }` and `evidence`
   - Sema subset:
     - duplicate workflow name error
     - duplicate step id error
     - step call target declaration warning (`fn`/`workflow`/`agent`)
     - step call signature checks (arity + basic argument type checks)
     - step argument symbol/type-flow check (`workflow params` + `previous step ids` as symbols)
-    - output contract checks (duplicate fields, return type exposure, source symbol type coverage)
+    - output contract checks (duplicate fields, return type exposure, explicit source binding and type coverage)
     - `on_fail` action legality (`retry/fallback/abort/compensate`)
     - workflow-level `requires` top-level capability existence
     - workflow evidence trace/metrics checks

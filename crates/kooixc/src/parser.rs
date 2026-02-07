@@ -543,14 +543,7 @@ impl<'a> Parser<'a> {
             return Ok(WorkflowCallArg::Number(value));
         }
         if self.at_ident() {
-            let (head, _) = self.expect_ident()?;
-            let mut segments = vec![head];
-            while self.at_dot() {
-                self.advance();
-                let (segment, _) = self.expect_ident()?;
-                segments.push(segment);
-            }
-            return Ok(WorkflowCallArg::Path(segments));
+            return Ok(WorkflowCallArg::Path(self.parse_symbol_path()?));
         }
 
         Err(Diagnostic::error(
@@ -694,12 +687,29 @@ impl<'a> Parser<'a> {
             let (name, _) = self.expect_ident()?;
             self.expect_colon()?;
             let ty = self.parse_type_ref()?;
+            let source = if self.at_eq() {
+                self.expect_eq()?;
+                Some(self.parse_symbol_path()?)
+            } else {
+                None
+            };
             self.expect_semicolon()?;
-            fields.push(OutputField { name, ty });
+            fields.push(OutputField { name, ty, source });
         }
 
         self.expect_rbrace()?;
         Ok(fields)
+    }
+
+    fn parse_symbol_path(&mut self) -> Result<Vec<String>, Diagnostic> {
+        let (head, _) = self.expect_ident()?;
+        let mut segments = vec![head];
+        while self.at_dot() {
+            self.advance();
+            let (segment, _) = self.expect_ident()?;
+            segments.push(segment);
+        }
+        Ok(segments)
     }
 
     fn parse_identifier_list(&mut self) -> Result<Vec<String>, Diagnostic> {

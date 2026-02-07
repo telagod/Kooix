@@ -146,6 +146,7 @@ pub enum WorkflowCallArg {
 pub struct OutputField {
     pub name: String,
     pub ty: TypeRef,
+    pub source: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
