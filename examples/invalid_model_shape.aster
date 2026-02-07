@@ -1,0 +1,4 @@
+cap Model<"openai", "gpt-4o-mini">;
+
+fn summarize(doc: Text) -> Summary !{model(openai)} requires [Model<"openai", "gpt-4o-mini">];
+

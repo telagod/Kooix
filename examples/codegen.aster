@@ -1,0 +1,6 @@
+cap Net<"api.openai.com">;
+
+fn answer() -> Int;
+fn noop() -> Unit;
+fn main() -> Int;
+fn call_remote() -> String !{net("api.openai.com")} requires [Net<"api.openai.com">];

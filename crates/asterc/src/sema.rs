@@ -1,0 +1,1427 @@
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use crate::ast::{
+    EnsureClause, FailureAction, FailureValue, PredicateValue, Program, TypeArg, TypeRef,
+};
+use crate::error::{Diagnostic, Span};
+use crate::hir::{lower_program, HirAgent, HirEffect, HirFunction, HirWorkflow};
+
+pub fn check_program(program: &Program) -> Vec<Diagnostic> {
+    let hir = lower_program(program);
+    let mut diagnostics = Vec::new();
+
+    let mut declared_capability_instances = HashSet::new();
+    let mut declared_capability_heads = HashSet::new();
+
+    for capability in &hir.capabilities {
+        let capability_name = capability.ty.to_string();
+        if !declared_capability_instances.insert(capability_name.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate capability declaration '{capability_name}'"),
+                capability.span,
+            ));
+        }
+        declared_capability_heads.insert(capability.ty.head().to_string());
+        validate_capability_shape(
+            &capability.ty,
+            "top-level capability",
+            capability.span,
+            &mut diagnostics,
+        );
+    }
+
+    let mut declared_functions = HashSet::new();
+
+    for function in &hir.functions {
+        if !declared_functions.insert(function.name.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate function declaration '{}'", function.name),
+                function.span,
+            ));
+        }
+
+        validate_intent(function, &mut diagnostics);
+
+        if !function.effects.is_empty() && function.requires.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "function '{}' declares effects but no required capabilities",
+                    function.name
+                ),
+                function.span,
+            ));
+        }
+
+        let mut seen_requires = HashSet::new();
+        for required in &function.requires {
+            if !seen_requires.insert(required.to_string()) {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "function '{}' repeats required capability '{}'",
+                        function.name, required
+                    ),
+                    function.span,
+                ));
+            }
+            validate_required_capability(
+                required,
+                function,
+                &declared_capability_heads,
+                &declared_capability_instances,
+                &mut diagnostics,
+            );
+        }
+
+        let mut seen_effects = HashSet::new();
+        for effect in &function.effects {
+            let effect_key = format!(
+                "{}:{}",
+                effect.name,
+                effect.argument.as_deref().unwrap_or("")
+            );
+            if !seen_effects.insert(effect_key) {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "function '{}' repeats effect '{}({})'",
+                        function.name,
+                        effect.name,
+                        effect.argument.as_deref().unwrap_or("")
+                    ),
+                    function.span,
+                ));
+            }
+
+            validate_effect_contract(effect, function, &mut diagnostics);
+        }
+
+        if function.effects.is_empty() && !function.requires.is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "function '{}' declares capabilities but has no effects",
+                    function.name
+                ),
+                function.span,
+            ));
+        }
+
+        validate_ensures(function, &mut diagnostics);
+        validate_failure(function, &mut diagnostics);
+        validate_evidence(function, &mut diagnostics);
+    }
+
+    let mut declared_workflows = HashSet::new();
+    for workflow in &hir.workflows {
+        if !declared_workflows.insert(workflow.name.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate workflow declaration '{}'", workflow.name),
+                workflow.span,
+            ));
+        }
+
+        validate_workflow(
+            workflow,
+            &declared_capability_heads,
+            &declared_capability_instances,
+            &mut diagnostics,
+        );
+    }
+
+    let mut declared_agents = HashSet::new();
+    for agent in &hir.agents {
+        if !declared_agents.insert(agent.name.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate agent declaration '{}'", agent.name),
+                agent.span,
+            ));
+        }
+
+        validate_agent(
+            agent,
+            &declared_capability_heads,
+            &declared_capability_instances,
+            &mut diagnostics,
+        );
+    }
+
+    diagnostics
+}
+
+fn validate_agent(
+    agent: &HirAgent,
+    declared_capability_heads: &HashSet<String>,
+    declared_capability_instances: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(intent) = &agent.intent {
+        if intent.trim().is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!("agent '{}' declares an empty intent", agent.name),
+                agent.span,
+            ));
+        }
+    }
+
+    if agent.state_rules.is_empty() {
+        diagnostics.push(Diagnostic::error(
+            format!("agent '{}' declares no state transitions", agent.name),
+            agent.span,
+        ));
+    }
+
+    let mut seen_state_edges = HashSet::new();
+    for rule in &agent.state_rules {
+        if rule.to.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "agent '{}' has state rule '{}' with no target state",
+                    agent.name, rule.from
+                ),
+                agent.span,
+            ));
+        }
+
+        for target in &rule.to {
+            let edge = format!("{}->{}", rule.from, target);
+            if !seen_state_edges.insert(edge.clone()) {
+                diagnostics.push(Diagnostic::warning(
+                    format!("agent '{}' repeats state transition '{}'", agent.name, edge),
+                    agent.span,
+                ));
+            }
+        }
+    }
+
+    let state_analysis = validate_agent_state_reachability(agent, diagnostics);
+    let known_state_symbols = collect_agent_state_symbols(agent);
+
+    let allow_set: HashSet<String> = agent.policy.allow_tools.iter().cloned().collect();
+    let deny_set: HashSet<String> = agent.policy.deny_tools.iter().cloned().collect();
+
+    let mut overlap_tools: Vec<String> = allow_set.intersection(&deny_set).cloned().collect();
+    overlap_tools.sort();
+
+    for tool in &overlap_tools {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "agent '{}' policy conflicts on tool '{}': both allow and deny",
+                agent.name, tool
+            ),
+            agent.span,
+        ));
+    }
+
+    if !overlap_tools.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "agent '{}' policy deny takes precedence over allow for tools: {}",
+                agent.name,
+                overlap_tools.join(", ")
+            ),
+            agent.span,
+        ));
+    }
+
+    if let Some(max_iterations) = &agent.policy.max_iterations {
+        if max_iterations == "0" {
+            diagnostics.push(Diagnostic::error(
+                format!("agent '{}' sets max_iterations to 0", agent.name),
+                agent.span,
+            ));
+        }
+    }
+
+    if agent.loop_spec.stages.is_empty() {
+        diagnostics.push(Diagnostic::error(
+            format!("agent '{}' loop has no stages", agent.name),
+            agent.span,
+        ));
+    }
+
+    validate_agent_termination(
+        agent,
+        state_analysis.as_ref(),
+        &known_state_symbols,
+        diagnostics,
+    );
+
+    let mut seen_loop_stages = HashSet::new();
+    for stage in &agent.loop_spec.stages {
+        if !seen_loop_stages.insert(stage.clone()) {
+            diagnostics.push(Diagnostic::warning(
+                format!("agent '{}' loop repeats stage '{}'", agent.name, stage),
+                agent.span,
+            ));
+        }
+    }
+
+    let mut seen_requires = HashSet::new();
+    for required in &agent.requires {
+        if !seen_requires.insert(required.to_string()) {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "agent '{}' repeats required capability '{}'",
+                    agent.name, required
+                ),
+                agent.span,
+            ));
+        }
+        validate_required_capability_for_agent(
+            required,
+            agent,
+            declared_capability_heads,
+            declared_capability_instances,
+            diagnostics,
+        );
+    }
+
+    validate_agent_predicate_value(
+        &agent.loop_spec.stop_when.left,
+        agent,
+        &known_state_symbols,
+        "agent loop stop condition",
+        diagnostics,
+    );
+    validate_agent_predicate_value(
+        &agent.loop_spec.stop_when.right,
+        agent,
+        &known_state_symbols,
+        "agent loop stop condition",
+        diagnostics,
+    );
+
+    if let Some(predicate) = &agent.policy.human_in_loop_when {
+        validate_agent_predicate_value(
+            &predicate.left,
+            agent,
+            &known_state_symbols,
+            "agent policy human_in_loop condition",
+            diagnostics,
+        );
+        validate_agent_predicate_value(
+            &predicate.right,
+            agent,
+            &known_state_symbols,
+            "agent policy human_in_loop condition",
+            diagnostics,
+        );
+    }
+
+    for ensure in &agent.ensures {
+        validate_agent_predicate_value(
+            &ensure.left,
+            agent,
+            &known_state_symbols,
+            "agent ensures",
+            diagnostics,
+        );
+        validate_agent_predicate_value(
+            &ensure.right,
+            agent,
+            &known_state_symbols,
+            "agent ensures",
+            diagnostics,
+        );
+    }
+
+    validate_agent_evidence(agent, diagnostics);
+}
+
+fn validate_agent_predicate_value(
+    value: &PredicateValue,
+    agent: &HirAgent,
+    known_state_symbols: &HashSet<String>,
+    context: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let PredicateValue::Path(segments) = value else {
+        return;
+    };
+
+    let Some(root) = segments.first() else {
+        return;
+    };
+
+    let mut allowed_roots: HashSet<String> = HashSet::new();
+    allowed_roots.insert("state".to_string());
+    allowed_roots.insert("output".to_string());
+    allowed_roots.extend(known_state_symbols.iter().cloned());
+    for param in &agent.params {
+        allowed_roots.insert(param.name.clone());
+    }
+
+    if !allowed_roots.contains(root) {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "{} in agent '{}' references unknown symbol '{}'",
+                context, agent.name, root
+            ),
+            agent.span,
+        ));
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AgentStateAnalysis {
+    reachable_states: HashSet<String>,
+    reachable_terminal_states: HashSet<String>,
+}
+
+fn validate_agent_state_reachability(
+    agent: &HirAgent,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<AgentStateAnalysis> {
+    if agent.state_rules.is_empty() {
+        return None;
+    }
+
+    let mut explicit_states = HashSet::new();
+    let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
+    let mut any_targets = HashSet::new();
+
+    for rule in &agent.state_rules {
+        if rule.from != "any" {
+            explicit_states.insert(rule.from.clone());
+            adjacency
+                .entry(rule.from.clone())
+                .or_default()
+                .extend(rule.to.iter().cloned());
+        }
+
+        for target in &rule.to {
+            explicit_states.insert(target.clone());
+            if rule.from == "any" {
+                any_targets.insert(target.clone());
+            }
+        }
+    }
+
+    let mut initial_states = Vec::new();
+    if explicit_states.contains("INIT") {
+        initial_states.push("INIT".to_string());
+    } else if let Some(rule) = agent.state_rules.iter().find(|rule| rule.from != "any") {
+        initial_states.push(rule.from.clone());
+    }
+
+    if initial_states.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "agent '{}' has no concrete initial state for reachability analysis",
+                agent.name
+            ),
+            agent.span,
+        ));
+        return None;
+    }
+
+    let mut reachable = HashSet::new();
+    let mut queue = VecDeque::new();
+
+    for initial in initial_states {
+        if reachable.insert(initial.clone()) {
+            queue.push_back(initial);
+        }
+    }
+
+    while let Some(state) = queue.pop_front() {
+        if let Some(targets) = adjacency.get(&state) {
+            for target in targets {
+                if reachable.insert(target.clone()) {
+                    queue.push_back(target.clone());
+                }
+            }
+        }
+
+        for target in &any_targets {
+            if reachable.insert(target.clone()) {
+                queue.push_back(target.clone());
+            }
+        }
+    }
+
+    let mut unreachable: Vec<String> = explicit_states
+        .iter()
+        .filter(|state| !reachable.contains(*state))
+        .cloned()
+        .collect();
+    unreachable.sort();
+
+    if !unreachable.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "agent '{}' has unreachable states: {}",
+                agent.name,
+                unreachable.join(", ")
+            ),
+            agent.span,
+        ));
+    }
+
+    let has_any_transition = !any_targets.is_empty();
+    let reachable_terminal_states = explicit_states
+        .iter()
+        .filter(|state| {
+            if !reachable.contains(*state) {
+                return false;
+            }
+
+            let has_direct_outgoing = adjacency
+                .get(*state)
+                .map(|targets| !targets.is_empty())
+                .unwrap_or(false);
+
+            !has_any_transition && !has_direct_outgoing
+        })
+        .cloned()
+        .collect();
+
+    Some(AgentStateAnalysis {
+        reachable_states: reachable,
+        reachable_terminal_states,
+    })
+}
+
+fn collect_agent_state_symbols(agent: &HirAgent) -> HashSet<String> {
+    let mut symbols = HashSet::new();
+    for rule in &agent.state_rules {
+        if rule.from != "any" {
+            symbols.insert(rule.from.clone());
+        }
+        symbols.extend(rule.to.iter().cloned());
+    }
+    symbols
+}
+
+fn extract_state_equality_target(predicate: &EnsureClause) -> Option<String> {
+    if predicate.op != crate::ast::PredicateOp::Eq {
+        return None;
+    }
+
+    match (&predicate.left, &predicate.right) {
+        (PredicateValue::Path(left), PredicateValue::Path(right))
+            if left.len() == 1 && left[0] == "state" && right.len() == 1 =>
+        {
+            Some(right[0].clone())
+        }
+        (PredicateValue::Path(left), PredicateValue::String(right))
+            if left.len() == 1 && left[0] == "state" =>
+        {
+            Some(right.clone())
+        }
+        (PredicateValue::Path(left), PredicateValue::Path(right))
+            if right.len() == 1 && right[0] == "state" && left.len() == 1 =>
+        {
+            Some(left[0].clone())
+        }
+        (PredicateValue::String(left), PredicateValue::Path(right))
+            if right.len() == 1 && right[0] == "state" =>
+        {
+            Some(left.clone())
+        }
+        _ => None,
+    }
+}
+
+fn validate_agent_termination(
+    agent: &HirAgent,
+    state_analysis: Option<&AgentStateAnalysis>,
+    known_state_symbols: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let stop_state = extract_state_equality_target(&agent.loop_spec.stop_when);
+
+    let reachable_stop_state = match (&stop_state, state_analysis) {
+        (Some(state), Some(analysis)) => {
+            if !known_state_symbols.contains(state) {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "agent '{}' stop condition targets unknown state '{}'",
+                        agent.name, state
+                    ),
+                    agent.span,
+                ));
+                false
+            } else if !analysis.reachable_states.contains(state) {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "agent '{}' stop condition targets unreachable state '{}'",
+                        agent.name, state
+                    ),
+                    agent.span,
+                ));
+                false
+            } else {
+                true
+            }
+        }
+        _ => false,
+    };
+
+    if agent.policy.max_iterations.is_some() {
+        return;
+    }
+
+    let has_reachable_terminal_state = state_analysis
+        .map(|analysis| !analysis.reachable_terminal_states.is_empty())
+        .unwrap_or(false);
+
+    if !reachable_stop_state && !has_reachable_terminal_state {
+        let qualifier = if stop_state.is_some() {
+            "stop condition does not reach a reachable terminal state"
+        } else {
+            "stop condition is not a direct state equality"
+        };
+
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "agent '{}' may not terminate: {} and no max_iterations guard",
+                agent.name, qualifier
+            ),
+            agent.span,
+        ));
+    }
+}
+
+fn validate_agent_evidence(agent: &HirAgent, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(evidence) = &agent.evidence else {
+        return;
+    };
+
+    match &evidence.trace {
+        Some(trace) if trace.trim().is_empty() => {
+            diagnostics.push(Diagnostic::error(
+                format!("agent '{}' declares empty evidence trace", agent.name),
+                agent.span,
+            ));
+        }
+        Some(_) => {}
+        None => {
+            diagnostics.push(Diagnostic::error(
+                format!("agent '{}' evidence block requires trace", agent.name),
+                agent.span,
+            ));
+        }
+    }
+
+    if evidence.metrics.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!("agent '{}' evidence block has empty metrics", agent.name),
+            agent.span,
+        ));
+        return;
+    }
+
+    let mut seen = HashSet::new();
+    for metric in &evidence.metrics {
+        if !seen.insert(metric.clone()) {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "agent '{}' evidence block repeats metric '{}'",
+                    agent.name, metric
+                ),
+                agent.span,
+            ));
+        }
+    }
+}
+
+fn validate_workflow(
+    workflow: &HirWorkflow,
+    declared_capability_heads: &HashSet<String>,
+    declared_capability_instances: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(intent) = &workflow.intent {
+        if intent.trim().is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!("workflow '{}' declares an empty intent", workflow.name),
+                workflow.span,
+            ));
+        }
+    }
+
+    let mut seen_requires = HashSet::new();
+    for required in &workflow.requires {
+        if !seen_requires.insert(required.to_string()) {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "workflow '{}' repeats required capability '{}'",
+                    workflow.name, required
+                ),
+                workflow.span,
+            ));
+        }
+        validate_required_capability_for_workflow(
+            required,
+            workflow,
+            declared_capability_heads,
+            declared_capability_instances,
+            diagnostics,
+        );
+    }
+
+    if workflow.steps.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!("workflow '{}' declares no steps", workflow.name),
+            workflow.span,
+        ));
+    }
+
+    let mut seen_step_ids = HashSet::new();
+    for step in &workflow.steps {
+        if !seen_step_ids.insert(step.id.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("workflow '{}' repeats step id '{}'", workflow.name, step.id),
+                workflow.span,
+            ));
+        }
+
+        if let Some(action) = &step.on_fail {
+            validate_workflow_step_action(workflow, &step.id, action, diagnostics);
+        }
+    }
+
+    validate_workflow_evidence(workflow, diagnostics);
+}
+
+fn validate_failure(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(policy) = &function.failure else {
+        return;
+    };
+
+    for rule in &policy.rules {
+        if rule.condition.trim().is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "function '{}' has failure rule with empty condition",
+                    function.name
+                ),
+                function.span,
+            ));
+        }
+        validate_failure_action(function, &rule.action, diagnostics);
+    }
+}
+
+fn validate_failure_action(
+    function: &HirFunction,
+    action: &FailureAction,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match action.name.as_str() {
+        "retry" => {
+            if action.args.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses failure action 'retry' without strategy argument",
+                        function.name
+                    ),
+                    function.span,
+                ));
+                return;
+            }
+
+            if action.args[0].key.is_some() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses failure action 'retry' with invalid first argument",
+                        function.name
+                    ),
+                    function.span,
+                ));
+            }
+
+            let mut seen_keys = HashSet::new();
+            for arg in action.args.iter().skip(1) {
+                let Some(key) = &arg.key else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses failure action 'retry' with positional argument after strategy",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                    continue;
+                };
+
+                if !seen_keys.insert(key.clone()) {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "function '{}' repeats retry argument '{}'",
+                            function.name, key
+                        ),
+                        function.span,
+                    ));
+                }
+
+                if key == "max" && !matches!(arg.value, FailureValue::Number(_)) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses retry argument 'max' with non-number value",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+        }
+        "fallback" | "abort" => {
+            if action.args.len() != 1 {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses failure action '{}' with invalid argument count",
+                        function.name, action.name
+                    ),
+                    function.span,
+                ));
+                return;
+            }
+
+            let arg = &action.args[0];
+            if arg.key.is_some() || !matches!(arg.value, FailureValue::String(_)) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses failure action '{}' with invalid argument type",
+                        function.name, action.name
+                    ),
+                    function.span,
+                ));
+            }
+        }
+        "compensate" => {
+            if !action.args.is_empty() {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "function '{}' uses failure action 'compensate' with arguments; arguments are ignored",
+                        function.name
+                    ),
+                    function.span,
+                ));
+            }
+        }
+        _ => {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "function '{}' uses unknown failure action '{}'",
+                    function.name, action.name
+                ),
+                function.span,
+            ));
+        }
+    }
+}
+
+fn validate_evidence(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(evidence) = &function.evidence else {
+        return;
+    };
+
+    match &evidence.trace {
+        Some(trace) if trace.trim().is_empty() => {
+            diagnostics.push(Diagnostic::error(
+                format!("function '{}' declares empty evidence trace", function.name),
+                function.span,
+            ));
+        }
+        Some(_) => {}
+        None => {
+            diagnostics.push(Diagnostic::error(
+                format!("function '{}' evidence block requires trace", function.name),
+                function.span,
+            ));
+        }
+    }
+
+    if evidence.metrics.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "function '{}' evidence block has empty metrics",
+                function.name
+            ),
+            function.span,
+        ));
+        return;
+    }
+
+    let mut seen = HashSet::new();
+    for metric in &evidence.metrics {
+        if !seen.insert(metric.clone()) {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "function '{}' evidence block repeats metric '{}'",
+                    function.name, metric
+                ),
+                function.span,
+            ));
+        }
+    }
+}
+
+fn validate_workflow_evidence(workflow: &HirWorkflow, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(evidence) = &workflow.evidence else {
+        return;
+    };
+
+    match &evidence.trace {
+        Some(trace) if trace.trim().is_empty() => {
+            diagnostics.push(Diagnostic::error(
+                format!("workflow '{}' declares empty evidence trace", workflow.name),
+                workflow.span,
+            ));
+        }
+        Some(_) => {}
+        None => {
+            diagnostics.push(Diagnostic::error(
+                format!("workflow '{}' evidence block requires trace", workflow.name),
+                workflow.span,
+            ));
+        }
+    }
+
+    if evidence.metrics.is_empty() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "workflow '{}' evidence block has empty metrics",
+                workflow.name
+            ),
+            workflow.span,
+        ));
+        return;
+    }
+
+    let mut seen = HashSet::new();
+    for metric in &evidence.metrics {
+        if !seen.insert(metric.clone()) {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "workflow '{}' evidence block repeats metric '{}'",
+                    workflow.name, metric
+                ),
+                workflow.span,
+            ));
+        }
+    }
+}
+
+fn validate_workflow_step_action(
+    workflow: &HirWorkflow,
+    step_id: &str,
+    action: &FailureAction,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match action.name.as_str() {
+        "retry" => {
+            if action.args.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "workflow '{}' step '{}' uses on_fail 'retry' without strategy argument",
+                        workflow.name, step_id
+                    ),
+                    workflow.span,
+                ));
+                return;
+            }
+
+            if action.args[0].key.is_some() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "workflow '{}' step '{}' uses on_fail 'retry' with invalid first argument",
+                        workflow.name, step_id
+                    ),
+                    workflow.span,
+                ));
+            }
+
+            let mut seen_keys = HashSet::new();
+            for arg in action.args.iter().skip(1) {
+                let Some(key) = &arg.key else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "workflow '{}' step '{}' uses on_fail 'retry' with positional argument after strategy",
+                            workflow.name, step_id
+                        ),
+                        workflow.span,
+                    ));
+                    continue;
+                };
+
+                if !seen_keys.insert(key.clone()) {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' step '{}' repeats retry argument '{}'",
+                            workflow.name, step_id, key
+                        ),
+                        workflow.span,
+                    ));
+                }
+
+                if key == "max" && !matches!(arg.value, FailureValue::Number(_)) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "workflow '{}' step '{}' uses retry argument 'max' with non-number value",
+                            workflow.name, step_id
+                        ),
+                        workflow.span,
+                    ));
+                }
+            }
+        }
+        "fallback" | "abort" => {
+            if action.args.len() != 1 {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "workflow '{}' step '{}' uses on_fail '{}' with invalid argument count",
+                        workflow.name, step_id, action.name
+                    ),
+                    workflow.span,
+                ));
+                return;
+            }
+
+            let arg = &action.args[0];
+            if arg.key.is_some() || !matches!(arg.value, FailureValue::String(_)) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "workflow '{}' step '{}' uses on_fail '{}' with invalid argument type",
+                        workflow.name, step_id, action.name
+                    ),
+                    workflow.span,
+                ));
+            }
+        }
+        "compensate" => {
+            if !action.args.is_empty() {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "workflow '{}' step '{}' uses on_fail 'compensate' with arguments; arguments are ignored",
+                        workflow.name, step_id
+                    ),
+                    workflow.span,
+                ));
+            }
+        }
+        _ => {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "workflow '{}' step '{}' uses unknown on_fail action '{}'",
+                    workflow.name, step_id, action.name
+                ),
+                workflow.span,
+            ));
+        }
+    }
+}
+
+fn validate_intent(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) {
+    if let Some(intent) = &function.intent {
+        if intent.trim().is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!("function '{}' declares an empty intent", function.name),
+                function.span,
+            ));
+        }
+    }
+}
+
+fn validate_ensures(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) {
+    if function.ensures.is_empty() {
+        return;
+    }
+
+    let mut allowed_roots = HashSet::new();
+    allowed_roots.insert("output".to_string());
+    for param in &function.params {
+        allowed_roots.insert(param.name.clone());
+    }
+
+    for ensure in &function.ensures {
+        validate_predicate_value(ensure, &ensure.left, function, &allowed_roots, diagnostics);
+        validate_predicate_value(ensure, &ensure.right, function, &allowed_roots, diagnostics);
+    }
+}
+
+fn validate_predicate_value(
+    _ensure: &EnsureClause,
+    value: &PredicateValue,
+    function: &HirFunction,
+    allowed_roots: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let PredicateValue::Path(segments) = value else {
+        return;
+    };
+
+    let Some(root) = segments.first() else {
+        return;
+    };
+
+    if !allowed_roots.contains(root) {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "function '{}' ensures references unknown symbol '{}'",
+                function.name, root
+            ),
+            function.span,
+        ));
+    }
+}
+
+fn validate_capability_shape(
+    capability: &TypeRef,
+    context: &str,
+    span: Span,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match capability.head() {
+        "Model" => {
+            require_arity(capability, 3, context, span, diagnostics);
+            require_arg_kind(capability, 0, ArgKind::String, context, span, diagnostics);
+            require_arg_kind(capability, 1, ArgKind::String, context, span, diagnostics);
+            require_arg_kind(capability, 2, ArgKind::Number, context, span, diagnostics);
+        }
+        "Net" => {
+            require_arity(capability, 1, context, span, diagnostics);
+            require_arg_kind(capability, 0, ArgKind::String, context, span, diagnostics);
+        }
+        "Tool" => {
+            require_arity(capability, 2, context, span, diagnostics);
+            require_arg_kind(capability, 0, ArgKind::String, context, span, diagnostics);
+            require_arg_kind(capability, 1, ArgKind::String, context, span, diagnostics);
+        }
+        "Io" => {
+            require_arity(capability, 0, context, span, diagnostics);
+        }
+        _ => {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "{} uses unknown capability '{}'; no schema rule applied",
+                    context,
+                    capability.head()
+                ),
+                span,
+            ));
+        }
+    }
+}
+
+fn validate_required_capability(
+    required: &TypeRef,
+    function: &HirFunction,
+    declared_capability_heads: &HashSet<String>,
+    declared_capability_instances: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    validate_capability_shape(
+        required,
+        &format!("function '{}' requires", function.name),
+        function.span,
+        diagnostics,
+    );
+
+    if !declared_capability_heads.contains(required.head()) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "function '{}' requires capability '{}' but it is not declared at top level",
+                function.name,
+                required.head()
+            ),
+            function.span,
+        ));
+    }
+
+    let required_instance = required.to_string();
+    if !declared_capability_instances.contains(&required_instance) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "function '{}' requires capability instance '{}' but it is not declared at top level",
+                function.name, required_instance
+            ),
+            function.span,
+        ));
+    }
+}
+
+fn validate_required_capability_for_workflow(
+    required: &TypeRef,
+    workflow: &HirWorkflow,
+    declared_capability_heads: &HashSet<String>,
+    declared_capability_instances: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    validate_capability_shape(
+        required,
+        &format!("workflow '{}' requires", workflow.name),
+        workflow.span,
+        diagnostics,
+    );
+
+    if !declared_capability_heads.contains(required.head()) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "workflow '{}' requires capability '{}' but it is not declared at top level",
+                workflow.name,
+                required.head()
+            ),
+            workflow.span,
+        ));
+    }
+
+    let required_instance = required.to_string();
+    if !declared_capability_instances.contains(&required_instance) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "workflow '{}' requires capability instance '{}' but it is not declared at top level",
+                workflow.name, required_instance
+            ),
+            workflow.span,
+        ));
+    }
+}
+
+fn validate_required_capability_for_agent(
+    required: &TypeRef,
+    agent: &HirAgent,
+    declared_capability_heads: &HashSet<String>,
+    declared_capability_instances: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    validate_capability_shape(
+        required,
+        &format!("agent '{}' requires", agent.name),
+        agent.span,
+        diagnostics,
+    );
+
+    if !declared_capability_heads.contains(required.head()) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "agent '{}' requires capability '{}' but it is not declared at top level",
+                agent.name,
+                required.head()
+            ),
+            agent.span,
+        ));
+    }
+
+    let required_instance = required.to_string();
+    if !declared_capability_instances.contains(&required_instance) {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "agent '{}' requires capability instance '{}' but it is not declared at top level",
+                agent.name, required_instance
+            ),
+            agent.span,
+        ));
+    }
+}
+
+fn validate_effect_contract(
+    effect: &HirEffect,
+    function: &HirFunction,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(required_capability) = effect_required_capability_name(effect.name.as_str()) {
+        let has_required_capability = function
+            .requires
+            .iter()
+            .any(|required| required.head() == required_capability);
+        if !has_required_capability {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "function '{}' uses effect '{}' but does not require '{}' capability",
+                    function.name, effect.name, required_capability
+                ),
+                function.span,
+            ));
+            return;
+        }
+
+        match effect.name.as_str() {
+            "model" => {
+                let Some(provider) = effect.argument.as_deref() else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses effect 'model' without provider argument",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                    return;
+                };
+
+                let matched = function.requires.iter().any(|required| {
+                    required.head() == "Model" && first_string_arg(required) == Some(provider)
+                });
+
+                if !matched {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses effect 'model({provider})' but no matching Model capability is required",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+            "tool" => {
+                let Some(tool_name) = effect.argument.as_deref() else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses effect 'tool' without tool name argument",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                    return;
+                };
+
+                let matched = function.requires.iter().any(|required| {
+                    required.head() == "Tool" && first_string_arg(required) == Some(tool_name)
+                });
+
+                if !matched {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses effect 'tool({tool_name})' but no matching Tool capability is required",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+            "net" => {
+                if let Some(domain) = effect.argument.as_deref() {
+                    let matched = function.requires.iter().any(|required| {
+                        required.head() == "Net" && first_string_arg(required) == Some(domain)
+                    });
+
+                    if !matched {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' uses effect 'net({domain})' but no matching Net capability is required",
+                                function.name
+                            ),
+                            function.span,
+                        ));
+                    }
+                }
+            }
+            "io" => {
+                if effect.argument.is_some() {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "function '{}' uses effect 'io' with an argument; argument is ignored",
+                            function.name
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+            _ => {}
+        }
+    } else {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "function '{}' uses unknown effect '{}'; no capability rule applied",
+                function.name, effect.name
+            ),
+            function.span,
+        ));
+    }
+}
+
+fn effect_required_capability_name(effect_name: &str) -> Option<&'static str> {
+    match effect_name {
+        "net" => Some("Net"),
+        "model" => Some("Model"),
+        "tool" => Some("Tool"),
+        "io" => Some("Io"),
+        _ => None,
+    }
+}
+
+fn first_string_arg(capability: &TypeRef) -> Option<&str> {
+    capability.args.first().and_then(|arg| {
+        if let TypeArg::String(value) = arg {
+            Some(value.as_str())
+        } else {
+            None
+        }
+    })
+}
+
+#[derive(Clone, Copy)]
+enum ArgKind {
+    String,
+    Number,
+}
+
+impl ArgKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::String => "string",
+            Self::Number => "number",
+        }
+    }
+}
+
+fn require_arity(
+    capability: &TypeRef,
+    expected: usize,
+    context: &str,
+    span: Span,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if capability.args.len() != expected {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "{} capability '{}' expects {} type arguments, found {}",
+                context,
+                capability.head(),
+                expected,
+                capability.args.len()
+            ),
+            span,
+        ));
+    }
+}
+
+fn require_arg_kind(
+    capability: &TypeRef,
+    index: usize,
+    expected: ArgKind,
+    context: &str,
+    span: Span,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(arg) = capability.args.get(index) else {
+        return;
+    };
+
+    let is_valid = match (expected, arg) {
+        (ArgKind::String, TypeArg::String(_)) => true,
+        (ArgKind::Number, TypeArg::Number(_)) => true,
+        _ => false,
+    };
+
+    if !is_valid {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "{} capability '{}' argument {} expects {}, found {}",
+                context,
+                capability.head(),
+                index,
+                expected.name(),
+                arg_kind_name(arg)
+            ),
+            span,
+        ));
+    }
+}
+
+fn arg_kind_name(arg: &TypeArg) -> &'static str {
+    match arg {
+        TypeArg::Type(_) => "type",
+        TypeArg::String(_) => "string",
+        TypeArg::Number(_) => "number",
+    }
+}

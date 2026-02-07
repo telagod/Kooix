@@ -1,0 +1,209 @@
+(*
+  Aster Grammar AI v1 (target grammar)
+  Scope: AI-native extension layer designed to coexist with Core v0.
+  Note: this grammar is a spec target and is not fully implemented yet.
+*)
+
+Program               = { Item } EOF ;
+
+Item                  = CapabilityDecl
+                      | FunctionDecl
+                      | WorkflowDecl
+                      | AgentDecl
+                      ;
+
+(* ---------- Shared Core ---------- *)
+
+CapabilityDecl        = "cap" TypeRef ";" ;
+
+ParamList             = Param { "," Param } ;
+
+Param                 = Identifier ":" TypeRef ;
+
+Effects               = "effects" "!" "{" [ EffectSpec { "," EffectSpec } ] "}" ;
+
+EffectSpec            = Identifier [ "(" EffectArg ")" ] ;
+
+EffectArg             = Identifier | StringLiteral | NumberLiteral ;
+
+Requires              = "requires" "[" [ CapabilityRef { "," CapabilityRef } ] "]" ;
+
+CapabilityRef         = "cap" TypeRef
+                      | TypeRef
+                      ;
+
+TypeRef               = Identifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
+
+TypeArg               = TypeRef | StringLiteral | NumberLiteral ;
+
+(* ---------- Function ---------- *)
+
+FunctionDecl          = "fn" Identifier "(" [ ParamList ] ")"
+                        "->" TypeRef
+                        [ Intent ]
+                        [ Requires ]
+                        [ Effects ]
+                        [ Ensures ]
+                        [ Failure ]
+                        [ Evidence ]
+                        ";"
+                      ;
+
+Intent                = "intent" StringLiteral ;
+
+Ensures               = "ensures" "[" PredicateList "]" ;
+
+PredicateList         = Predicate { "," Predicate } ;
+
+Predicate             = Expr CompareOp Expr
+                      | Predicate "and" Predicate
+                      | Predicate "or" Predicate
+                      | "not" Predicate
+                      | "(" Predicate ")"
+                      ;
+
+CompareOp             = "==" | "!=" | ">" | ">=" | "<" | "<=" | "in" ;
+
+Failure               = "failure" "{" { FailureRule } "}" ;
+
+FailureRule           = Identifier "->" FailureAction ";" ;
+
+FailureAction         = RetryAction
+                      | FallbackAction
+                      | AbortAction
+                      | CompensateAction
+                      | CompositeAction
+                      ;
+
+RetryAction           = "retry" "(" RetryStrategy { "," RetryArg } ")" ;
+
+RetryStrategy         = Identifier ;
+
+RetryArg              = Identifier "=" (NumberLiteral | Identifier | StringLiteral) ;
+
+FallbackAction        = "fallback" "(" StringLiteral ")" ;
+
+AbortAction           = "abort" "(" StringLiteral ")" ;
+
+CompensateAction      = "compensate" "{" { Statement } "}" ;
+
+CompositeAction       = FailureAction "else" FailureAction ;
+
+Evidence              = "evidence" "{"
+                        [ TraceClause ]
+                        [ MetricsClause ]
+                        [ ArtifactsClause ]
+                        "}"
+                      ;
+
+TraceClause           = "trace" StringLiteral ";" ;
+
+MetricsClause         = "metrics" "[" IdentifierList "]" ";" ;
+
+ArtifactsClause       = "artifacts" "[" IdentifierList "]" ";" ;
+
+IdentifierList        = Identifier { "," Identifier } ;
+
+(* ---------- Workflow ---------- *)
+
+WorkflowDecl          = "workflow" Identifier "(" [ ParamList ] ")" "->" TypeRef
+                        [ Intent ]
+                        [ Requires ]
+                        [ Sla ]
+                        Steps
+                        [ OutputSpec ]
+                        [ Evidence ]
+                        ";"
+                      ;
+
+Sla                   = "sla" "{" PredicateList ";" "}" ;
+
+Steps                 = "steps" "{" { StepDecl } "}" ;
+
+StepDecl              = Identifier ":" CallExpr
+                        [ Ensures ]
+                        [ OnFail ]
+                        ";"
+                      ;
+
+OnFail                = "on_fail" "->" FailureAction ;
+
+OutputSpec            = "output" "{" { OutputField } "}" ;
+
+OutputField           = Identifier ":" TypeRef ";" ;
+
+(* ---------- Agent ---------- *)
+
+AgentDecl             = "agent" Identifier "(" [ ParamList ] ")" "->" TypeRef
+                        [ Intent ]
+                        StateSpec
+                        [ MemorySpec ]
+                        PolicySpec
+                        [ Requires ]
+                        LoopSpec
+                        [ Ensures ]
+                        [ Evidence ]
+                        ";"
+                      ;
+
+StateSpec             = "state" "{" { StateRule } "}" ;
+
+StateRule             = Identifier "->" IdentifierList ";"
+                      | "any" "->" Identifier ";"
+                      ;
+
+MemorySpec            = "memory" "{" { MemoryRule } "}" ;
+
+MemoryRule            = Identifier { Identifier "=" (Identifier | StringLiteral | NumberLiteral) } ";" ;
+
+PolicySpec            = "policy" "{" { PolicyRule } "}" ;
+
+PolicyRule            = "allow_tools" "[" StringList "]" ";"
+                      | "deny_tools" "[" StringList "]" ";"
+                      | "max_iterations" "=" NumberLiteral ";"
+                      | "human_in_loop" "when" Predicate ";"
+                      ;
+
+StringList            = StringLiteral { "," StringLiteral } ;
+
+LoopSpec              = "loop" "{" Identifier { "->" Identifier } ";" "stop" "when" Predicate ";" "}" ;
+
+(* ---------- Expressions ---------- *)
+
+Expr                  = Identifier
+                      | NumberLiteral
+                      | StringLiteral
+                      | CallExpr
+                      | FieldAccess
+                      | ListLiteral
+                      | "(" Expr ")"
+                      ;
+
+CallExpr              = Identifier "(" [ ExprList ] ")" ;
+
+ExprList              = Expr { "," Expr } ;
+
+FieldAccess           = Identifier "." Identifier ;
+
+ListLiteral           = "[" [ ExprList ] "]" ;
+
+Statement             = CallExpr ";"
+                      | Identifier "=" Expr ";"
+                      ;
+
+(* ---------- Lexical ---------- *)
+
+Identifier            = Letter { Letter | Digit | "_" } ;
+
+StringLiteral         = '"' { Character - '"' | EscapedChar } '"' ;
+
+NumberLiteral         = Digit { Digit } ;
+
+EscapedChar           = "\\" ("\\" | '"' | "n" | "t") ;
+
+Letter                = "A".."Z" | "a".."z" ;
+
+Digit                 = "0".."9" ;
+
+EOF                   = ? end of input ? ;
+

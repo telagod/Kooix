@@ -1,0 +1,4 @@
+cap Net<"api.openai.com">;
+
+fn summarize(doc: Text) -> Summary !{model(openai), net} requires [Net<"api.openai.com">];
+

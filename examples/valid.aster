@@ -1,0 +1,10 @@
+cap Net<"api.openai.com">;
+cap Model<"openai", "gpt-4o-mini", 1000>;
+cap Tool<"web_search", "read-only">;
+
+fn summarize(doc: Text) -> Summary !{model(openai), net} requires [Model<"openai", "gpt-4o-mini", 1000>, Net<"api.openai.com">];
+
+fn fetch_and_rank(query: Text) -> ResultSet !{tool(web_search), net} requires [Tool<"web_search", "read-only">, Net<"api.openai.com">];
+
+fn pure_score(x: Int, y: Int) -> Int;
+
