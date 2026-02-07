@@ -1,4 +1,4 @@
-# Aster MVP Design
+# Kooix MVP Design
 
 ## 设计目标
 
@@ -123,7 +123,7 @@ agent <name>(<params>) -> <TypeRef>
 
 ## 变更历史
 
-### 2026-02-07 - Aster MVP 初始落地
+### 2026-02-07 - Kooix MVP 初始落地
 
 - **变更内容**：初始化 Rust workspace，落地 lexer/parser/sema/CLI/tests。
 - **变更理由**：将设计方案转为可运行原型，验证核心语义约束。

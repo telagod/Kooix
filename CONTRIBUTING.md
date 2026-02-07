@@ -1,6 +1,6 @@
-# Contributing to Aster
+# Contributing to Kooix
 
-Thanks for contributing to Aster.
+Thanks for contributing to Kooix.
 This project is currently in MVP stage, so we prioritize small, verifiable, and well-documented changes.
 
 ## Development Setup
@@ -9,8 +9,8 @@ This project is currently in MVP stage, so we prioritize small, verifiable, and 
 - Optional for native pipeline: `llc`, `clang`
 
 ```bash
-git clone https://github.com/telagod/Aster.git
-cd Aster
+git clone https://github.com/telagod/Kooix.git
+cd Kooix
 cargo test -p asterc
 ```
 

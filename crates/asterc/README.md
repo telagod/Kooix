@@ -1,6 +1,6 @@
 # asterc
 
-`asterc` 是 Aster 语言 MVP 的前端检查器。
+`asterc` 是 Kooix 语言 MVP 的前端检查器。
 
 ## 模块职责
 

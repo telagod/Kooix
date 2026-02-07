@@ -2,7 +2,7 @@
 name = "asterc"
 version = "0.1.0"
 edition = "2021"
-description = "Aster language checker MVP (AI-native strong typing)"
+description = "Kooix language checker MVP (AI-native strong typing)"
 
 [lib]
 name = "asterc"

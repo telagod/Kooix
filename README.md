@@ -1,17 +1,17 @@
-# Aster
+# Kooix
 
 [中文](README.md) | [English](README.en.md)
 
 [Contributing](CONTRIBUTING.md)
 [Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
-Aster 是一个 **AI-native、强类型** 编程语言原型（MVP），目标是把 AI 系统中的能力约束、流程约束与可审计性尽量前移到编译期。
+Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标是把 AI 系统中的能力约束、流程约束与可审计性尽量前移到编译期。
 
 ---
 
 ## 当前状态（截至 2026-02-07）
 
-Aster 已完成一条可运行的最小编译链路：
+Kooix 已完成一条可运行的最小编译链路：
 
 `Source (.aster)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
 

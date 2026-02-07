@@ -1,18 +1,18 @@
-# Aster
+# Kooix
 
 [English](README.en.md) | [中文](README.md)
 
 [Contributing](CONTRIBUTING.md)
 [Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
-Aster is an **AI-native, strongly typed** programming language prototype (MVP).
+Kooix is an **AI-native, strongly typed** programming language prototype (MVP).
 Its core goal is to push AI capability constraints, workflow constraints, and auditability checks into compile time as much as possible.
 
 ---
 
 ## Current Status (as of 2026-02-07)
 
-Aster already has a runnable minimal compiler pipeline:
+Kooix already has a runnable minimal compiler pipeline:
 
 `Source (.aster)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
 
