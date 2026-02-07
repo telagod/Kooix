@@ -13,12 +13,26 @@ pub enum Item {
     Function(FunctionDecl),
     Workflow(WorkflowDecl),
     Agent(AgentDecl),
+    Record(RecordDecl),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapabilityDecl {
     pub capability: TypeRef,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordDecl {
+    pub name: String,
+    pub fields: Vec<RecordField>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordField {
+    pub name: String,
+    pub ty: TypeRef,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

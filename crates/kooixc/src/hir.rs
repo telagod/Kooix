@@ -1,6 +1,6 @@
 use crate::ast::{
     AgentPolicy, EnsureClause, EvidenceSpec, FailureAction, FailurePolicy, Item, LoopSpec,
-    OutputField, Program, StateRule, TypeRef, WorkflowCall,
+    OutputField, Program, RecordField, StateRule, TypeRef, WorkflowCall,
 };
 use crate::error::Span;
 
@@ -10,6 +10,7 @@ pub struct HirProgram {
     pub functions: Vec<HirFunction>,
     pub workflows: Vec<HirWorkflow>,
     pub agents: Vec<HirAgent>,
+    pub records: Vec<HirRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +67,13 @@ pub struct HirWorkflowStep {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirRecord {
+    pub name: String,
+    pub fields: Vec<RecordField>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirAgent {
     pub name: String,
     pub params: Vec<HirParam>,
@@ -85,6 +93,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
     let mut functions = Vec::new();
     let mut workflows = Vec::new();
     let mut agents = Vec::new();
+    let mut records = Vec::new();
 
     for item in &program.items {
         match item {
@@ -173,6 +182,13 @@ pub fn lower_program(program: &Program) -> HirProgram {
                     span: agent_decl.span,
                 });
             }
+            Item::Record(record_decl) => {
+                records.push(HirRecord {
+                    name: record_decl.name.clone(),
+                    fields: record_decl.fields.clone(),
+                    span: record_decl.span,
+                });
+            }
         }
     }
 
@@ -181,5 +197,6 @@ pub fn lower_program(program: &Program) -> HirProgram {
         functions,
         workflows,
         agents,
+        records,
     }
 }

@@ -5,7 +5,7 @@ use crate::ast::{
     WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
-use crate::hir::{lower_program, HirAgent, HirEffect, HirFunction, HirWorkflow};
+use crate::hir::{lower_program, HirAgent, HirEffect, HirFunction, HirRecord, HirWorkflow};
 
 #[derive(Debug, Clone)]
 struct InvocableSignature {
@@ -58,6 +58,8 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
                 return_type: agent.return_type.clone(),
             });
     }
+
+    let declared_record_types = validate_record_declarations(&hir.records, &mut diagnostics);
 
     let mut declared_capability_instances = HashSet::new();
     let mut declared_capability_heads = HashSet::new();
@@ -173,6 +175,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
             &declared_capability_instances,
             &declared_invocable_targets,
             &declared_invocable_signatures,
+            &declared_record_types,
             &mut diagnostics,
         );
     }
@@ -195,6 +198,47 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     }
 
     diagnostics
+}
+
+fn validate_record_declarations(
+    records: &[HirRecord],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> HashMap<String, HashMap<String, TypeRef>> {
+    let mut declared_record_types: HashMap<String, HashMap<String, TypeRef>> = HashMap::new();
+
+    for record in records {
+        if declared_record_types.contains_key(&record.name) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate record declaration '{}'", record.name),
+                record.span,
+            ));
+            continue;
+        }
+
+        if record.fields.is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!("record '{}' declares no fields", record.name),
+                record.span,
+            ));
+        }
+
+        let mut field_types: HashMap<String, TypeRef> = HashMap::new();
+        for field in &record.fields {
+            if field_types
+                .insert(field.name.clone(), field.ty.clone())
+                .is_some()
+            {
+                diagnostics.push(Diagnostic::error(
+                    format!("record '{}' repeats field '{}'", record.name, field.name),
+                    record.span,
+                ));
+            }
+        }
+
+        declared_record_types.insert(record.name.clone(), field_types);
+    }
+
+    declared_record_types
 }
 
 fn validate_agent(
@@ -843,6 +887,7 @@ fn validate_workflow(
     declared_capability_instances: &HashSet<String>,
     declared_invocable_targets: &HashSet<String>,
     declared_invocable_signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(intent) = &workflow.intent {
@@ -911,6 +956,7 @@ fn validate_workflow(
                     &step.call.args,
                     signature,
                     &available_symbols,
+                    declared_record_types,
                     diagnostics,
                 );
 
@@ -923,13 +969,19 @@ fn validate_workflow(
         }
     }
 
-    validate_workflow_output_contract(workflow, &available_symbols, diagnostics);
+    validate_workflow_output_contract(
+        workflow,
+        &available_symbols,
+        declared_record_types,
+        diagnostics,
+    );
     validate_workflow_evidence(workflow, diagnostics);
 }
 
 fn validate_workflow_output_contract(
     workflow: &HirWorkflow,
     available_symbols: &HashMap<String, TypeRef>,
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if workflow.output.is_empty() {
@@ -967,7 +1019,11 @@ fn validate_workflow_output_contract(
                     continue;
                 };
 
-                let resolved_type = match infer_member_projection_type(source_type, &source[1..]) {
+                let resolved_type = match infer_member_projection_type(
+                    source_type,
+                    &source[1..],
+                    declared_record_types,
+                ) {
                     Ok(ty) => ty,
                     Err(projection) => {
                         diagnostics.push(Diagnostic::warning(
@@ -1317,6 +1373,7 @@ fn validate_workflow_step_call_signature(
     call_args: &[WorkflowCallArg],
     signature: &InvocableSignature,
     available_symbols: &HashMap<String, TypeRef>,
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if call_args.len() != signature.params.len() {
@@ -1340,6 +1397,7 @@ fn validate_workflow_step_call_signature(
             call_target,
             arg,
             available_symbols,
+            declared_record_types,
             diagnostics,
         ) else {
             continue;
@@ -1368,6 +1426,7 @@ fn infer_workflow_call_arg_type(
     call_target: &str,
     arg: &WorkflowCallArg,
     available_symbols: &HashMap<String, TypeRef>,
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     match arg {
@@ -1399,7 +1458,7 @@ fn infer_workflow_call_arg_type(
                 return None;
             };
 
-            match infer_member_projection_type(root_type, &segments[1..]) {
+            match infer_member_projection_type(root_type, &segments[1..], declared_record_types) {
                 Ok(ty) => Some(ty),
                 Err(projection) => {
                     diagnostics.push(Diagnostic::warning(
@@ -1434,10 +1493,11 @@ struct MemberProjectionFailure {
 fn infer_member_projection_type(
     root_type: &TypeRef,
     members: &[String],
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
 ) -> Result<TypeRef, MemberProjectionFailure> {
     let mut current = root_type.clone();
     for member in members {
-        let Some(next) = project_member_type(&current, member) else {
+        let Some(next) = project_member_type(&current, member, declared_record_types) else {
             return Err(MemberProjectionFailure {
                 member: member.clone(),
                 base_type: current,
@@ -1449,7 +1509,17 @@ fn infer_member_projection_type(
     Ok(current)
 }
 
-fn project_member_type(base: &TypeRef, member: &str) -> Option<TypeRef> {
+fn project_member_type(
+    base: &TypeRef,
+    member: &str,
+    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+) -> Option<TypeRef> {
+    if let Some(record_fields) = declared_record_types.get(base.head()) {
+        if let Some(field_type) = record_fields.get(member) {
+            return Some(field_type.clone());
+        }
+    }
+
     match base.head() {
         "Option" => {
             if matches!(member, "some" | "value") {

@@ -148,6 +148,7 @@ impl<'a> Lexer<'a> {
             "fn" => TokenKind::KwFn,
             "workflow" => TokenKind::KwWorkflow,
             "agent" => TokenKind::KwAgent,
+            "record" => TokenKind::KwRecord,
             "steps" => TokenKind::KwSteps,
             "on_fail" => TokenKind::KwOnFail,
             "output" => TokenKind::KwOutput,

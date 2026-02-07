@@ -317,6 +317,72 @@ fn summarize(doc: Text) -> Summary evidence { trace "summarize.v1"; metrics [lat
 }
 
 #[test]
+fn parses_record_declaration() {
+    let source = r#"
+record Answer {
+  text: Text;
+  confidence: Float;
+}
+;
+"#;
+
+    let program = parse_source(source).expect("record should parse");
+    assert_eq!(program.items.len(), 1);
+    assert!(matches!(program.items[0], Item::Record(_)));
+}
+
+#[test]
+fn rejects_duplicate_record_declarations() {
+    let source = r#"
+record Answer { text: Text; };
+record Answer { text: Text; };
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("duplicate record declaration 'Answer'")
+    }));
+}
+
+#[test]
+fn rejects_duplicate_record_fields() {
+    let source = r#"
+record Answer {
+  text: Text;
+  text: Text;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record 'Answer' repeats field 'text'")
+    }));
+}
+
+#[test]
+fn warns_on_record_without_fields() {
+    let source = r#"
+record Empty {}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("record 'Empty' declares no fields")
+    }));
+}
+
+#[test]
 fn parses_workflow_with_steps_output_and_evidence() {
     let source = r#"
 cap Tool<"vector_search", "read-only">;
@@ -629,6 +695,32 @@ steps {
 }
 
 #[test]
+fn accepts_workflow_step_call_with_record_member_projection() {
+    let source = r#"
+record Answer {
+  text: Text;
+}
+;
+fn retrieve(input: Query) -> Answer;
+fn deliver(text: Text) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: deliver(s1.text);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'text' on type 'Answer'")
+    }));
+}
+
+#[test]
 fn warns_on_workflow_step_call_with_unsupported_member_projection() {
     let source = r#"
 fn retrieve(input: Query) -> Answer;
@@ -936,6 +1028,37 @@ output {
     assert!(!diagnostics.iter().any(|diagnostic| {
         diagnostic.severity == Severity::Warning
             && diagnostic.message.contains("cannot infer member 'some'")
+    }));
+}
+
+#[test]
+fn accepts_workflow_output_binding_with_record_member_projection() {
+    let source = r#"
+record Answer {
+  text: Text;
+}
+;
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Text
+steps {
+  s1: answer(input);
+}
+output {
+  result: Text = s1.text;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("output field 'result'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'text' on type 'Answer'")
     }));
 }
 

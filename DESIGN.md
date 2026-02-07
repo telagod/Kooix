@@ -291,6 +291,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：以最小规则提升确定性，不改变显式 `= symbol` 的最高优先级。
 
+### 2026-02-07 - Phase 6.9：Record 声明与字段投影
+
+- **变更内容**：新增顶层 `record` 声明；为 workflow step/output 的 `symbol.path` 类型推导加入用户记录类型字段映射。
+- **变更理由**：补齐 AI-native 数据语义主线，让业务对象字段可被静态验证地引用，而不局限于容器内建规则。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先实现最小 record field map（无泛型/方法），优先交付可读可验的字段路径能力。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

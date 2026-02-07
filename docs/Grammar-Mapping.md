@@ -131,7 +131,26 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
 ## AI v1 Mapping (Target, Not Implemented Yet)
 
 - workflow `sla` block and predicate validation
-- user-defined record/struct member typing (currently only generic container projection rules are supported)
+
+### Record top-level
+
+## Record Mapping (Partial Implementation)
+
+- `record Name { field: Type; ... };`
+  - AST: `Item::Record(RecordDecl)`
+  - HIR: `HirRecord`
+  - Parser subset:
+    - supports named field list with `field: Type;`
+  - Sema subset:
+    - duplicate record declaration error
+    - duplicate field name error
+    - empty record warning
+    - record field projection in workflow step/output path typing
+
+## Record Mapping (Target, Not Implemented Yet)
+
+- user-defined record generics and constraints
+- record projection beyond static field map (methods/computed fields)
 
 ### Agent top-level
 

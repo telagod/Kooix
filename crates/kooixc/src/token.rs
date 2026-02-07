@@ -6,6 +6,7 @@ pub enum TokenKind {
     KwFn,
     KwWorkflow,
     KwAgent,
+    KwRecord,
     KwSteps,
     KwOnFail,
     KwOutput,

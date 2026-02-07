@@ -1,8 +1,8 @@
 use crate::ast::{
     AgentDecl, AgentPolicy, CapabilityDecl, EffectSpec, EnsureClause, EvidenceSpec, FailureAction,
     FailureActionArg, FailurePolicy, FailureRule, FailureValue, FunctionDecl, Item, LoopSpec,
-    OutputField, Param, PredicateOp, PredicateValue, Program, StateRule, TypeArg, TypeRef,
-    WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
+    OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl, RecordField, StateRule,
+    TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -32,6 +32,8 @@ impl<'a> Parser<'a> {
                 Item::Workflow(self.parse_workflow_decl()?)
             } else if self.at_kw_agent() {
                 Item::Agent(self.parse_agent_decl()?)
+            } else if self.at_kw_record() {
+                Item::Record(self.parse_record_decl()?)
             } else {
                 return Err(Diagnostic::error(
                     format!(
@@ -53,6 +55,33 @@ impl<'a> Parser<'a> {
         let end = self.expect_semicolon()?.end;
         Ok(CapabilityDecl {
             capability,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_record_decl(&mut self) -> Result<RecordDecl, Diagnostic> {
+        let start = self.expect_kw_record()?.start;
+        let (name, _) = self.expect_ident()?;
+        self.expect_lbrace()?;
+
+        let mut fields = Vec::new();
+        while !self.at_rbrace() {
+            let (field_name, _) = self.expect_ident()?;
+            self.expect_colon()?;
+            let field_type = self.parse_type_ref()?;
+            self.expect_semicolon()?;
+            fields.push(RecordField {
+                name: field_name,
+                ty: field_type,
+            });
+        }
+
+        self.expect_rbrace()?;
+        let end = self.expect_semicolon()?.end;
+
+        Ok(RecordDecl {
+            name,
+            fields,
             span: Span::new(start, end),
         })
     }
@@ -871,6 +900,10 @@ impl<'a> Parser<'a> {
         self.expect_simple(Self::at_kw_agent, "'agent'")
     }
 
+    fn expect_kw_record(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_record, "'record'")
+    }
+
     fn expect_kw_workflow(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_workflow, "'workflow'")
     }
@@ -1098,6 +1131,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwAgent)
     }
 
+    fn at_kw_record(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwRecord)
+    }
+
     fn at_kw_workflow(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwWorkflow)
     }
@@ -1275,6 +1312,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwFn => "'fn'",
             TokenKind::KwWorkflow => "'workflow'",
             TokenKind::KwAgent => "'agent'",
+            TokenKind::KwRecord => "'record'",
             TokenKind::KwSteps => "'steps'",
             TokenKind::KwOnFail => "'on_fail'",
             TokenKind::KwOutput => "'output'",
