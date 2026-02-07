@@ -21,7 +21,7 @@ crates/kooixc/src/      # compiler implementation
   lexer/parser/hir/mir/sema/native/cli
 crates/kooixc/tests/    # compiler tests
 docs/                   # grammar and mapping docs
-examples/               # sample .aster programs
+examples/               # sample .kooix programs
 ```
 
 ## Recommended Workflow

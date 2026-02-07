@@ -13,7 +13,7 @@ Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标�
 
 Kooix 已完成一条可运行的最小编译链路：
 
-`Source (.aster)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
+`Source (.kooix)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
 
 ### 已可用能力
 
@@ -64,29 +64,29 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 常用命令
 
 ```bash
-cargo run -p kooixc -- check examples/valid.aster
-cargo run -p kooixc -- ast examples/valid.aster
-cargo run -p kooixc -- hir examples/valid.aster
-cargo run -p kooixc -- mir examples/valid.aster
-cargo run -p kooixc -- llvm examples/codegen.aster
+cargo run -p kooixc -- check examples/valid.kooix
+cargo run -p kooixc -- ast examples/valid.kooix
+cargo run -p kooixc -- hir examples/valid.kooix
+cargo run -p kooixc -- mir examples/valid.kooix
+cargo run -p kooixc -- llvm examples/codegen.kooix
 
 # 生成本地可执行文件
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo
 
 # 编译后立即运行
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run
 
 # 透传运行参数
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run -- arg1 arg2
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run -- arg1 arg2
 
 # 注入 stdin（文件）
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin input.txt -- arg1
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --stdin input.txt -- arg1
 
 # 注入 stdin（管道）
-printf 'payload' | cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin - -- arg1
+printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --stdin - -- arg1
 
 # 运行超时保护（ms）
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --timeout 2000 -- arg1
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
 # 测试
 cargo test -p kooixc
@@ -97,10 +97,10 @@ cargo test -p kooixc
 ## 示例与语法文档
 
 - 示例程序：
-  - `examples/valid.aster`
-  - `examples/invalid_missing_model_cap.aster`
-  - `examples/invalid_model_shape.aster`
-  - `examples/codegen.aster`
+  - `examples/valid.kooix`
+  - `examples/invalid_missing_model_cap.kooix`
+  - `examples/invalid_model_shape.kooix`
+  - `examples/codegen.kooix`
 - 语法文档：
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`

@@ -14,7 +14,7 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 
 Kooix already has a runnable minimal compiler pipeline:
 
-`Source (.aster)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
+`Source (.kooix)` → `Lexer` → `Parser(AST)` → `HIR` → `MIR` → `Semantic Check` → `LLVM IR text` → `llc + clang native`
 
 ### Implemented Features
 
@@ -65,29 +65,29 @@ See also: `DESIGN.md`
 ### Common Commands
 
 ```bash
-cargo run -p kooixc -- check examples/valid.aster
-cargo run -p kooixc -- ast examples/valid.aster
-cargo run -p kooixc -- hir examples/valid.aster
-cargo run -p kooixc -- mir examples/valid.aster
-cargo run -p kooixc -- llvm examples/codegen.aster
+cargo run -p kooixc -- check examples/valid.kooix
+cargo run -p kooixc -- ast examples/valid.kooix
+cargo run -p kooixc -- hir examples/valid.kooix
+cargo run -p kooixc -- mir examples/valid.kooix
+cargo run -p kooixc -- llvm examples/codegen.kooix
 
 # Build native executable
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo
 
 # Build and run
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run
 
 # Pass runtime args
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run -- arg1 arg2
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run -- arg1 arg2
 
 # Inject stdin from file
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin input.txt -- arg1
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --stdin input.txt -- arg1
 
 # Inject stdin from pipe
-printf 'payload' | cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin - -- arg1
+printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --stdin - -- arg1
 
 # Runtime timeout (ms)
-cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --timeout 2000 -- arg1
+cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
 # Tests
 cargo test -p kooixc
@@ -98,10 +98,10 @@ cargo test -p kooixc
 ## Examples and Grammar Docs
 
 - Example programs:
-  - `examples/valid.aster`
-  - `examples/invalid_missing_model_cap.aster`
-  - `examples/invalid_model_shape.aster`
-  - `examples/codegen.aster`
+  - `examples/valid.kooix`
+  - `examples/invalid_missing_model_cap.kooix`
+  - `examples/invalid_model_shape.kooix`
+  - `examples/codegen.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`

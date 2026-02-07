@@ -16,17 +16,17 @@
 ## 快速使用
 
 ```bash
-cargo run -p kooixc -- check ../../examples/valid.aster
-cargo run -p kooixc -- ast ../../examples/valid.aster
-cargo run -p kooixc -- hir ../../examples/valid.aster
-cargo run -p kooixc -- mir ../../examples/valid.aster
-cargo run -p kooixc -- llvm ../../examples/codegen.aster
-cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo
-cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo --run
-cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo --run -- arg1 arg2
-cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo --run --stdin input.txt -- arg1 arg2
-printf 'payload' | cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo --run --stdin - -- arg1
-cargo run -p kooixc -- native ../../examples/codegen.aster /tmp/kooixc-demo --run --timeout 2000 -- arg1
+cargo run -p kooixc -- check ../../examples/valid.kooix
+cargo run -p kooixc -- ast ../../examples/valid.kooix
+cargo run -p kooixc -- hir ../../examples/valid.kooix
+cargo run -p kooixc -- mir ../../examples/valid.kooix
+cargo run -p kooixc -- llvm ../../examples/codegen.kooix
+cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo
+cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run
+cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run -- arg1 arg2
+cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run --stdin input.txt -- arg1 arg2
+printf 'payload' | cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run --stdin - -- arg1
+cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 ```
 
 ## 测试
