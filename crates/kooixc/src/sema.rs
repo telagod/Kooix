@@ -1000,6 +1000,25 @@ fn validate_workflow_output_contract(
                 }
             }
             None => {
+                if let Some(named_type) = available_symbols.get(&field.name) {
+                    if types_compatible_for_workflow_call(&field.ty, named_type) {
+                        // Prefer implicit name-based binding before type-only matching.
+                        continue;
+                    }
+
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' output field '{}' matches symbol '{}' by name but type is '{}', expected '{}'; use explicit '= symbol' binding",
+                            workflow.name,
+                            field.name,
+                            field.name,
+                            named_type,
+                            field.ty
+                        ),
+                        workflow.span,
+                    ));
+                }
+
                 let mut matching_sources: Vec<String> = available_symbols
                     .iter()
                     .filter(|(_, symbol_type)| {

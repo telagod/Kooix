@@ -723,6 +723,56 @@ output {
 }
 
 #[test]
+fn prefers_name_based_implicit_workflow_output_binding() {
+    let source = r#"
+fn answer_a(input: Query) -> Answer;
+fn answer_b(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  answer: answer_a(input);
+  s2: answer_b(input);
+}
+output {
+  answer: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("implicitly matches multiple source symbols")
+    }));
+}
+
+#[test]
+fn warns_when_name_based_implicit_output_binding_type_mismatches() {
+    let source = r#"
+fn summarize(input: Query) -> Summary;
+fn answer_b(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  answer: summarize(input);
+  s2: answer_b(input);
+}
+output {
+  answer: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic.message.contains(
+                "matches symbol 'answer' by name but type is 'Summary', expected 'Answer'",
+            )
+    }));
+}
+
+#[test]
 fn explicit_workflow_output_binding_resolves_implicit_ambiguity() {
     let source = r#"
 fn answer_a(input: Query) -> Answer;
