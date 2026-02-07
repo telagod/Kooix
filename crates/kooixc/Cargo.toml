@@ -1,14 +1,14 @@
 [package]
-name = "asterc"
+name = "kooixc"
 version = "0.1.0"
 edition = "2021"
 description = "Kooix language checker MVP (AI-native strong typing)"
 
 [lib]
-name = "asterc"
+name = "kooixc"
 path = "src/lib.rs"
 
 [[bin]]
-name = "asterc"
+name = "kooixc"
 path = "src/main.rs"
 

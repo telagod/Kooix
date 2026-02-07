@@ -15,17 +15,17 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
 
 - Grammar: `CapabilityDecl ::= "cap" TypeRef ";"`
   - AST: `Item::Capability(CapabilityDecl)`
-  - Code: `crates/asterc/src/ast.rs`, `crates/asterc/src/parser.rs`
+  - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
 
 - Grammar: `FunctionDecl ::= "fn" ... [Effects] [Requires] ";"`
   - AST: `Item::Function(FunctionDecl)`
-  - Code: `crates/asterc/src/ast.rs`, `crates/asterc/src/parser.rs`
+  - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
 
 ### Type system nodes
 
 - Grammar: `TypeRef`, `TypeArg`
   - AST: `TypeRef { name, args }`, `TypeArg::{Type,String,Number}`
-  - Code: `crates/asterc/src/ast.rs`
+  - Code: `crates/kooixc/src/ast.rs`
 
 ### Effects and requires
 
@@ -34,7 +34,7 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - Sema checks:
     - effect→capability relation (`model`→`Model`, `net`→`Net`, ...)
     - required capability presence
-  - Code: `crates/asterc/src/sema.rs`
+  - Code: `crates/kooixc/src/sema.rs`
 
 - Grammar: `Requires`
   - AST: `FunctionDecl.requires: Vec<TypeRef>`
@@ -42,21 +42,21 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
     - top-level capability declaration existence
     - capability instance match
     - shape checks for known capabilities
-  - Code: `crates/asterc/src/sema.rs`
+  - Code: `crates/kooixc/src/sema.rs`
 
 ### Lowering pipeline mapping
 
 - `AST Program` → `HIR Program`
-  - Code: `crates/asterc/src/hir.rs`
+  - Code: `crates/kooixc/src/hir.rs`
 
 - `HIR Program` → `MIR Program`
-  - Code: `crates/asterc/src/mir.rs`
+  - Code: `crates/kooixc/src/mir.rs`
 
 - `MIR Program` → LLVM IR text
-  - Code: `crates/asterc/src/llvm.rs`
+  - Code: `crates/kooixc/src/llvm.rs`
 
 - LLVM IR text → native binary (`llc` + `clang`)
-  - Code: `crates/asterc/src/native.rs`
+  - Code: `crates/kooixc/src/native.rs`
 
 ## AI v1 Mapping (Partial Implementation)
 

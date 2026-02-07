@@ -2,9 +2,9 @@ use std::io::Read;
 use std::path::Path;
 use std::{env, fs, process};
 
-use asterc::error::{Diagnostic, Severity};
-use asterc::native::NativeError;
-use asterc::{
+use kooixc::error::{Diagnostic, Severity};
+use kooixc::native::NativeError;
+use kooixc::{
     check_source, compile_and_run_native_source_with_args_stdin_and_timeout, compile_native_source,
     emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source,
 };
@@ -179,7 +179,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: asterc <check|ast|hir|mir|llvm|native> <file.aster> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|native> <file.aster> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 

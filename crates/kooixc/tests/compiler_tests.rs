@@ -1,11 +1,11 @@
-use asterc::ast::{FailureValue, Item, PredicateOp, PredicateValue};
-use asterc::error::Severity;
-use asterc::native::{
+use kooixc::ast::{FailureValue, Item, PredicateOp, PredicateValue};
+use kooixc::error::Severity;
+use kooixc::native::{
     compile_llvm_ir_to_executable, compile_llvm_ir_to_executable_with_tools,
     run_executable_with_args_and_stdin, run_executable_with_args_and_stdin_and_timeout,
     NativeError,
 };
-use asterc::{
+use kooixc::{
     check_source, compile_and_run_native_source, compile_and_run_native_source_with_args,
     compile_and_run_native_source_with_args_and_stdin,
     compile_and_run_native_source_with_args_stdin_and_timeout, emit_llvm_ir_source, lower_source,
@@ -845,7 +845,7 @@ fn noop() -> Unit;
 #[test]
 fn fails_native_compile_when_tool_missing() {
     let ir = "define i64 @answer() {\nentry:\n  ret i64 0\n}\n";
-    let output = std::env::temp_dir().join("asterc-native-missing-tool.bin");
+    let output = std::env::temp_dir().join("kooixc-native-missing-tool.bin");
     let result = compile_llvm_ir_to_executable_with_tools(
         ir,
         &output,
@@ -863,7 +863,7 @@ cap Model<"openai", "gpt-4o-mini">;
 fn summarize(doc: Text) -> Summary !{model(openai)} requires [Model<"openai", "gpt-4o-mini">];
 "#;
 
-    let result = asterc::compile_native_source(source, std::path::Path::new("/tmp/asterc-bad"));
+    let result = kooixc::compile_native_source(source, std::path::Path::new("/tmp/kooixc-bad"));
     assert!(matches!(result, Err(NativeError::Diagnostics(_))));
 }
 
@@ -874,7 +874,7 @@ fn compiles_native_binary_when_toolchain_available() {
     }
 
     let ir = "define i32 @main() {\nentry:\n  ret i32 0\n}\n";
-    let output = std::env::temp_dir().join("asterc-native-smoke");
+    let output = std::env::temp_dir().join("kooixc-native-smoke");
     let _ = std::fs::remove_file(&output);
 
     compile_llvm_ir_to_executable(ir, &output).expect("native compile should succeed");
@@ -893,7 +893,7 @@ fn compiles_and_runs_native_binary() {
 fn main() -> Int;
 "#;
 
-    let output = std::env::temp_dir().join("asterc-native-run-smoke");
+    let output = std::env::temp_dir().join("kooixc-native-run-smoke");
     let _ = std::fs::remove_file(&output);
 
     let run_output =
@@ -913,7 +913,7 @@ fn compiles_and_runs_native_binary_with_args() {
 fn main() -> Int;
 "#;
 
-    let output = std::env::temp_dir().join("asterc-native-run-args-smoke");
+    let output = std::env::temp_dir().join("kooixc-native-run-args-smoke");
     let _ = std::fs::remove_file(&output);
 
     let args = vec!["demo".to_string(), "123".to_string()];
@@ -934,7 +934,7 @@ fn compiles_and_runs_native_binary_with_stdin() {
 fn main() -> Int;
 "#;
 
-    let output = std::env::temp_dir().join("asterc-native-run-stdin-smoke");
+    let output = std::env::temp_dir().join("kooixc-native-run-stdin-smoke");
     let _ = std::fs::remove_file(&output);
 
     let run_output = compile_and_run_native_source_with_args_and_stdin(
@@ -956,7 +956,7 @@ fn runs_existing_executable_with_stdin() {
     }
 
     let ir = "define i32 @main() {\nentry:\n  ret i32 0\n}\n";
-    let output = std::env::temp_dir().join("asterc-native-stdin-direct");
+    let output = std::env::temp_dir().join("kooixc-native-stdin-direct");
     let _ = std::fs::remove_file(&output);
 
     compile_llvm_ir_to_executable(ir, &output).expect("native compile should succeed");
@@ -978,7 +978,7 @@ fn compiles_and_runs_native_binary_with_timeout() {
 fn main() -> Int;
 "#;
 
-    let output = std::env::temp_dir().join("asterc-native-run-timeout-smoke");
+    let output = std::env::temp_dir().join("kooixc-native-run-timeout-smoke");
     let _ = std::fs::remove_file(&output);
 
     let run_output = compile_and_run_native_source_with_args_stdin_and_timeout(

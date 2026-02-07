@@ -205,7 +205,7 @@ fn create_temp_workdir() -> Result<std::path::PathBuf, NativeError> {
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
 
-    let path = std::env::temp_dir().join(format!("asterc-native-{}-{nanos}", process::id()));
+    let path = std::env::temp_dir().join(format!("kooixc-native-{}-{nanos}", process::id()));
     fs::create_dir_all(&path)?;
     Ok(path)
 }

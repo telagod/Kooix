@@ -32,7 +32,7 @@ Kooix already has a runnable minimal compiler pipeline:
 
 ### Test Status
 
-- Latest regression command: `cargo test -p asterc`
+- Latest regression command: `cargo test -p kooixc`
 - Result: `57 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
@@ -65,32 +65,32 @@ See also: `DESIGN.md`
 ### Common Commands
 
 ```bash
-cargo run -p asterc -- check examples/valid.aster
-cargo run -p asterc -- ast examples/valid.aster
-cargo run -p asterc -- hir examples/valid.aster
-cargo run -p asterc -- mir examples/valid.aster
-cargo run -p asterc -- llvm examples/codegen.aster
+cargo run -p kooixc -- check examples/valid.aster
+cargo run -p kooixc -- ast examples/valid.aster
+cargo run -p kooixc -- hir examples/valid.aster
+cargo run -p kooixc -- mir examples/valid.aster
+cargo run -p kooixc -- llvm examples/codegen.aster
 
 # Build native executable
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo
 
 # Build and run
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run
 
 # Pass runtime args
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run -- arg1 arg2
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run -- arg1 arg2
 
 # Inject stdin from file
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --stdin input.txt -- arg1
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin input.txt -- arg1
 
 # Inject stdin from pipe
-printf 'payload' | cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --stdin - -- arg1
+printf 'payload' | cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin - -- arg1
 
 # Runtime timeout (ms)
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --timeout 2000 -- arg1
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
 # Tests
-cargo test -p asterc
+cargo test -p kooixc
 ```
 
 ---
@@ -140,7 +140,7 @@ Recommended order:
 ├── docs/
 ├── examples/
 └── crates/
-    └── asterc/
+    └── kooixc/
         ├── src/
         └── tests/
 ```

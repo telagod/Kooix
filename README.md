@@ -31,7 +31,7 @@ Kooix 已完成一条可运行的最小编译链路：
 
 ### 测试状态
 
-- 最新回归：`cargo test -p asterc`
+- 最新回归：`cargo test -p kooixc`
 - 结果：`57 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
@@ -64,32 +64,32 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 常用命令
 
 ```bash
-cargo run -p asterc -- check examples/valid.aster
-cargo run -p asterc -- ast examples/valid.aster
-cargo run -p asterc -- hir examples/valid.aster
-cargo run -p asterc -- mir examples/valid.aster
-cargo run -p asterc -- llvm examples/codegen.aster
+cargo run -p kooixc -- check examples/valid.aster
+cargo run -p kooixc -- ast examples/valid.aster
+cargo run -p kooixc -- hir examples/valid.aster
+cargo run -p kooixc -- mir examples/valid.aster
+cargo run -p kooixc -- llvm examples/codegen.aster
 
 # 生成本地可执行文件
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo
 
 # 编译后立即运行
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run
 
 # 透传运行参数
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run -- arg1 arg2
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run -- arg1 arg2
 
 # 注入 stdin（文件）
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --stdin input.txt -- arg1
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin input.txt -- arg1
 
 # 注入 stdin（管道）
-printf 'payload' | cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --stdin - -- arg1
+printf 'payload' | cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --stdin - -- arg1
 
 # 运行超时保护（ms）
-cargo run -p asterc -- native examples/codegen.aster /tmp/asterc-demo --run --timeout 2000 -- arg1
+cargo run -p kooixc -- native examples/codegen.aster /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
 # 测试
-cargo test -p asterc
+cargo test -p kooixc
 ```
 
 ---
@@ -141,7 +141,7 @@ cargo test -p asterc
 ├── docs/
 ├── examples/
 └── crates/
-    └── asterc/
+    └── kooixc/
         ├── src/
         └── tests/
 ```

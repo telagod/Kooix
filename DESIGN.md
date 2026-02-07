@@ -127,14 +127,14 @@ agent <name>(<params>) -> <TypeRef>
 
 - **变更内容**：初始化 Rust workspace，落地 lexer/parser/sema/CLI/tests。
 - **变更理由**：将设计方案转为可运行原型，验证核心语义约束。
-- **影响范围**：新增 `crates/asterc` 与顶层文档/示例。
+- **影响范围**：新增 `crates/kooixc` 与顶层文档/示例。
 - **决策依据**：优先交付最短可验证闭环。
 
 ### 2026-02-07 - Phase 2：HIR 与语义约束增强
 
 - **变更内容**：新增 HIR lowering；增强 capability 参数与 effect 匹配校验；扩充测试与示例。
 - **变更理由**：提升类型系统表达力与错误定位精度。
-- **影响范围**：`crates/asterc/src/hir.rs`、`sema.rs`、CLI 与 tests。
+- **影响范围**：`crates/kooixc/src/hir.rs`、`sema.rs`、CLI 与 tests。
 - **决策依据**：在不引入新依赖下提升语义强度。
 
 ### 2026-02-07 - Phase 3：MIR 与 LLVM IR 后端骨架

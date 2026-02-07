@@ -1,4 +1,4 @@
-# asterc DESIGN
+# kooixc DESIGN
 
 ## 设计目标
 

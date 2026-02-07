@@ -11,15 +11,15 @@ This project is currently in MVP stage, so we prioritize small, verifiable, and 
 ```bash
 git clone https://github.com/telagod/Kooix.git
 cd Kooix
-cargo test -p asterc
+cargo test -p kooixc
 ```
 
 ## Project Structure
 
 ```text
-crates/asterc/src/      # compiler implementation
+crates/kooixc/src/      # compiler implementation
   lexer/parser/hir/mir/sema/native/cli
-crates/asterc/tests/    # compiler tests
+crates/kooixc/tests/    # compiler tests
 docs/                   # grammar and mapping docs
 examples/               # sample .aster programs
 ```
@@ -38,14 +38,14 @@ Run what applies to your change:
 
 ```bash
 cargo fmt --all
-cargo test -p asterc --test compiler_tests
-cargo test -p asterc
+cargo test -p kooixc --test compiler_tests
+cargo test -p kooixc
 ```
 
 For agent-related changes, run focused tests:
 
 ```bash
-cargo test -p asterc --test compiler_tests agent
+cargo test -p kooixc --test compiler_tests agent
 ```
 
 ## Commit Message Style
