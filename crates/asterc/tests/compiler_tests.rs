@@ -1018,6 +1018,77 @@ fn resolve_unix_test_shell() -> std::path::PathBuf {
     panic!("no usable shell found for timeout tests (expected /bin/sh or /usr/bin/sh)");
 }
 
+#[cfg(windows)]
+#[test]
+fn run_executable_times_out_on_windows() {
+    let shell_path = resolve_windows_test_shell();
+
+    let args = vec!["/C".to_string(), "ping 127.0.0.1 -n 4 >NUL".to_string()];
+    let result = run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(50));
+
+    assert!(matches!(
+        result,
+        Err(NativeError::TimedOut { timeout_ms: 50 })
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn run_executable_finishes_before_timeout_on_windows() {
+    let shell_path = resolve_windows_test_shell();
+
+    let args = vec!["/C".to_string(), "exit 0".to_string()];
+    let result =
+        run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(500))
+            .expect("fast process should finish before timeout");
+
+    assert_eq!(result.status_code, Some(0));
+}
+
+#[cfg(windows)]
+#[test]
+fn run_executable_timeout_path_is_stable_under_repetition_on_windows() {
+    let shell_path = resolve_windows_test_shell();
+    let args = vec!["/C".to_string(), "ping 127.0.0.1 -n 4 >NUL".to_string()];
+
+    for _ in 0..10 {
+        let result =
+            run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(50));
+        assert!(matches!(
+            result,
+            Err(NativeError::TimedOut { timeout_ms: 50 })
+        ));
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn run_executable_fast_path_is_stable_under_repetition_on_windows() {
+    let shell_path = resolve_windows_test_shell();
+    let args = vec!["/C".to_string(), "exit 0".to_string()];
+
+    for _ in 0..20 {
+        let result =
+            run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(200))
+                .expect("fast process should not time out");
+        assert_eq!(result.status_code, Some(0));
+    }
+}
+
+#[cfg(windows)]
+fn resolve_windows_test_shell() -> std::path::PathBuf {
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        let candidate = std::path::PathBuf::from(system_root)
+            .join("System32")
+            .join("cmd.exe");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    std::path::PathBuf::from("cmd.exe")
+}
+
 fn tool_exists(tool: &str) -> bool {
     std::process::Command::new(tool)
         .arg("--version")

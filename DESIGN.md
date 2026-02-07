@@ -200,6 +200,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`native.rs`、`compiler_tests.rs` 与 README 测试状态。
 - **决策依据**：通过“实现稳健化 + 压测回归”双路径提升可信度。
 
+### 2026-02-07 - Phase 4.8：Windows Timeout 回归覆盖
+
+- **变更内容**：新增 `cmd.exe` 路径下 timeout/fast-path/重复压测测试分支（`#[cfg(windows)]`）。
+- **变更理由**：补齐跨平台行为验证，降低仅 Unix 覆盖导致的隐藏回归风险。
+- **影响范围**：`compiler_tests.rs` 与设计文档。
+- **决策依据**：在不引入新依赖前提下，使用系统 shell 保持测试可执行与可维护。
+
 ### 2026-02-07 - Phase 5：AI v1 函数契约子集（intent + ensures）
 
 - **变更内容**：为 `fn` 增加 `intent` 与 `ensures` 语法；补齐 lexer/parser/AST/HIR/Sema 与测试覆盖。
