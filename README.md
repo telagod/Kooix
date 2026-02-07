@@ -20,6 +20,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - Core 语言骨架：`cap`、`fn` 顶层声明。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
+- 记录类型：`record` 声明、字段投影与最小泛型替换（如 `Box<Answer>.value`）。
 - AI v1 agent 子集：`agent`（`state/policy/loop/requires/ensures/evidence`）。
 - Agent 语义增强：
   - allow/deny 冲突检测（error）+ deny precedence 报告（warning）。
@@ -32,7 +33,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`57 passed, 0 failed`
+- 结果：`91 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -46,9 +47,12 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 4: LLVM IR 文本后端 + Native 构建/运行链路
 - ✅ Phase 5: AI v1 函数契约子集（intent/ensures/failure/evidence）
 - ✅ Phase 6: AI v1 Workflow 最小子集
+- ✅ Phase 6.9: Record 声明与字段投影
+- ✅ Phase 6.10: Record 泛型字段投影（最小子集）
 - ✅ Phase 7: AI v1 Agent 最小子集
 - ✅ Phase 7.1: Agent 策略冲突解释 + 状态可达性提示
 - ✅ Phase 7.2: Agent 活性/终止性提示
+- ✅ Phase 7.3: Agent SCC 循环活性校验
 
 详见：`DESIGN.md`
 
@@ -125,10 +129,10 @@ cargo test -p kooixc
 
 建议优先级：
 
-1. Agent 状态机强校验（SCC/循环可达性，终态覆盖）
-2. Workflow step call 级语义校验（签名/类型流）
-3. Core 表达式与类型系统扩展（为真实 codegen 做准备）
-4. 诊断分级与 CI 门禁（warning → 可配置策略）
+1. Core 表达式系统与类型推导扩展（为真实 codegen 做准备）
+2. 泛型约束系统（record bounds / where 子句）
+3. 模块系统与 import/linking（多文件编译闭环）
+4. 诊断分级与 CI 门禁（warning 策略可配置）
 
 ---
 

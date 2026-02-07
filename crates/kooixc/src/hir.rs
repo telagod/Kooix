@@ -69,6 +69,7 @@ pub struct HirWorkflowStep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirRecord {
     pub name: String,
+    pub generics: Vec<String>,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }
@@ -185,6 +186,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
             Item::Record(record_decl) => {
                 records.push(HirRecord {
                     name: record_decl.name.clone(),
+                    generics: record_decl.generics.clone(),
                     fields: record_decl.fields.clone(),
                     span: record_decl.span,
                 });

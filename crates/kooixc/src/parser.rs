@@ -62,6 +62,24 @@ impl<'a> Parser<'a> {
     fn parse_record_decl(&mut self) -> Result<RecordDecl, Diagnostic> {
         let start = self.expect_kw_record()?.start;
         let (name, _) = self.expect_ident()?;
+
+        let mut generics = Vec::new();
+        if self.at_langle() {
+            self.expect_langle()?;
+            if !self.at_rangle() {
+                loop {
+                    let (generic_name, _) = self.expect_ident()?;
+                    generics.push(generic_name);
+                    if self.at_comma() {
+                        self.advance();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            self.expect_rangle()?;
+        }
+
         self.expect_lbrace()?;
 
         let mut fields = Vec::new();
@@ -81,6 +99,7 @@ impl<'a> Parser<'a> {
 
         Ok(RecordDecl {
             name,
+            generics,
             fields,
             span: Span::new(start, end),
         })

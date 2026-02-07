@@ -25,6 +25,7 @@ pub struct CapabilityDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordDecl {
     pub name: String,
+    pub generics: Vec<String>,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }

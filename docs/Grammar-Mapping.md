@@ -136,20 +136,25 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
 
 ## Record Mapping (Partial Implementation)
 
-- `record Name { field: Type; ... };`
-  - AST: `Item::Record(RecordDecl)`
-  - HIR: `HirRecord`
+- `record Name ["<" GenericList ">"] { field: Type; ... };`
+  - AST: `Item::Record(RecordDecl { name, generics, fields })`
+  - HIR: `HirRecord { name, generics, fields }`
   - Parser subset:
     - supports named field list with `field: Type;`
+    - supports optional generic parameter list: `record Box<T, U> { ... };`
   - Sema subset:
     - duplicate record declaration error
+    - duplicate generic parameter error
     - duplicate field name error
+    - generic parameter cannot be used with nested type args (`T<Int>`)
     - empty record warning
     - record field projection in workflow step/output path typing
+    - generic field projection substitution (e.g. `Box<Answer>.value -> Answer`)
+    - generic arity mismatch falls back to projection warning (non-fatal)
 
 ## Record Mapping (Target, Not Implemented Yet)
 
-- user-defined record generics and constraints
+- generic constraints / where-clause style bounds
 - record projection beyond static field map (methods/computed fields)
 
 ### Agent top-level

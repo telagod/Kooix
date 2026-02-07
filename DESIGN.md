@@ -298,6 +298,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先实现最小 record field map（无泛型/方法），优先交付可读可验的字段路径能力。
 
+### 2026-02-07 - Phase 6.10：Record 泛型字段投影（最小子集）
+
+- **变更内容**：在 `record` 声明中支持可选泛型参数（如 `record Box<T>`）；workflow step/output 的 member path 投影支持按实例化类型做字段泛型替换（`Box<Answer>.value -> Answer`）。
+- **变更理由**：提升 DSL 数据流表达力，让抽象数据容器在编排层保持强类型可推导。
+- **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先落地“声明 + 投影替换”闭环，不引入约束系统与方法分派；泛型参数数量不匹配时保持 warning 级别兼容。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

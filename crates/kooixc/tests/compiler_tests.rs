@@ -332,6 +332,30 @@ record Answer {
 }
 
 #[test]
+fn parses_generic_record_declaration() {
+    let source = r#"
+record Box<T> {
+  value: T;
+}
+;
+"#;
+
+    let program = parse_source(source).expect("generic record should parse");
+    assert_eq!(program.items.len(), 1);
+
+    let record = match &program.items[0] {
+        Item::Record(record) => record,
+        _ => panic!("expected first item to be record"),
+    };
+
+    assert_eq!(record.name, "Box");
+    assert_eq!(record.generics, vec!["T".to_string()]);
+    assert_eq!(record.fields.len(), 1);
+    assert_eq!(record.fields[0].name, "value");
+    assert_eq!(record.fields[0].ty.to_string(), "T");
+}
+
+#[test]
 fn rejects_duplicate_record_declarations() {
     let source = r#"
 record Answer { text: Text; };
@@ -363,6 +387,42 @@ record Answer {
             && diagnostic
                 .message
                 .contains("record 'Answer' repeats field 'text'")
+    }));
+}
+
+#[test]
+fn rejects_duplicate_record_generic_parameters() {
+    let source = r#"
+record Box<T, T> {
+  value: T;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record 'Box' repeats generic parameter 'T'")
+    }));
+}
+
+#[test]
+fn rejects_record_generic_parameter_with_type_arguments() {
+    let source = r#"
+record Box<T> {
+  value: T<Int>;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record 'Box' uses generic parameter 'T' with type arguments")
     }));
 }
 
@@ -721,6 +781,36 @@ steps {
 }
 
 #[test]
+fn accepts_workflow_step_call_with_generic_record_member_projection() {
+    let source = r#"
+record Box<T> {
+  value: T;
+}
+;
+fn retrieve(input: Query) -> Box<Answer>;
+fn deliver(answer: Answer) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: deliver(s1.value);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("workflow 'flow' step 's2'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'value' on type 'Box<Answer>'")
+    }));
+}
+
+#[test]
 fn warns_on_workflow_step_call_with_unsupported_member_projection() {
     let source = r#"
 fn retrieve(input: Query) -> Answer;
@@ -739,6 +829,32 @@ steps {
             && diagnostic
                 .message
                 .contains("cannot infer member 'value' on type 'Answer'")
+    }));
+}
+
+#[test]
+fn warns_on_workflow_step_call_with_record_generic_arity_mismatch() {
+    let source = r#"
+record Box<T> {
+  value: T;
+}
+;
+fn retrieve(input: Query) -> Box;
+fn deliver(answer: Answer) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: deliver(s1.value);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'value' on type 'Box'")
     }));
 }
 
@@ -1059,6 +1175,37 @@ output {
             && diagnostic
                 .message
                 .contains("cannot infer member 'text' on type 'Answer'")
+    }));
+}
+
+#[test]
+fn accepts_workflow_output_binding_with_generic_record_member_projection() {
+    let source = r#"
+record Envelope<T> {
+  payload: Option<T>;
+}
+;
+fn answer(input: Query) -> Envelope<Answer>;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer = s1.payload.some;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("output field 'result'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'payload' on type 'Envelope<Answer>'")
     }));
 }
 

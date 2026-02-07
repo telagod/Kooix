@@ -200,11 +200,17 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     diagnostics
 }
 
+#[derive(Debug, Clone)]
+struct RecordSchema {
+    generics: Vec<String>,
+    fields: HashMap<String, TypeRef>,
+}
+
 fn validate_record_declarations(
     records: &[HirRecord],
     diagnostics: &mut Vec<Diagnostic>,
-) -> HashMap<String, HashMap<String, TypeRef>> {
-    let mut declared_record_types: HashMap<String, HashMap<String, TypeRef>> = HashMap::new();
+) -> HashMap<String, RecordSchema> {
+    let mut declared_record_types: HashMap<String, RecordSchema> = HashMap::new();
 
     for record in records {
         if declared_record_types.contains_key(&record.name) {
@@ -222,6 +228,20 @@ fn validate_record_declarations(
             ));
         }
 
+        let mut seen_generics = HashSet::new();
+        for generic in &record.generics {
+            if !seen_generics.insert(generic.clone()) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "record '{}' repeats generic parameter '{}'",
+                        record.name, generic
+                    ),
+                    record.span,
+                ));
+            }
+        }
+
+        let generic_set: HashSet<&str> = record.generics.iter().map(|name| name.as_str()).collect();
         let mut field_types: HashMap<String, TypeRef> = HashMap::new();
         for field in &record.fields {
             if field_types
@@ -233,12 +253,47 @@ fn validate_record_declarations(
                     record.span,
                 ));
             }
+
+            validate_record_field_type_ref(&field.ty, &generic_set, record, diagnostics);
         }
 
-        declared_record_types.insert(record.name.clone(), field_types);
+        declared_record_types.insert(
+            record.name.clone(),
+            RecordSchema {
+                generics: record.generics.clone(),
+                fields: field_types,
+            },
+        );
     }
 
     declared_record_types
+}
+
+fn validate_record_field_type_ref(
+    ty: &TypeRef,
+    generic_set: &HashSet<&str>,
+    record: &HirRecord,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if generic_set.contains(ty.head()) {
+        if !ty.args.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "record '{}' uses generic parameter '{}' with type arguments",
+                    record.name,
+                    ty.head(),
+                ),
+                record.span,
+            ));
+        }
+        return;
+    }
+
+    for arg in &ty.args {
+        if let TypeArg::Type(inner) = arg {
+            validate_record_field_type_ref(inner, generic_set, record, diagnostics);
+        }
+    }
 }
 
 fn validate_agent(
@@ -887,7 +942,7 @@ fn validate_workflow(
     declared_capability_instances: &HashSet<String>,
     declared_invocable_targets: &HashSet<String>,
     declared_invocable_signatures: &HashMap<String, InvocableSignature>,
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(intent) = &workflow.intent {
@@ -981,7 +1036,7 @@ fn validate_workflow(
 fn validate_workflow_output_contract(
     workflow: &HirWorkflow,
     available_symbols: &HashMap<String, TypeRef>,
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if workflow.output.is_empty() {
@@ -1373,7 +1428,7 @@ fn validate_workflow_step_call_signature(
     call_args: &[WorkflowCallArg],
     signature: &InvocableSignature,
     available_symbols: &HashMap<String, TypeRef>,
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if call_args.len() != signature.params.len() {
@@ -1426,7 +1481,7 @@ fn infer_workflow_call_arg_type(
     call_target: &str,
     arg: &WorkflowCallArg,
     available_symbols: &HashMap<String, TypeRef>,
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     match arg {
@@ -1493,7 +1548,7 @@ struct MemberProjectionFailure {
 fn infer_member_projection_type(
     root_type: &TypeRef,
     members: &[String],
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
 ) -> Result<TypeRef, MemberProjectionFailure> {
     let mut current = root_type.clone();
     for member in members {
@@ -1512,11 +1567,19 @@ fn infer_member_projection_type(
 fn project_member_type(
     base: &TypeRef,
     member: &str,
-    declared_record_types: &HashMap<String, HashMap<String, TypeRef>>,
+    declared_record_types: &HashMap<String, RecordSchema>,
 ) -> Option<TypeRef> {
-    if let Some(record_fields) = declared_record_types.get(base.head()) {
-        if let Some(field_type) = record_fields.get(member) {
-            return Some(field_type.clone());
+    if let Some(record_schema) = declared_record_types.get(base.head()) {
+        if record_schema.generics.len() != base.args.len() {
+            return None;
+        }
+
+        if let Some(field_type) = record_schema.fields.get(member) {
+            return Some(substitute_record_generic_type(
+                field_type,
+                &record_schema.generics,
+                &base.args,
+            ));
         }
     }
 
@@ -1546,6 +1609,35 @@ fn project_member_type(
             _ => None,
         },
         _ => None,
+    }
+}
+
+fn substitute_record_generic_type(
+    ty: &TypeRef,
+    generics: &[String],
+    actual_args: &[TypeArg],
+) -> TypeRef {
+    if ty.args.is_empty() {
+        if let Some(index) = generics.iter().position(|name| name == ty.head()) {
+            if let Some(TypeArg::Type(actual_ty)) = actual_args.get(index) {
+                return actual_ty.clone();
+            }
+        }
+    }
+
+    TypeRef {
+        name: ty.name.clone(),
+        args: ty
+            .args
+            .iter()
+            .map(|arg| match arg {
+                TypeArg::Type(inner) => {
+                    TypeArg::Type(substitute_record_generic_type(inner, generics, actual_args))
+                }
+                TypeArg::String(value) => TypeArg::String(value.clone()),
+                TypeArg::Number(value) => TypeArg::Number(value.clone()),
+            })
+            .collect(),
     }
 }
 
