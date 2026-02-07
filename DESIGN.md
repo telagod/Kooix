@@ -256,6 +256,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先落地 root symbol 级别绑定（不做成员投影），以低风险方式推进类型流主线能力。
 
+### 2026-02-07 - Phase 6.4：Workflow Output Contract 类型流校验
+
+- **变更内容**：为 `output { ... }` 增加语义检查：重复字段 error、输出字段类型来源覆盖 warning、返回类型未在 output 合同中暴露 warning。
+- **变更理由**：让 workflow 返回合同与内部数据流形成静态闭环，提前发现“有返回类型但输出合同不可达/不一致”的设计缺陷。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先做最小 root-level 类型流校验，不引入表达式绑定语法，保持语法面稳定。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

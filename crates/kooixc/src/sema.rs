@@ -923,7 +923,60 @@ fn validate_workflow(
         }
     }
 
+    validate_workflow_output_contract(workflow, &available_symbols, diagnostics);
     validate_workflow_evidence(workflow, diagnostics);
+}
+
+fn validate_workflow_output_contract(
+    workflow: &HirWorkflow,
+    available_symbols: &HashMap<String, TypeRef>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if workflow.output.is_empty() {
+        return;
+    }
+
+    let mut seen_fields = HashSet::new();
+    for field in &workflow.output {
+        if !seen_fields.insert(field.name.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "workflow '{}' output block repeats field '{}'",
+                    workflow.name, field.name
+                ),
+                workflow.span,
+            ));
+        }
+
+        let has_matching_source = available_symbols
+            .values()
+            .any(|symbol_type| types_compatible_for_workflow_call(&field.ty, symbol_type));
+
+        if !has_matching_source {
+            diagnostics.push(Diagnostic::warning(
+                format!(
+                    "workflow '{}' output field '{}' has type '{}' but no matching source symbol exists in workflow scope",
+                    workflow.name, field.name, field.ty
+                ),
+                workflow.span,
+            ));
+        }
+    }
+
+    let exposes_return_type = workflow
+        .output
+        .iter()
+        .any(|field| types_compatible_for_workflow_call(&workflow.return_type, &field.ty));
+
+    if !exposes_return_type {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "workflow '{}' output contract does not expose return type '{}'",
+                workflow.name, workflow.return_type
+            ),
+            workflow.span,
+        ));
+    }
 }
 
 fn validate_failure(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) {

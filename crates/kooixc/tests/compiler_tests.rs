@@ -605,6 +605,103 @@ steps {
 }
 
 #[test]
+fn rejects_duplicate_workflow_output_fields() {
+    let source = r#"
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer;
+  result: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("output block repeats field 'result'")
+    }));
+}
+
+#[test]
+fn warns_when_workflow_output_field_has_no_matching_source_symbol() {
+    let source = r#"
+fn noop() -> Unit;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: noop();
+}
+output {
+  answer: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("output field 'answer' has type 'Answer' but no matching source symbol")
+    }));
+}
+
+#[test]
+fn warns_when_workflow_output_contract_does_not_expose_return_type() {
+    let source = r#"
+fn summarize(input: Query) -> Summary;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: summarize(input);
+}
+output {
+  summary: Summary;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("output contract does not expose return type 'Answer'")
+    }));
+}
+
+#[test]
+fn accepts_workflow_output_contract_with_step_bound_return_type() {
+    let source = r#"
+fn answer(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("output contract does not expose return type")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic.message.contains("output field 'result'")
+    }));
+}
+
+#[test]
 fn rejects_workflow_requires_without_top_level_capability() {
     let source = r#"
 workflow flow() -> Unit
