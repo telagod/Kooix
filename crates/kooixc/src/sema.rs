@@ -5,7 +5,9 @@ use crate::ast::{
     WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
-use crate::hir::{lower_program, HirAgent, HirEffect, HirFunction, HirRecord, HirWorkflow};
+use crate::hir::{
+    lower_program, HirAgent, HirEffect, HirFunction, HirProgram, HirRecord, HirWorkflow,
+};
 
 #[derive(Debug, Clone)]
 struct InvocableSignature {
@@ -60,6 +62,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     }
 
     let declared_record_types = validate_record_declarations(&hir.records, &mut diagnostics);
+    validate_record_type_arity_usage(&hir, &declared_record_types, &mut diagnostics);
 
     let mut declared_capability_instances = HashSet::new();
     let mut declared_capability_heads = HashSet::new();
@@ -292,6 +295,134 @@ fn validate_record_field_type_ref(
     for arg in &ty.args {
         if let TypeArg::Type(inner) = arg {
             validate_record_field_type_ref(inner, generic_set, record, diagnostics);
+        }
+    }
+}
+
+fn validate_record_type_arity_usage(
+    program: &HirProgram,
+    declared_record_types: &HashMap<String, RecordSchema>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for record in &program.records {
+        for field in &record.fields {
+            validate_record_type_ref_arity(
+                &field.ty,
+                declared_record_types,
+                &format!("record '{}' field '{}'", record.name, field.name),
+                record.span,
+                diagnostics,
+            );
+        }
+    }
+
+    for function in &program.functions {
+        for param in &function.params {
+            validate_record_type_ref_arity(
+                &param.ty,
+                declared_record_types,
+                &format!("function '{}' parameter '{}'", function.name, param.name),
+                function.span,
+                diagnostics,
+            );
+        }
+
+        validate_record_type_ref_arity(
+            &function.return_type,
+            declared_record_types,
+            &format!("function '{}' return type", function.name),
+            function.span,
+            diagnostics,
+        );
+    }
+
+    for workflow in &program.workflows {
+        for param in &workflow.params {
+            validate_record_type_ref_arity(
+                &param.ty,
+                declared_record_types,
+                &format!("workflow '{}' parameter '{}'", workflow.name, param.name),
+                workflow.span,
+                diagnostics,
+            );
+        }
+
+        validate_record_type_ref_arity(
+            &workflow.return_type,
+            declared_record_types,
+            &format!("workflow '{}' return type", workflow.name),
+            workflow.span,
+            diagnostics,
+        );
+
+        for output in &workflow.output {
+            validate_record_type_ref_arity(
+                &output.ty,
+                declared_record_types,
+                &format!(
+                    "workflow '{}' output field '{}'",
+                    workflow.name, output.name
+                ),
+                workflow.span,
+                diagnostics,
+            );
+        }
+    }
+
+    for agent in &program.agents {
+        for param in &agent.params {
+            validate_record_type_ref_arity(
+                &param.ty,
+                declared_record_types,
+                &format!("agent '{}' parameter '{}'", agent.name, param.name),
+                agent.span,
+                diagnostics,
+            );
+        }
+
+        validate_record_type_ref_arity(
+            &agent.return_type,
+            declared_record_types,
+            &format!("agent '{}' return type", agent.name),
+            agent.span,
+            diagnostics,
+        );
+    }
+}
+
+fn validate_record_type_ref_arity(
+    ty: &TypeRef,
+    declared_record_types: &HashMap<String, RecordSchema>,
+    context: &str,
+    span: Span,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(record_schema) = declared_record_types.get(ty.head()) {
+        let expected_arity = record_schema.generics.len();
+        let actual_arity = ty.args.len();
+        if expected_arity != actual_arity {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "{} uses record type '{}' with {} generic argument(s), expected {}",
+                    context,
+                    ty.head(),
+                    actual_arity,
+                    expected_arity,
+                ),
+                span,
+            ));
+        }
+    }
+
+    for arg in &ty.args {
+        if let TypeArg::Type(inner) = arg {
+            validate_record_type_ref_arity(
+                inner,
+                declared_record_types,
+                context,
+                span,
+                diagnostics,
+            );
         }
     }
 }

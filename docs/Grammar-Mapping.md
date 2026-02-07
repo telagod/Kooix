@@ -150,7 +150,8 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - empty record warning
     - record field projection in workflow step/output path typing
     - generic field projection substitution (e.g. `Box<Answer>.value -> Answer`)
-    - generic arity mismatch falls back to projection warning (non-fatal)
+    - declaration-level record generic arity checks across `record/fn/workflow/agent` type positions
+    - projection on arity-mismatched record paths keeps warning fallback for compatibility
 
 ## Record Mapping (Target, Not Implemented Yet)
 

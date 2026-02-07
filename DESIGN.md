@@ -305,6 +305,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先落地“声明 + 投影替换”闭环，不引入约束系统与方法分派；泛型参数数量不匹配时保持 warning 级别兼容。
 
+### 2026-02-07 - Phase 6.11：Record 泛型实参数量静态校验
+
+- **变更内容**：新增 record type arity 全局校验，对 `fn/workflow/agent` 的参数与返回类型、`workflow output` 字段类型、`record` 字段类型中的 record 泛型实参数量不匹配给出 error。
+- **变更理由**：把原本只在 member projection 阶段暴露的问题前移到声明阶段，减少隐式降级与后续连锁告警。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：在不引入约束系统的前提下先强化 arity correctness，提升类型系统可靠性与诊断确定性。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

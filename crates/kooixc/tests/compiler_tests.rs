@@ -427,6 +427,28 @@ record Box<T> {
 }
 
 #[test]
+fn rejects_record_field_type_with_record_generic_arity_mismatch() {
+    let source = r#"
+record Box<T> {
+  value: T;
+}
+;
+record Envelope {
+  payload: Box;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record 'Envelope' field 'payload' uses record type 'Box' with 0 generic argument(s), expected 1")
+    }));
+}
+
+#[test]
 fn warns_on_record_without_fields() {
     let source = r#"
 record Empty {}
@@ -620,6 +642,25 @@ steps {
             && diagnostic
                 .message
                 .contains("passes argument 1 to 'fetch' as 'Text' but expected 'Int'")
+    }));
+}
+
+#[test]
+fn rejects_function_return_type_with_record_generic_arity_mismatch() {
+    let source = r#"
+record Box<T> {
+  value: T;
+}
+;
+fn answer(input: Query) -> Box;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("function 'answer' return type uses record type 'Box' with 0 generic argument(s), expected 1")
     }));
 }
 
@@ -1119,6 +1160,34 @@ output {
             && diagnostic
                 .message
                 .contains("binds 's1' as 'Summary' but declared type is 'Answer'")
+    }));
+}
+
+#[test]
+fn rejects_workflow_output_field_type_with_record_generic_arity_mismatch() {
+    let source = r#"
+record Pair<T, U> {
+  left: T;
+  right: U;
+}
+;
+fn build(input: Query) -> Pair<Answer, Text>;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: build(input);
+}
+output {
+  result: Pair<Answer> = s1;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("workflow 'flow' output field 'result' uses record type 'Pair' with 1 generic argument(s), expected 2")
     }));
 }
 
