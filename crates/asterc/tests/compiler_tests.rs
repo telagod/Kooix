@@ -952,23 +952,70 @@ fn main() -> Int;
 #[cfg(unix)]
 #[test]
 fn run_executable_times_out() {
-    use std::os::unix::fs::PermissionsExt;
+    let shell_path = resolve_unix_test_shell();
 
-    let script_path = std::env::temp_dir().join("asterc-timeout-smoke.sh");
-    let _ = std::fs::remove_file(&script_path);
+    let args = vec!["-c".to_string(), "sleep 2".to_string()];
+    let result = run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(50));
 
-    std::fs::write(&script_path, "#!/bin/sh\nsleep 1\n")
-        .expect("should write timeout smoke script");
-    let mut permissions = std::fs::metadata(&script_path)
-        .expect("should stat script")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(&script_path, permissions).expect("should chmod script");
+    assert!(matches!(
+        result,
+        Err(NativeError::TimedOut { timeout_ms: 50 })
+    ));
+}
 
-    let result = run_executable_with_args_and_stdin_and_timeout(&script_path, &[], None, Some(10));
-    assert!(matches!(result, Err(NativeError::TimedOut { .. })));
+#[cfg(unix)]
+#[test]
+fn run_executable_finishes_before_timeout() {
+    let shell_path = resolve_unix_test_shell();
 
-    let _ = std::fs::remove_file(&script_path);
+    let args = vec!["-c".to_string(), "exit 0".to_string()];
+    let result =
+        run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(500))
+            .expect("fast process should finish before timeout");
+
+    assert_eq!(result.status_code, Some(0));
+}
+
+#[cfg(unix)]
+#[test]
+fn run_executable_timeout_path_is_stable_under_repetition() {
+    let shell_path = resolve_unix_test_shell();
+    let args = vec!["-c".to_string(), "sleep 1".to_string()];
+
+    for _ in 0..20 {
+        let result =
+            run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(20));
+        assert!(matches!(
+            result,
+            Err(NativeError::TimedOut { timeout_ms: 20 })
+        ));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn run_executable_fast_path_is_stable_under_repetition() {
+    let shell_path = resolve_unix_test_shell();
+    let args = vec!["-c".to_string(), "exit 0".to_string()];
+
+    for _ in 0..20 {
+        let result =
+            run_executable_with_args_and_stdin_and_timeout(&shell_path, &args, None, Some(200))
+                .expect("fast process should not time out");
+        assert_eq!(result.status_code, Some(0));
+    }
+}
+
+#[cfg(unix)]
+fn resolve_unix_test_shell() -> std::path::PathBuf {
+    for candidate in ["/bin/sh", "/usr/bin/sh"] {
+        let path = std::path::Path::new(candidate);
+        if path.exists() {
+            return path.to_path_buf();
+        }
+    }
+
+    panic!("no usable shell found for timeout tests (expected /bin/sh or /usr/bin/sh)");
 }
 
 fn tool_exists(tool: &str) -> bool {

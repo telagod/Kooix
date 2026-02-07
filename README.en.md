@@ -32,10 +32,10 @@ Aster already has a runnable minimal compiler pipeline:
 
 ### Test Status
 
-- Latest regression command: `cargo test -p asterc -- --skip run_executable_times_out`
-- Result: `50 passed, 0 failed, 1 filtered`
+- Latest regression command: `cargo test -p asterc`
+- Result: `55 passed, 0 failed`
 
-> Note: `run_executable_times_out` is currently treated as a known flaky case and skipped in this baseline run.
+> Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
 ---
 

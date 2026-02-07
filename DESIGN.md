@@ -186,6 +186,20 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`native.rs` 运行器轮询与 kill、`main.rs` 选项解析、`lib.rs` API 与 tests。
 - **决策依据**：通过标准库实现，无额外依赖，兼容现有命令行为。
 
+### 2026-02-07 - Phase 4.6：Timeout 稳定性修复
+
+- **变更内容**：优化超时轮询逻辑（deadline + 二次 `try_wait` 边界确认）；重写 `run_executable_times_out` 为无临时脚本依赖版本，并补充 fast-path 不超时测试。
+- **变更理由**：修复历史 flaky 行为，确保 timeout 语义在边界时刻可预测且可复现。
+- **影响范围**：`native.rs`、`compiler_tests.rs`、README/CONTRIBUTING。
+- **决策依据**：优先消除测试环境差异与临时文件竞争，再增强超时判定稳健性。
+
+### 2026-02-07 - Phase 4.7：Timeout 高可靠性加固
+
+- **变更内容**：补充 kill 失败时的存活校验与错误上抛；新增 timeout/fast-path 重复压测测试（20x）。
+- **变更理由**：进一步降低极端调度抖动下的误判与潜在挂死风险。
+- **影响范围**：`native.rs`、`compiler_tests.rs` 与 README 测试状态。
+- **决策依据**：通过“实现稳健化 + 压测回归”双路径提升可信度。
+
 ### 2026-02-07 - Phase 5：AI v1 函数契约子集（intent + ensures）
 
 - **变更内容**：为 `fn` 增加 `intent` 与 `ensures` 语法；补齐 lexer/parser/AST/HIR/Sema 与测试覆盖。

@@ -31,10 +31,10 @@ Aster 已完成一条可运行的最小编译链路：
 
 ### 测试状态
 
-- 最新回归：`cargo test -p asterc -- --skip run_executable_times_out`
-- 结果：`50 passed, 0 failed, 1 filtered`
+- 最新回归：`cargo test -p asterc`
+- 结果：`55 passed, 0 failed`
 
-> 注：`run_executable_times_out` 在当前阶段按已知不稳定项过滤。
+> 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
 ---
 

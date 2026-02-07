@@ -11,7 +11,7 @@ This project is currently in MVP stage, so we prioritize small, verifiable, and 
 ```bash
 git clone https://github.com/telagod/Aster.git
 cd Aster
-cargo test -p asterc -- --skip run_executable_times_out
+cargo test -p asterc
 ```
 
 ## Project Structure
@@ -39,7 +39,7 @@ Run what applies to your change:
 ```bash
 cargo fmt --all
 cargo test -p asterc --test compiler_tests
-cargo test -p asterc -- --skip run_executable_times_out
+cargo test -p asterc
 ```
 
 For agent-related changes, run focused tests:

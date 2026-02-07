@@ -105,20 +105,32 @@ pub fn run_executable_with_args_and_stdin_and_timeout(
 
     if let Some(timeout_ms) = timeout_ms {
         let timeout = Duration::from_millis(timeout_ms);
-        let start = Instant::now();
+        let deadline = Instant::now() + timeout;
+        let poll_interval = Duration::from_millis(5);
 
         loop {
-            match child.try_wait().map_err(NativeError::Io)? {
-                Some(_) => break,
-                None => {
-                    if start.elapsed() >= timeout {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return Err(NativeError::TimedOut { timeout_ms });
-                    }
-                    thread::sleep(Duration::from_millis(5));
-                }
+            if child.try_wait().map_err(NativeError::Io)?.is_some() {
+                break;
             }
+
+            let now = Instant::now();
+            if now >= deadline {
+                if child.try_wait().map_err(NativeError::Io)?.is_some() {
+                    break;
+                }
+
+                if let Err(kill_err) = child.kill() {
+                    if child.try_wait().map_err(NativeError::Io)?.is_none() {
+                        return Err(NativeError::Io(kill_err));
+                    }
+                }
+
+                let _ = child.wait();
+                return Err(NativeError::TimedOut { timeout_ms });
+            }
+
+            let remaining = deadline.saturating_duration_since(now);
+            thread::sleep(std::cmp::min(poll_interval, remaining));
         }
     }
 
