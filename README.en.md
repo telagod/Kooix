@@ -3,6 +3,7 @@
 [English](README.en.md) | [中文](README.md)
 
 [Contributing](CONTRIBUTING.md)
+[Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
 Aster is an **AI-native, strongly typed** programming language prototype (MVP).
 Its core goal is to push AI capability constraints, workflow constraints, and auditability checks into compile time as much as possible.
