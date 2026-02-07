@@ -122,7 +122,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - duplicate step id error
     - step call target declaration warning (`fn`/`workflow`/`agent`)
     - step call signature checks (arity + basic argument type checks)
-    - step argument symbol/type-flow check (`workflow params` + `previous step ids` as symbols)
+    - step argument symbol/type-flow check (`workflow params` + `previous step ids` as symbols, plus member projection for `Option/Result/Map/List/Vec/Array` roots)
     - output contract checks (duplicate fields, return type exposure, explicit source binding and type coverage)
     - `on_fail` action legality (`retry/fallback/abort/compensate`)
     - workflow-level `requires` top-level capability existence
@@ -131,7 +131,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
 ## AI v1 Mapping (Target, Not Implemented Yet)
 
 - workflow `sla` block and predicate validation
-- rich step argument expression typing (member/path projection beyond root symbol)
+- user-defined record/struct member typing (currently only generic container projection rules are supported)
 
 ### Agent top-level
 

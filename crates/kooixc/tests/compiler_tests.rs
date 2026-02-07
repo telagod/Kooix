@@ -605,6 +605,52 @@ steps {
 }
 
 #[test]
+fn accepts_workflow_step_call_with_option_member_projection() {
+    let source = r#"
+fn retrieve(input: Query) -> Option<Answer>;
+fn deliver(answer: Answer) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: deliver(s1.some);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("workflow 'flow' step 's2'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic.message.contains("cannot infer member 'some'")
+    }));
+}
+
+#[test]
+fn warns_on_workflow_step_call_with_unsupported_member_projection() {
+    let source = r#"
+fn retrieve(input: Query) -> Answer;
+fn deliver(answer: Answer) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: deliver(s1.value);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("cannot infer member 'value' on type 'Answer'")
+    }));
+}
+
+#[test]
 fn rejects_duplicate_workflow_output_fields() {
     let source = r#"
 fn answer(input: Query) -> Answer;
@@ -769,7 +815,32 @@ output {
 }
 
 #[test]
-fn warns_on_workflow_output_binding_member_access_until_supported() {
+fn accepts_workflow_output_binding_with_option_member_projection() {
+    let source = r#"
+fn answer(input: Query) -> Option<Answer>;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer(input);
+}
+output {
+  result: Answer = s1.some;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("output field 'result'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic.message.contains("cannot infer member 'some'")
+    }));
+}
+
+#[test]
+fn warns_on_workflow_output_binding_with_unsupported_member_projection() {
     let source = r#"
 fn answer(input: Query) -> Answer;
 workflow flow(input: Query) -> Answer
@@ -787,7 +858,7 @@ output {
         diagnostic.severity == Severity::Warning
             && diagnostic
                 .message
-                .contains("output field 'result' binds 's1.value' with member access")
+                .contains("cannot infer member 'value' on type 'Answer'")
     }));
 }
 

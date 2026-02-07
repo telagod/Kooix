@@ -967,27 +967,32 @@ fn validate_workflow_output_contract(
                     continue;
                 };
 
-                if source.len() > 1 {
-                    diagnostics.push(Diagnostic::warning(
-                        format!(
-                            "workflow '{}' output field '{}' binds '{}' with member access; static type-flow for member paths is not implemented yet",
-                            workflow.name,
-                            field.name,
-                            format_workflow_call_path(source),
-                        ),
-                        workflow.span,
-                    ));
-                    continue;
-                }
+                let resolved_type = match infer_member_projection_type(source_type, &source[1..]) {
+                    Ok(ty) => ty,
+                    Err(projection) => {
+                        diagnostics.push(Diagnostic::warning(
+                            format!(
+                                "workflow '{}' output field '{}' binds '{}' but cannot infer member '{}' on type '{}'",
+                                workflow.name,
+                                field.name,
+                                format_workflow_call_path(source),
+                                projection.member,
+                                projection.base_type,
+                            ),
+                            workflow.span,
+                        ));
+                        continue;
+                    }
+                };
 
-                if !types_compatible_for_workflow_call(&field.ty, source_type) {
+                if !types_compatible_for_workflow_call(&field.ty, &resolved_type) {
                     diagnostics.push(Diagnostic::error(
                         format!(
                             "workflow '{}' output field '{}' binds '{}' as '{}' but declared type is '{}'",
                             workflow.name,
                             field.name,
-                            root,
-                            source_type,
+                            format_workflow_call_path(source),
+                            resolved_type,
                             field.ty
                         ),
                         workflow.span,
@@ -1342,7 +1347,7 @@ fn infer_workflow_call_arg_type(
                 return None;
             };
 
-            let Some(ty) = available_symbols.get(root) else {
+            let Some(root_type) = available_symbols.get(root) else {
                 diagnostics.push(Diagnostic::warning(
                     format!(
                         "workflow '{}' step '{}' passes '{}' to '{}' but '{}' is not available in workflow scope (params + previous step ids)",
@@ -1357,27 +1362,95 @@ fn infer_workflow_call_arg_type(
                 return None;
             };
 
-            if segments.len() > 1 {
-                diagnostics.push(Diagnostic::warning(
-                    format!(
-                        "workflow '{}' step '{}' passes '{}' to '{}' with member access; static type-flow for member paths is not implemented yet",
-                        workflow.name,
-                        step_id,
-                        format_workflow_call_path(segments),
-                        call_target,
-                    ),
-                    workflow.span,
-                ));
-                return None;
+            match infer_member_projection_type(root_type, &segments[1..]) {
+                Ok(ty) => Some(ty),
+                Err(projection) => {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' step '{}' passes '{}' to '{}' but cannot infer member '{}' on type '{}'",
+                            workflow.name,
+                            step_id,
+                            format_workflow_call_path(segments),
+                            call_target,
+                            projection.member,
+                            projection.base_type,
+                        ),
+                        workflow.span,
+                    ));
+                    None
+                }
             }
-
-            Some(ty.clone())
         }
     }
 }
 
 fn format_workflow_call_path(segments: &[String]) -> String {
     segments.join(".")
+}
+
+#[derive(Debug)]
+struct MemberProjectionFailure {
+    member: String,
+    base_type: TypeRef,
+}
+
+fn infer_member_projection_type(
+    root_type: &TypeRef,
+    members: &[String],
+) -> Result<TypeRef, MemberProjectionFailure> {
+    let mut current = root_type.clone();
+    for member in members {
+        let Some(next) = project_member_type(&current, member) else {
+            return Err(MemberProjectionFailure {
+                member: member.clone(),
+                base_type: current,
+            });
+        };
+        current = next;
+    }
+
+    Ok(current)
+}
+
+fn project_member_type(base: &TypeRef, member: &str) -> Option<TypeRef> {
+    match base.head() {
+        "Option" => {
+            if matches!(member, "some" | "value") {
+                first_type_arg(base)
+            } else {
+                None
+            }
+        }
+        "Result" => match member {
+            "ok" | "value" => type_arg_at(base, 0),
+            "err" | "error" => type_arg_at(base, 1),
+            _ => None,
+        },
+        "List" | "Vec" | "Array" => {
+            if matches!(member, "item" | "first") {
+                first_type_arg(base)
+            } else {
+                None
+            }
+        }
+        "Map" => match member {
+            "key" => type_arg_at(base, 0),
+            "value" => type_arg_at(base, 1),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn first_type_arg(base: &TypeRef) -> Option<TypeRef> {
+    type_arg_at(base, 0)
+}
+
+fn type_arg_at(base: &TypeRef, index: usize) -> Option<TypeRef> {
+    match base.args.get(index) {
+        Some(TypeArg::Type(ty)) => Some(ty.clone()),
+        _ => None,
+    }
 }
 
 fn types_compatible_for_workflow_call(expected: &TypeRef, actual: &TypeRef) -> bool {

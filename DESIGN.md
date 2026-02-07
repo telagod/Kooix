@@ -270,6 +270,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先支持 root symbol 与保守 member-path warning，不一次性引入复杂投影类型系统。
 
+### 2026-02-07 - Phase 6.6：Member Path 投影类型流（容器子集）
+
+- **变更内容**：为 step 参数与 output 绑定的 `symbol.path` 增加 member 投影推导，支持 `Option/Result/Map/List/Vec/Array` 的最小规则集；未知 member 给出可解释 warning。
+- **变更理由**：把“仅 root symbol 可推导”的能力推进到容器级路径表达，提升 workflow 数据流表达力与静态检查精度。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先落地 deterministic 容器规则，暂不引入用户自定义结构体字段系统，控制复杂度与兼容风险。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。
