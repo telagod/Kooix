@@ -1000,15 +1000,33 @@ fn validate_workflow_output_contract(
                 }
             }
             None => {
-                let has_matching_source = available_symbols
-                    .values()
-                    .any(|symbol_type| types_compatible_for_workflow_call(&field.ty, symbol_type));
+                let mut matching_sources: Vec<String> = available_symbols
+                    .iter()
+                    .filter(|(_, symbol_type)| {
+                        types_compatible_for_workflow_call(&field.ty, symbol_type)
+                    })
+                    .map(|(name, _)| name.clone())
+                    .collect();
+                matching_sources.sort();
 
-                if !has_matching_source {
+                if matching_sources.is_empty() {
                     diagnostics.push(Diagnostic::warning(
                         format!(
                             "workflow '{}' output field '{}' has type '{}' but no matching source symbol exists in workflow scope",
                             workflow.name, field.name, field.ty
+                        ),
+                        workflow.span,
+                    ));
+                    continue;
+                }
+
+                if matching_sources.len() > 1 {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "workflow '{}' output field '{}' implicitly matches multiple source symbols: {}; use explicit '= symbol' binding",
+                            workflow.name,
+                            field.name,
+                            matching_sources.join(", ")
                         ),
                         workflow.span,
                     ));

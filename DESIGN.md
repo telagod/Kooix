@@ -277,6 +277,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先落地 deterministic 容器规则，暂不引入用户自定义结构体字段系统，控制复杂度与兼容风险。
 
+### 2026-02-07 - Phase 6.7：Output 隐式绑定歧义告警
+
+- **变更内容**：对未显式 `= symbol` 绑定的 output 字段，若同类型匹配到多个来源符号，新增 ambiguity warning 并提示使用显式绑定。
+- **变更理由**：避免 output 合同在多候选场景下产生隐式不确定性，让 AI 与人类都能明确数据来源。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：保持向后兼容，不强制报错；通过可解释 warning 引导迁移到显式绑定语法。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

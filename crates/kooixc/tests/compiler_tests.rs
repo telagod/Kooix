@@ -698,6 +698,56 @@ output {
 }
 
 #[test]
+fn warns_when_workflow_output_field_implicit_binding_is_ambiguous() {
+    let source = r#"
+fn answer_a(input: Query) -> Answer;
+fn answer_b(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer_a(input);
+  s2: answer_b(input);
+}
+output {
+  result: Answer;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("implicitly matches multiple source symbols: s1, s2")
+    }));
+}
+
+#[test]
+fn explicit_workflow_output_binding_resolves_implicit_ambiguity() {
+    let source = r#"
+fn answer_a(input: Query) -> Answer;
+fn answer_b(input: Query) -> Answer;
+workflow flow(input: Query) -> Answer
+steps {
+  s1: answer_a(input);
+  s2: answer_b(input);
+}
+output {
+  result: Answer = s2;
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("implicitly matches multiple source symbols")
+    }));
+}
+
+#[test]
 fn warns_when_workflow_output_contract_does_not_expose_return_type() {
     let source = r#"
 fn summarize(input: Query) -> Summary;

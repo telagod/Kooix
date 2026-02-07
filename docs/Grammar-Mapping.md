@@ -123,7 +123,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - step call target declaration warning (`fn`/`workflow`/`agent`)
     - step call signature checks (arity + basic argument type checks)
     - step argument symbol/type-flow check (`workflow params` + `previous step ids` as symbols, plus member projection for `Option/Result/Map/List/Vec/Array` roots)
-    - output contract checks (duplicate fields, return type exposure, explicit source binding and type coverage)
+    - output contract checks (duplicate fields, return type exposure, explicit source binding/type coverage, implicit binding ambiguity warning)
     - `on_fail` action legality (`retry/fallback/abort/compensate`)
     - workflow-level `requires` top-level capability existence
     - workflow evidence trace/metrics checks
