@@ -18,8 +18,8 @@ cargo test -p asterc -- --skip run_executable_times_out
 
 ```text
 crates/asterc/src/      # compiler implementation
-a/c lexer/parser/hir/mir/sema/native/cli
-a/crates/asterc/tests/  # compiler tests
+  lexer/parser/hir/mir/sema/native/cli
+crates/asterc/tests/    # compiler tests
 docs/                   # grammar and mapping docs
 examples/               # sample .aster programs
 ```
