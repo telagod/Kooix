@@ -124,9 +124,22 @@ pub struct WorkflowDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowStep {
     pub id: String,
-    pub call: String,
+    pub call: WorkflowCall,
     pub ensures: Vec<EnsureClause>,
     pub on_fail: Option<FailureAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowCall {
+    pub target: String,
+    pub args: Vec<WorkflowCallArg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkflowCallArg {
+    Path(Vec<String>),
+    String(String),
+    Number(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

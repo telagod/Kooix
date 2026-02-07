@@ -2,9 +2,16 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
     EnsureClause, FailureAction, FailureValue, PredicateValue, Program, TypeArg, TypeRef,
+    WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{lower_program, HirAgent, HirEffect, HirFunction, HirWorkflow};
+
+#[derive(Debug, Clone)]
+struct InvocableSignature {
+    params: Vec<TypeRef>,
+    return_type: TypeRef,
+}
 
 pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     let hir = lower_program(program);
@@ -17,6 +24,40 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         .chain(hir.workflows.iter().map(|workflow| workflow.name.clone()))
         .chain(hir.agents.iter().map(|agent| agent.name.clone()))
         .collect();
+
+    let mut declared_invocable_signatures: HashMap<String, InvocableSignature> = HashMap::new();
+    for function in &hir.functions {
+        declared_invocable_signatures
+            .entry(function.name.clone())
+            .or_insert_with(|| InvocableSignature {
+                params: function
+                    .params
+                    .iter()
+                    .map(|param| param.ty.clone())
+                    .collect(),
+                return_type: function.return_type.clone(),
+            });
+    }
+    for workflow in &hir.workflows {
+        declared_invocable_signatures
+            .entry(workflow.name.clone())
+            .or_insert_with(|| InvocableSignature {
+                params: workflow
+                    .params
+                    .iter()
+                    .map(|param| param.ty.clone())
+                    .collect(),
+                return_type: workflow.return_type.clone(),
+            });
+    }
+    for agent in &hir.agents {
+        declared_invocable_signatures
+            .entry(agent.name.clone())
+            .or_insert_with(|| InvocableSignature {
+                params: agent.params.iter().map(|param| param.ty.clone()).collect(),
+                return_type: agent.return_type.clone(),
+            });
+    }
 
     let mut declared_capability_instances = HashSet::new();
     let mut declared_capability_heads = HashSet::new();
@@ -131,6 +172,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
             &declared_capability_heads,
             &declared_capability_instances,
             &declared_invocable_targets,
+            &declared_invocable_signatures,
             &mut diagnostics,
         );
     }
@@ -800,6 +842,7 @@ fn validate_workflow(
     declared_capability_heads: &HashSet<String>,
     declared_capability_instances: &HashSet<String>,
     declared_invocable_targets: &HashSet<String>,
+    declared_invocable_signatures: &HashMap<String, InvocableSignature>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(intent) = &workflow.intent {
@@ -838,6 +881,12 @@ fn validate_workflow(
         ));
     }
 
+    let mut available_symbols: HashMap<String, TypeRef> = workflow
+        .params
+        .iter()
+        .map(|param| (param.name.clone(), param.ty.clone()))
+        .collect();
+
     let mut seen_step_ids = HashSet::new();
     for step in &workflow.steps {
         if !seen_step_ids.insert(step.id.clone()) {
@@ -847,13 +896,27 @@ fn validate_workflow(
             ));
         }
 
-        validate_workflow_step_call_target(
+        if validate_workflow_step_call_target(
             workflow,
             &step.id,
-            &step.call,
+            &step.call.target,
             declared_invocable_targets,
             diagnostics,
-        );
+        ) {
+            if let Some(signature) = declared_invocable_signatures.get(&step.call.target) {
+                validate_workflow_step_call_signature(
+                    workflow,
+                    &step.id,
+                    &step.call.target,
+                    &step.call.args,
+                    signature,
+                    &available_symbols,
+                    diagnostics,
+                );
+
+                available_symbols.insert(step.id.clone(), signature.return_type.clone());
+            }
+        }
 
         if let Some(action) = &step.on_fail {
             validate_workflow_step_action(workflow, &step.id, action, diagnostics);
@@ -1088,7 +1151,7 @@ fn validate_workflow_step_call_target(
     call_target: &str,
     declared_invocable_targets: &HashSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> bool {
     if !declared_invocable_targets.contains(call_target) {
         diagnostics.push(Diagnostic::warning(
             format!(
@@ -1097,7 +1160,140 @@ fn validate_workflow_step_call_target(
             ),
             workflow.span,
         ));
+        return false;
     }
+
+    true
+}
+
+fn validate_workflow_step_call_signature(
+    workflow: &HirWorkflow,
+    step_id: &str,
+    call_target: &str,
+    call_args: &[WorkflowCallArg],
+    signature: &InvocableSignature,
+    available_symbols: &HashMap<String, TypeRef>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if call_args.len() != signature.params.len() {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "workflow '{}' step '{}' calls '{}' with {} argument(s), expected {}",
+                workflow.name,
+                step_id,
+                call_target,
+                call_args.len(),
+                signature.params.len()
+            ),
+            workflow.span,
+        ));
+    }
+
+    for (index, (arg, expected_type)) in call_args.iter().zip(signature.params.iter()).enumerate() {
+        let Some(actual_type) = infer_workflow_call_arg_type(
+            workflow,
+            step_id,
+            call_target,
+            arg,
+            available_symbols,
+            diagnostics,
+        ) else {
+            continue;
+        };
+
+        if !types_compatible_for_workflow_call(expected_type, &actual_type) {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "workflow '{}' step '{}' passes argument {} to '{}' as '{}' but expected '{}'",
+                    workflow.name,
+                    step_id,
+                    index + 1,
+                    call_target,
+                    actual_type,
+                    expected_type
+                ),
+                workflow.span,
+            ));
+        }
+    }
+}
+
+fn infer_workflow_call_arg_type(
+    workflow: &HirWorkflow,
+    step_id: &str,
+    call_target: &str,
+    arg: &WorkflowCallArg,
+    available_symbols: &HashMap<String, TypeRef>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<TypeRef> {
+    match arg {
+        WorkflowCallArg::String(_) => Some(TypeRef {
+            name: "Text".to_string(),
+            args: Vec::new(),
+        }),
+        WorkflowCallArg::Number(_) => Some(TypeRef {
+            name: "Int".to_string(),
+            args: Vec::new(),
+        }),
+        WorkflowCallArg::Path(segments) => {
+            let Some(root) = segments.first() else {
+                return None;
+            };
+
+            let Some(ty) = available_symbols.get(root) else {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "workflow '{}' step '{}' passes '{}' to '{}' but '{}' is not available in workflow scope (params + previous step ids)",
+                        workflow.name,
+                        step_id,
+                        format_workflow_call_path(segments),
+                        call_target,
+                        root
+                    ),
+                    workflow.span,
+                ));
+                return None;
+            };
+
+            if segments.len() > 1 {
+                diagnostics.push(Diagnostic::warning(
+                    format!(
+                        "workflow '{}' step '{}' passes '{}' to '{}' with member access; static type-flow for member paths is not implemented yet",
+                        workflow.name,
+                        step_id,
+                        format_workflow_call_path(segments),
+                        call_target,
+                    ),
+                    workflow.span,
+                ));
+                return None;
+            }
+
+            Some(ty.clone())
+        }
+    }
+}
+
+fn format_workflow_call_path(segments: &[String]) -> String {
+    segments.join(".")
+}
+
+fn types_compatible_for_workflow_call(expected: &TypeRef, actual: &TypeRef) -> bool {
+    if expected == actual {
+        return true;
+    }
+
+    let expected_head = expected.head();
+    let actual_head = actual.head();
+
+    matches!(
+        (expected_head, actual_head),
+        ("Text", "String")
+            | ("String", "Text")
+            | ("Num", "Int")
+            | ("Float", "Int")
+            | ("Number", "Int")
+    )
 }
 
 fn validate_workflow_step_action(

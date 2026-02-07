@@ -1,6 +1,6 @@
 use crate::ast::{
     AgentPolicy, EnsureClause, EvidenceSpec, FailureAction, FailurePolicy, Item, LoopSpec,
-    OutputField, Program, StateRule, TypeRef,
+    OutputField, Program, StateRule, TypeRef, WorkflowCall,
 };
 use crate::error::Span;
 
@@ -60,7 +60,7 @@ pub struct HirWorkflow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirWorkflowStep {
     pub id: String,
-    pub call: String,
+    pub call: WorkflowCall,
     pub ensures: Vec<EnsureClause>,
     pub on_fail: Option<FailureAction>,
 }

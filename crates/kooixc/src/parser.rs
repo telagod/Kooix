@@ -2,7 +2,7 @@ use crate::ast::{
     AgentDecl, AgentPolicy, CapabilityDecl, EffectSpec, EnsureClause, EvidenceSpec, FailureAction,
     FailureActionArg, FailurePolicy, FailureRule, FailureValue, FunctionDecl, Item, LoopSpec,
     OutputField, Param, PredicateOp, PredicateValue, Program, StateRule, TypeArg, TypeRef,
-    WorkflowDecl, WorkflowStep,
+    WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -515,33 +515,48 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_workflow_call(&mut self) -> Result<String, Diagnostic> {
-        let (name, _) = self.expect_ident()?;
+    fn parse_workflow_call(&mut self) -> Result<WorkflowCall, Diagnostic> {
+        let (target, _) = self.expect_ident()?;
         self.expect_lparen()?;
-        let mut depth = 1usize;
-        while depth > 0 {
-            if self.at_eof() {
-                return Err(Diagnostic::error(
-                    "unterminated workflow step call",
-                    self.current().span,
-                ));
-            }
 
-            if self.at_lparen() {
-                depth += 1;
-                self.advance();
-                continue;
+        let mut args = Vec::new();
+        if !self.at_rparen() {
+            loop {
+                args.push(self.parse_workflow_call_arg()?);
+                if self.at_comma() {
+                    self.advance();
+                    continue;
+                }
+                break;
             }
-
-            if self.at_rparen() {
-                depth -= 1;
-                self.advance();
-                continue;
-            }
-
-            self.advance();
         }
-        Ok(name)
+
+        self.expect_rparen()?;
+        Ok(WorkflowCall { target, args })
+    }
+
+    fn parse_workflow_call_arg(&mut self) -> Result<WorkflowCallArg, Diagnostic> {
+        if let Some(value) = self.take_string() {
+            return Ok(WorkflowCallArg::String(value));
+        }
+        if let Some(value) = self.take_number() {
+            return Ok(WorkflowCallArg::Number(value));
+        }
+        if self.at_ident() {
+            let (head, _) = self.expect_ident()?;
+            let mut segments = vec![head];
+            while self.at_dot() {
+                self.advance();
+                let (segment, _) = self.expect_ident()?;
+                segments.push(segment);
+            }
+            return Ok(WorkflowCallArg::Path(segments));
+        }
+
+        Err(Diagnostic::error(
+            "expected workflow step argument",
+            self.current().span,
+        ))
     }
 
     fn parse_state_block(&mut self) -> Result<Vec<StateRule>, Diagnostic> {

@@ -14,7 +14,7 @@
 ## 架构设计
 
 ```text
-Source (.aster)
+Source (.kooix)
   -> Lexer (Token stream)
   -> Parser (AST)
   -> HIR Lowering
@@ -241,6 +241,20 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：提前暴露编排层误拼写/漏声明问题，减少运行期才发现调用失效。
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先落地“声明级”校验，后续再扩展到签名与类型流校验。
+
+### 2026-02-07 - Phase 6.2：Workflow 调用签名与参数类型校验
+
+- **变更内容**：将 step call 从“仅目标名”扩展为“目标+参数列表”语义节点；新增调用 arity 校验、基础参数类型校验（字符串/数字字面量与 workflow 参数推导）。
+- **变更理由**：让 workflow 编排的错误尽可能在静态阶段暴露，减少调用参数错配进入运行时。
+- **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先实现可验证的最小类型流（literal + workflow params），后续再扩展跨 step 变量绑定与复杂表达式推导。
+
+### 2026-02-07 - Phase 6.3：Workflow 跨 Step 符号绑定（最小闭环）
+
+- **变更内容**：step 参数类型推导从“仅 workflow params”扩展为“workflow params + 已声明前序 step id”；支持将前序 step 返回类型作为后续 step 入参参与静态校验。
+- **变更理由**：让 workflow 编排具备最小数据流语义，提前暴露 step 链路上的类型错配与前向引用错误。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先落地 root symbol 级别绑定（不做成员投影），以低风险方式推进类型流主线能力。
 
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 

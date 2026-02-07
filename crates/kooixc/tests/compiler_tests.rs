@@ -458,6 +458,153 @@ steps {
 }
 
 #[test]
+fn rejects_workflow_step_call_with_argument_count_mismatch() {
+    let source = r#"
+fn normalize(input: Query) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: normalize();
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("calls 'normalize' with 0 argument(s), expected 1")
+    }));
+}
+
+#[test]
+fn rejects_workflow_step_call_with_argument_type_mismatch() {
+    let source = r#"
+fn fetch(id: Int) -> Unit;
+workflow flow() -> Unit
+steps {
+  s1: fetch("abc");
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("passes argument 1 to 'fetch' as 'Text' but expected 'Int'")
+    }));
+}
+
+#[test]
+fn warns_when_workflow_step_argument_symbol_is_unbound() {
+    let source = r#"
+fn normalize(input: Query) -> Unit;
+workflow flow() -> Unit
+steps {
+  s1: normalize(input);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("'input' is not available in workflow scope")
+    }));
+}
+
+#[test]
+fn accepts_workflow_step_call_with_matching_signature() {
+    let source = r#"
+fn normalize(input: Query) -> Unit;
+workflow helper(input: Query) -> Unit
+steps {
+  s1: normalize(input);
+}
+;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: helper(input);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("workflow 'flow' step 's1'")
+    }));
+}
+
+#[test]
+fn accepts_workflow_step_call_with_previous_step_binding() {
+    let source = r#"
+fn retrieve(input: Query) -> Docs;
+fn rank(docs: Docs) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: rank(s1);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("workflow 'flow' step 's2'")
+    }));
+}
+
+#[test]
+fn rejects_workflow_step_call_with_previous_step_type_mismatch() {
+    let source = r#"
+fn retrieve(input: Query) -> Docs;
+fn rank(score: Int) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: retrieve(input);
+  s2: rank(s1);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("passes argument 1 to 'rank' as 'Docs' but expected 'Int'")
+    }));
+}
+
+#[test]
+fn warns_when_workflow_step_uses_future_step_symbol() {
+    let source = r#"
+fn retrieve(input: Query) -> Docs;
+fn rank(docs: Docs) -> Unit;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: rank(s2);
+  s2: retrieve(input);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("'s2' is not available in workflow scope")
+    }));
+}
+
+#[test]
 fn rejects_workflow_requires_without_top_level_capability() {
     let source = r#"
 workflow flow() -> Unit
