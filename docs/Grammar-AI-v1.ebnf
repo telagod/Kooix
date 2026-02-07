@@ -39,11 +39,17 @@ TypeArg               = TypeRef | StringLiteral | NumberLiteral ;
 
 (* ---------- Record ---------- *)
 
-RecordDecl            = "record" Identifier [ GenericParams ] "{" { RecordField } "}" ";" ;
+RecordDecl            = "record" Identifier [ GenericParams ] [ WhereClause ] "{" { RecordField } "}" ";" ;
 
 GenericParams         = "<" GenericParam { "," GenericParam } ">" ;
 
-GenericParam          = Identifier [ ":" TypeRef ] ;
+GenericParam          = Identifier [ ":" TypeBoundList ] ;
+
+TypeBoundList         = TypeRef { "+" TypeRef } ;
+
+WhereClause           = "where" WhereConstraint { "," WhereConstraint } ;
+
+WhereConstraint       = Identifier ":" TypeBoundList ;
 
 RecordField           = Identifier ":" TypeRef ";" ;
 
@@ -217,4 +223,3 @@ Letter                = "A".."Z" | "a".."z" ;
 Digit                 = "0".."9" ;
 
 EOF                   = ? end of input ? ;
-

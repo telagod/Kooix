@@ -319,6 +319,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：先用单 bound + 兼容既有类型兼容规则实现最小闭环，后续再扩展为 `where`/多约束体系。
 
+### 2026-02-07 - Phase 6.13：Record 多 Bound + where 子句（最小子集）
+
+- **变更内容**：record 泛型参数支持多 bound（`record Box<T: Answer + Summary>`），并支持 `where` 子句追加约束（`record Box<T> where T: Answer + Summary { ... };`）；语义层要求 type arg 同时满足全部 bound。
+- **变更理由**：让约束表达从“单一硬约束”升级到“可组合约束”，同时在泛型参数较多时保持声明可读性。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：约束检查保持保守（沿用现有类型兼容规则），不引入 trait 系统与约束求解器，优先交付可验证闭环。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

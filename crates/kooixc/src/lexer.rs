@@ -63,6 +63,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     b',' => self.single_char_token(TokenKind::Comma, start),
+                    b'+' => self.single_char_token(TokenKind::Plus, start),
                     b'.' => self.single_char_token(TokenKind::Dot, start),
                     b':' => self.single_char_token(TokenKind::Colon, start),
                     b';' => self.single_char_token(TokenKind::Semicolon, start),
@@ -170,6 +171,7 @@ impl<'a> Lexer<'a> {
             "metrics" => TokenKind::KwMetrics,
             "in" => TokenKind::KwIn,
             "requires" => TokenKind::KwRequires,
+            "where" => TokenKind::KwWhere,
             _ => TokenKind::Ident(value.to_string()),
         };
         Token::new(kind, Span::new(start, self.pos))

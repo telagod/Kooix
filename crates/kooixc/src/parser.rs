@@ -70,15 +70,21 @@ impl<'a> Parser<'a> {
             if !self.at_rangle() {
                 loop {
                     let (generic_name, _) = self.expect_ident()?;
-                    let bound = if self.at_colon() {
+                    let bounds = if self.at_colon() {
                         self.expect_colon()?;
-                        Some(self.parse_type_ref()?)
+                        let mut bounds = Vec::new();
+                        bounds.push(self.parse_type_ref()?);
+                        while self.at_plus() {
+                            self.expect_plus()?;
+                            bounds.push(self.parse_type_ref()?);
+                        }
+                        bounds
                     } else {
-                        None
+                        Vec::new()
                     };
                     generics.push(RecordGenericParam {
                         name: generic_name,
-                        bound,
+                        bounds,
                     });
                     if self.at_comma() {
                         self.advance();
@@ -88,6 +94,50 @@ impl<'a> Parser<'a> {
                 }
             }
             self.expect_rangle()?;
+        }
+
+        if self.at_kw_where() {
+            if generics.is_empty() {
+                return Err(Diagnostic::error(
+                    format!(
+                        "record '{}' uses where clause without generic parameters",
+                        name
+                    ),
+                    self.current().span,
+                ));
+            }
+
+            self.expect_kw_where()?;
+            loop {
+                let (param_name, param_span) = self.expect_ident()?;
+                self.expect_colon()?;
+                let mut bounds = Vec::new();
+                bounds.push(self.parse_type_ref()?);
+                while self.at_plus() {
+                    self.expect_plus()?;
+                    bounds.push(self.parse_type_ref()?);
+                }
+
+                let Some(param) = generics.iter_mut().find(|param| param.name == param_name) else {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "record '{}' where clause references unknown generic parameter '{}'",
+                            name, param_name
+                        ),
+                        param_span,
+                    ));
+                };
+                param.bounds.extend(bounds);
+
+                if self.at_comma() {
+                    self.advance();
+                    if self.at_lbrace() {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
         }
 
         self.expect_lbrace()?;
@@ -941,6 +991,10 @@ impl<'a> Parser<'a> {
         self.expect_simple(Self::at_kw_requires, "'requires'")
     }
 
+    fn expect_kw_where(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_where, "'where'")
+    }
+
     fn expect_kw_intent(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_intent, "'intent'")
     }
@@ -1047,6 +1101,10 @@ impl<'a> Parser<'a> {
 
     fn expect_rangle(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_rangle, "'>'")
+    }
+
+    fn expect_plus(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_plus, "'+'")
     }
 
     fn expect_colon(&mut self) -> Result<Span, Diagnostic> {
@@ -1172,6 +1230,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwRequires)
     }
 
+    fn at_kw_where(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwWhere)
+    }
+
     fn at_kw_intent(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwIntent)
     }
@@ -1288,6 +1350,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::Comma)
     }
 
+    fn at_plus(&self) -> bool {
+        matches!(self.current().kind, TokenKind::Plus)
+    }
+
     fn at_dot(&self) -> bool {
         matches!(self.current().kind, TokenKind::Dot)
     }
@@ -1363,6 +1429,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwMetrics => "'metrics'",
             TokenKind::KwIn => "'in'",
             TokenKind::KwRequires => "'requires'",
+            TokenKind::KwWhere => "'where'",
             TokenKind::Ident(_) => "identifier",
             TokenKind::StringLiteral(_) => "string literal",
             TokenKind::Number(_) => "number",
@@ -1375,6 +1442,7 @@ impl<'a> Parser<'a> {
             TokenKind::LAngle => "'<'",
             TokenKind::RAngle => "'>'",
             TokenKind::Comma => "','",
+            TokenKind::Plus => "'+'",
             TokenKind::Dot => "'.'",
             TokenKind::Colon => "':'",
             TokenKind::Semicolon => "';'",

@@ -351,7 +351,7 @@ record Box<T> {
     assert_eq!(record.name, "Box");
     assert_eq!(record.generics.len(), 1);
     assert_eq!(record.generics[0].name, "T");
-    assert!(record.generics[0].bound.is_none());
+    assert!(record.generics[0].bounds.is_empty());
     assert_eq!(record.fields.len(), 1);
     assert_eq!(record.fields[0].name, "value");
     assert_eq!(record.fields[0].ty.to_string(), "T");
@@ -374,11 +374,52 @@ record Box<T: Answer> {
 
     assert_eq!(record.generics.len(), 1);
     assert_eq!(record.generics[0].name, "T");
-    let bound = record.generics[0]
-        .bound
-        .as_ref()
-        .expect("generic bound should exist");
-    assert_eq!(bound.to_string(), "Answer");
+    assert_eq!(record.generics[0].bounds.len(), 1);
+    assert_eq!(record.generics[0].bounds[0].to_string(), "Answer");
+}
+
+#[test]
+fn parses_multi_bound_generic_record_declaration() {
+    let source = r#"
+record Box<T: Answer + Summary> {
+  value: T;
+}
+;
+"#;
+
+    let program = parse_source(source).expect("multi-bound generic record should parse");
+    let record = match &program.items[0] {
+        Item::Record(record) => record,
+        _ => panic!("expected first item to be record"),
+    };
+
+    assert_eq!(record.generics.len(), 1);
+    assert_eq!(record.generics[0].name, "T");
+    assert_eq!(record.generics[0].bounds.len(), 2);
+    assert_eq!(record.generics[0].bounds[0].to_string(), "Answer");
+    assert_eq!(record.generics[0].bounds[1].to_string(), "Summary");
+}
+
+#[test]
+fn parses_where_clause_record_generic_bounds() {
+    let source = r#"
+record Box<T> where T: Answer + Summary {
+  value: T;
+}
+;
+"#;
+
+    let program = parse_source(source).expect("where-clause record should parse");
+    let record = match &program.items[0] {
+        Item::Record(record) => record,
+        _ => panic!("expected first item to be record"),
+    };
+
+    assert_eq!(record.generics.len(), 1);
+    assert_eq!(record.generics[0].name, "T");
+    assert_eq!(record.generics[0].bounds.len(), 2);
+    assert_eq!(record.generics[0].bounds[0].to_string(), "Answer");
+    assert_eq!(record.generics[0].bounds[1].to_string(), "Summary");
 }
 
 #[test]
@@ -694,6 +735,44 @@ fn answer(input: Query) -> Box;
 fn rejects_function_return_type_with_record_generic_bound_mismatch() {
     let source = r#"
 record Box<T: Answer> {
+  value: T;
+}
+;
+fn answer(input: Query) -> Box<Text>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "function 'answer' return type uses record type 'Box' with generic argument 'T' as 'Text' but it must satisfy bound 'Answer'"
+            )
+    }));
+}
+
+#[test]
+fn rejects_function_return_type_with_record_generic_multi_bound_mismatch() {
+    let source = r#"
+record Box<T: Answer + Summary> {
+  value: T;
+}
+;
+fn answer(input: Query) -> Box<Answer>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "function 'answer' return type uses record type 'Box' with generic argument 'T' as 'Answer' but it must satisfy bound 'Summary'"
+            )
+    }));
+}
+
+#[test]
+fn rejects_function_return_type_with_record_generic_where_bound_mismatch() {
+    let source = r#"
+record Box<T> where T: Answer {
   value: T;
 }
 ;

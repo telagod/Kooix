@@ -417,7 +417,7 @@ fn validate_record_type_ref_arity(
             ));
         } else {
             for (index, generic) in record_schema.generics.iter().enumerate() {
-                let Some(bound) = &generic.bound else {
+                if generic.bounds.is_empty() {
                     continue;
                 };
 
@@ -426,41 +426,53 @@ fn validate_record_type_ref_arity(
                 };
 
                 match actual_arg {
-                    TypeArg::Type(actual_ty)
-                        if types_compatible_for_workflow_call(bound, actual_ty) => {}
-                    TypeArg::Type(actual_ty) => diagnostics.push(Diagnostic::error(
-                        format!(
-                            "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
-                            context,
-                            ty.head(),
-                            generic.name,
-                            actual_ty,
-                            bound,
-                        ),
-                        span,
-                    )),
-                    TypeArg::String(actual) => diagnostics.push(Diagnostic::error(
-                        format!(
-                            "{} uses record type '{}' with generic argument '{}' as string '{}' but it must satisfy bound '{}'",
-                            context,
-                            ty.head(),
-                            generic.name,
-                            actual,
-                            bound,
-                        ),
-                        span,
-                    )),
-                    TypeArg::Number(actual) => diagnostics.push(Diagnostic::error(
-                        format!(
-                            "{} uses record type '{}' with generic argument '{}' as number '{}' but it must satisfy bound '{}'",
-                            context,
-                            ty.head(),
-                            generic.name,
-                            actual,
-                            bound,
-                        ),
-                        span,
-                    )),
+                    TypeArg::Type(actual_ty) => {
+                        for bound in &generic.bounds {
+                            if !types_compatible_for_workflow_call(bound, actual_ty) {
+                                diagnostics.push(Diagnostic::error(
+                                        format!(
+                                            "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                                            context,
+                                            ty.head(),
+                                            generic.name,
+                                            actual_ty,
+                                            bound,
+                                        ),
+                                        span,
+                                    ));
+                            }
+                        }
+                    }
+                    TypeArg::String(actual) => {
+                        for bound in &generic.bounds {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "{} uses record type '{}' with generic argument '{}' as string '{}' but it must satisfy bound '{}'",
+                                    context,
+                                    ty.head(),
+                                    generic.name,
+                                    actual,
+                                    bound,
+                                ),
+                                span,
+                            ));
+                        }
+                    }
+                    TypeArg::Number(actual) => {
+                        for bound in &generic.bounds {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "{} uses record type '{}' with generic argument '{}' as number '{}' but it must satisfy bound '{}'",
+                                    context,
+                                    ty.head(),
+                                    generic.name,
+                                    actual,
+                                    bound,
+                                ),
+                                span,
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -1800,17 +1812,16 @@ fn project_member_type(
 }
 
 fn record_type_args_satisfy_bounds(base: &TypeRef, record_schema: &RecordSchema) -> bool {
-    record_schema
-        .generics
-        .iter()
-        .zip(base.args.iter())
-        .all(|(generic, actual_arg)| match (&generic.bound, actual_arg) {
-            (None, _) => true,
-            (Some(bound), TypeArg::Type(actual_ty)) => {
-                types_compatible_for_workflow_call(bound, actual_ty)
-            }
-            (Some(_), TypeArg::String(_) | TypeArg::Number(_)) => false,
-        })
+    record_schema.generics.iter().zip(base.args.iter()).all(
+        |(generic, actual_arg)| match actual_arg {
+            _ if generic.bounds.is_empty() => true,
+            TypeArg::Type(actual_ty) => generic
+                .bounds
+                .iter()
+                .all(|bound| types_compatible_for_workflow_call(bound, actual_ty)),
+            TypeArg::String(_) | TypeArg::Number(_) => false,
+        },
+    )
 }
 
 fn substitute_record_generic_type(

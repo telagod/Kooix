@@ -136,13 +136,14 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
 
 ## Record Mapping (Partial Implementation)
 
-- `record Name ["<" GenericList ">"] { field: Type; ... };`
+- `record Name ["<" GenericList ">"] ["where" WhereList] { field: Type; ... };`
   - AST: `Item::Record(RecordDecl { name, generics, fields })`
   - HIR: `HirRecord { name, generics, fields }`
   - Parser subset:
     - supports named field list with `field: Type;`
     - supports optional generic parameter list: `record Box<T, U> { ... };`
-    - supports optional bound per generic parameter: `record Box<T: Answer> { ... };`
+    - supports optional bound list per generic parameter: `record Box<T: Answer + Summary> { ... };`
+    - supports optional where clause bounds: `record Box<T> where T: Answer + Summary { ... };`
   - Sema subset:
     - duplicate record declaration error
     - duplicate generic parameter error
@@ -152,12 +153,12 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - record field projection in workflow step/output path typing
     - generic field projection substitution (e.g. `Box<Answer>.value -> Answer`)
     - declaration-level record generic arity checks across `record/fn/workflow/agent` type positions
-    - declaration-level generic bound checks for record type arguments
+    - declaration-level generic bound checks for record type arguments (all bounds must be satisfied)
     - projection on arity-mismatched or bound-mismatched record paths keeps warning fallback for compatibility
 
 ## Record Mapping (Target, Not Implemented Yet)
 
-- generic constraints / where-clause style bounds
+- richer generic constraint model (trait-like algebra, where clause normalization)
 - record projection beyond static field map (methods/computed fields)
 
 ### Agent top-level

@@ -33,7 +33,7 @@ pub struct RecordDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordGenericParam {
     pub name: String,
-    pub bound: Option<TypeRef>,
+    pub bounds: Vec<TypeRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
