@@ -142,6 +142,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
   - Parser subset:
     - supports named field list with `field: Type;`
     - supports optional generic parameter list: `record Box<T, U> { ... };`
+    - supports optional bound per generic parameter: `record Box<T: Answer> { ... };`
   - Sema subset:
     - duplicate record declaration error
     - duplicate generic parameter error
@@ -151,7 +152,8 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - record field projection in workflow step/output path typing
     - generic field projection substitution (e.g. `Box<Answer>.value -> Answer`)
     - declaration-level record generic arity checks across `record/fn/workflow/agent` type positions
-    - projection on arity-mismatched record paths keeps warning fallback for compatibility
+    - declaration-level generic bound checks for record type arguments
+    - projection on arity-mismatched or bound-mismatched record paths keeps warning fallback for compatibility
 
 ## Record Mapping (Target, Not Implemented Yet)
 

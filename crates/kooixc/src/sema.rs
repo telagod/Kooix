@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    EnsureClause, FailureAction, FailureValue, PredicateValue, Program, TypeArg, TypeRef,
-    WorkflowCallArg,
+    EnsureClause, FailureAction, FailureValue, PredicateValue, Program, RecordGenericParam,
+    TypeArg, TypeRef, WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{
@@ -205,7 +205,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
 
 #[derive(Debug, Clone)]
 struct RecordSchema {
-    generics: Vec<String>,
+    generics: Vec<RecordGenericParam>,
     fields: HashMap<String, TypeRef>,
 }
 
@@ -233,18 +233,22 @@ fn validate_record_declarations(
 
         let mut seen_generics = HashSet::new();
         for generic in &record.generics {
-            if !seen_generics.insert(generic.clone()) {
+            if !seen_generics.insert(generic.name.clone()) {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "record '{}' repeats generic parameter '{}'",
-                        record.name, generic
+                        record.name, generic.name
                     ),
                     record.span,
                 ));
             }
         }
 
-        let generic_set: HashSet<&str> = record.generics.iter().map(|name| name.as_str()).collect();
+        let generic_set: HashSet<&str> = record
+            .generics
+            .iter()
+            .map(|param| param.name.as_str())
+            .collect();
         let mut field_types: HashMap<String, TypeRef> = HashMap::new();
         for field in &record.fields {
             if field_types
@@ -411,6 +415,54 @@ fn validate_record_type_ref_arity(
                 ),
                 span,
             ));
+        } else {
+            for (index, generic) in record_schema.generics.iter().enumerate() {
+                let Some(bound) = &generic.bound else {
+                    continue;
+                };
+
+                let Some(actual_arg) = ty.args.get(index) else {
+                    continue;
+                };
+
+                match actual_arg {
+                    TypeArg::Type(actual_ty)
+                        if types_compatible_for_workflow_call(bound, actual_ty) => {}
+                    TypeArg::Type(actual_ty) => diagnostics.push(Diagnostic::error(
+                        format!(
+                            "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                            context,
+                            ty.head(),
+                            generic.name,
+                            actual_ty,
+                            bound,
+                        ),
+                        span,
+                    )),
+                    TypeArg::String(actual) => diagnostics.push(Diagnostic::error(
+                        format!(
+                            "{} uses record type '{}' with generic argument '{}' as string '{}' but it must satisfy bound '{}'",
+                            context,
+                            ty.head(),
+                            generic.name,
+                            actual,
+                            bound,
+                        ),
+                        span,
+                    )),
+                    TypeArg::Number(actual) => diagnostics.push(Diagnostic::error(
+                        format!(
+                            "{} uses record type '{}' with generic argument '{}' as number '{}' but it must satisfy bound '{}'",
+                            context,
+                            ty.head(),
+                            generic.name,
+                            actual,
+                            bound,
+                        ),
+                        span,
+                    )),
+                }
+            }
         }
     }
 
@@ -1705,6 +1757,10 @@ fn project_member_type(
             return None;
         }
 
+        if !record_type_args_satisfy_bounds(base, record_schema) {
+            return None;
+        }
+
         if let Some(field_type) = record_schema.fields.get(member) {
             return Some(substitute_record_generic_type(
                 field_type,
@@ -1743,13 +1799,27 @@ fn project_member_type(
     }
 }
 
+fn record_type_args_satisfy_bounds(base: &TypeRef, record_schema: &RecordSchema) -> bool {
+    record_schema
+        .generics
+        .iter()
+        .zip(base.args.iter())
+        .all(|(generic, actual_arg)| match (&generic.bound, actual_arg) {
+            (None, _) => true,
+            (Some(bound), TypeArg::Type(actual_ty)) => {
+                types_compatible_for_workflow_call(bound, actual_ty)
+            }
+            (Some(_), TypeArg::String(_) | TypeArg::Number(_)) => false,
+        })
+}
+
 fn substitute_record_generic_type(
     ty: &TypeRef,
-    generics: &[String],
+    generics: &[RecordGenericParam],
     actual_args: &[TypeArg],
 ) -> TypeRef {
     if ty.args.is_empty() {
-        if let Some(index) = generics.iter().position(|name| name == ty.head()) {
+        if let Some(index) = generics.iter().position(|param| param.name == ty.head()) {
             if let Some(TypeArg::Type(actual_ty)) = actual_args.get(index) {
                 return actual_ty.clone();
             }

@@ -1,6 +1,6 @@
 use crate::ast::{
     AgentPolicy, EnsureClause, EvidenceSpec, FailureAction, FailurePolicy, Item, LoopSpec,
-    OutputField, Program, RecordField, StateRule, TypeRef, WorkflowCall,
+    OutputField, Program, RecordField, RecordGenericParam, StateRule, TypeRef, WorkflowCall,
 };
 use crate::error::Span;
 
@@ -69,7 +69,7 @@ pub struct HirWorkflowStep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirRecord {
     pub name: String,
-    pub generics: Vec<String>,
+    pub generics: Vec<RecordGenericParam>,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }

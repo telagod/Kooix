@@ -312,6 +312,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：在不引入约束系统的前提下先强化 arity correctness，提升类型系统可靠性与诊断确定性。
 
+### 2026-02-07 - Phase 6.12：Record 泛型约束（Bound）最小子集
+
+- **变更内容**：为 record 泛型参数增加可选 bound 语法（`record Box<T: Answer>`）；新增声明期 bound 校验，并在 member projection 时约束不满足即拒绝投影。
+- **变更理由**：让泛型不仅“数量正确”，还具备最小语义约束，进一步降低错误类型进入工作流主链的概率。
+- **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先用单 bound + 兼容既有类型兼容规则实现最小闭环，后续再扩展为 `where`/多约束体系。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

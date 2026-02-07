@@ -349,10 +349,36 @@ record Box<T> {
     };
 
     assert_eq!(record.name, "Box");
-    assert_eq!(record.generics, vec!["T".to_string()]);
+    assert_eq!(record.generics.len(), 1);
+    assert_eq!(record.generics[0].name, "T");
+    assert!(record.generics[0].bound.is_none());
     assert_eq!(record.fields.len(), 1);
     assert_eq!(record.fields[0].name, "value");
     assert_eq!(record.fields[0].ty.to_string(), "T");
+}
+
+#[test]
+fn parses_bounded_generic_record_declaration() {
+    let source = r#"
+record Box<T: Answer> {
+  value: T;
+}
+;
+"#;
+
+    let program = parse_source(source).expect("bounded generic record should parse");
+    let record = match &program.items[0] {
+        Item::Record(record) => record,
+        _ => panic!("expected first item to be record"),
+    };
+
+    assert_eq!(record.generics.len(), 1);
+    assert_eq!(record.generics[0].name, "T");
+    let bound = record.generics[0]
+        .bound
+        .as_ref()
+        .expect("generic bound should exist");
+    assert_eq!(bound.to_string(), "Answer");
 }
 
 #[test]
@@ -661,6 +687,42 @@ fn answer(input: Query) -> Box;
             && diagnostic
                 .message
                 .contains("function 'answer' return type uses record type 'Box' with 0 generic argument(s), expected 1")
+    }));
+}
+
+#[test]
+fn rejects_function_return_type_with_record_generic_bound_mismatch() {
+    let source = r#"
+record Box<T: Answer> {
+  value: T;
+}
+;
+fn answer(input: Query) -> Box<Text>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "function 'answer' return type uses record type 'Box' with generic argument 'T' as 'Text' but it must satisfy bound 'Answer'"
+            )
+    }));
+}
+
+#[test]
+fn accepts_function_return_type_with_record_generic_bound_match() {
+    let source = r#"
+record Box<T: Answer> {
+  value: T;
+}
+;
+fn answer(input: Query) -> Box<Answer>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("function 'answer' return type")
     }));
 }
 

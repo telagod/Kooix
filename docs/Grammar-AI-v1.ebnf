@@ -10,6 +10,7 @@ Item                  = CapabilityDecl
                       | FunctionDecl
                       | WorkflowDecl
                       | AgentDecl
+                      | RecordDecl
                       ;
 
 (* ---------- Shared Core ---------- *)
@@ -35,6 +36,16 @@ CapabilityRef         = "cap" TypeRef
 TypeRef               = Identifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
 
 TypeArg               = TypeRef | StringLiteral | NumberLiteral ;
+
+(* ---------- Record ---------- *)
+
+RecordDecl            = "record" Identifier [ GenericParams ] "{" { RecordField } "}" ";" ;
+
+GenericParams         = "<" GenericParam { "," GenericParam } ">" ;
+
+GenericParam          = Identifier [ ":" TypeRef ] ;
+
+RecordField           = Identifier ":" TypeRef ";" ;
 
 (* ---------- Function ---------- *)
 

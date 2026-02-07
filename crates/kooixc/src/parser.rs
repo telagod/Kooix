@@ -1,8 +1,9 @@
 use crate::ast::{
     AgentDecl, AgentPolicy, CapabilityDecl, EffectSpec, EnsureClause, EvidenceSpec, FailureAction,
     FailureActionArg, FailurePolicy, FailureRule, FailureValue, FunctionDecl, Item, LoopSpec,
-    OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl, RecordField, StateRule,
-    TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
+    OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl, RecordField,
+    RecordGenericParam, StateRule, TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl,
+    WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -69,7 +70,16 @@ impl<'a> Parser<'a> {
             if !self.at_rangle() {
                 loop {
                     let (generic_name, _) = self.expect_ident()?;
-                    generics.push(generic_name);
+                    let bound = if self.at_colon() {
+                        self.expect_colon()?;
+                        Some(self.parse_type_ref()?)
+                    } else {
+                        None
+                    };
+                    generics.push(RecordGenericParam {
+                        name: generic_name,
+                        bound,
+                    });
                     if self.at_comma() {
                         self.advance();
                         continue;
