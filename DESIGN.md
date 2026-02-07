@@ -326,6 +326,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`compiler_tests.rs` 与语法映射文档。
 - **决策依据**：约束检查保持保守（沿用现有类型兼容规则），不引入 trait 系统与约束求解器，优先交付可验证闭环。
 
+### 2026-02-07 - Phase 6.14：Record-as-Trait 结构化 Bound + 约束诊断收敛
+
+- **变更内容**：当 bound 引用到 record 类型时，按字段子集规则进行结构化满足校验（actual record 至少包含 bound record 的全部字段，且字段类型深度兼容）；bound 校验对多约束做去重归一，并对多失败项给出聚合 error。
+- **变更理由**：让 bound 从“名义类型等价”升级到“语义结构约束”，把 AI-native schema 约束落到可验证的静态规则上，同时降低多 bound 场景的诊断噪音。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先以 record schema 作为最小 trait 载体，不引入独立 trait 声明与约束求解器；优先让编排与契约场景可读可验。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

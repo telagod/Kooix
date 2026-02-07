@@ -264,10 +264,30 @@ fn validate_record_declarations(
             validate_record_field_type_ref(&field.ty, &generic_set, record, diagnostics);
         }
 
+        let mut normalized_generics = record.generics.clone();
+        for generic in &mut normalized_generics {
+            let mut seen_bounds = HashSet::new();
+            generic.bounds.retain(|bound| {
+                let key = bound.to_string();
+                if seen_bounds.insert(key.clone()) {
+                    true
+                } else {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "record '{}' repeats bound '{}' for generic parameter '{}'",
+                            record.name, key, generic.name
+                        ),
+                        record.span,
+                    ));
+                    false
+                }
+            });
+        }
+
         declared_record_types.insert(
             record.name.clone(),
             RecordSchema {
-                generics: record.generics.clone(),
+                generics: normalized_generics,
                 fields: field_types,
             },
         );
@@ -417,61 +437,77 @@ fn validate_record_type_ref_arity(
             ));
         } else {
             for (index, generic) in record_schema.generics.iter().enumerate() {
-                if generic.bounds.is_empty() {
-                    continue;
-                };
-
                 let Some(actual_arg) = ty.args.get(index) else {
                     continue;
                 };
 
                 match actual_arg {
                     TypeArg::Type(actual_ty) => {
+                        if generic.bounds.is_empty() {
+                            continue;
+                        }
+
+                        let mut failed_bounds = Vec::new();
                         for bound in &generic.bounds {
-                            if !types_compatible_for_workflow_call(bound, actual_ty) {
-                                diagnostics.push(Diagnostic::error(
-                                        format!(
-                                            "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
-                                            context,
-                                            ty.head(),
-                                            generic.name,
-                                            actual_ty,
-                                            bound,
-                                        ),
-                                        span,
-                                    ));
+                            if !type_satisfies_bound(actual_ty, bound, declared_record_types) {
+                                failed_bounds.push(bound.to_string());
                             }
                         }
+
+                        if failed_bounds.is_empty() {
+                            continue;
+                        }
+
+                        if failed_bounds.len() == 1 {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                                    context,
+                                    ty.head(),
+                                    generic.name,
+                                    actual_ty,
+                                    failed_bounds[0],
+                                ),
+                                span,
+                            ));
+                            continue;
+                        }
+
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bounds '{}'",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual_ty,
+                                failed_bounds.join(" + "),
+                            ),
+                            span,
+                        ));
                     }
                     TypeArg::String(actual) => {
-                        for bound in &generic.bounds {
-                            diagnostics.push(Diagnostic::error(
-                                format!(
-                                    "{} uses record type '{}' with generic argument '{}' as string '{}' but it must satisfy bound '{}'",
-                                    context,
-                                    ty.head(),
-                                    generic.name,
-                                    actual,
-                                    bound,
-                                ),
-                                span,
-                            ));
-                        }
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses record type '{}' with generic argument '{}' as string '{}' but expected a type",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            span,
+                        ));
                     }
                     TypeArg::Number(actual) => {
-                        for bound in &generic.bounds {
-                            diagnostics.push(Diagnostic::error(
-                                format!(
-                                    "{} uses record type '{}' with generic argument '{}' as number '{}' but it must satisfy bound '{}'",
-                                    context,
-                                    ty.head(),
-                                    generic.name,
-                                    actual,
-                                    bound,
-                                ),
-                                span,
-                            ));
-                        }
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses record type '{}' with generic argument '{}' as number '{}' but expected a type",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            span,
+                        ));
                     }
                 }
             }
@@ -1769,7 +1805,7 @@ fn project_member_type(
             return None;
         }
 
-        if !record_type_args_satisfy_bounds(base, record_schema) {
+        if !record_type_args_satisfy_bounds(base, record_schema, declared_record_types) {
             return None;
         }
 
@@ -1811,14 +1847,103 @@ fn project_member_type(
     }
 }
 
-fn record_type_args_satisfy_bounds(base: &TypeRef, record_schema: &RecordSchema) -> bool {
+fn type_satisfies_bound(
+    actual: &TypeRef,
+    bound: &TypeRef,
+    declared_record_types: &HashMap<String, RecordSchema>,
+) -> bool {
+    let mut seen = HashSet::new();
+    type_satisfies_bound_inner(actual, bound, declared_record_types, &mut seen)
+}
+
+fn type_satisfies_bound_inner(
+    actual: &TypeRef,
+    bound: &TypeRef,
+    declared_record_types: &HashMap<String, RecordSchema>,
+    seen: &mut HashSet<(String, String)>,
+) -> bool {
+    if types_compatible_for_workflow_call(bound, actual) {
+        return true;
+    }
+
+    if bound.head() == actual.head() {
+        if bound.args.len() != actual.args.len() {
+            return false;
+        }
+
+        for (expected_arg, actual_arg) in bound.args.iter().zip(actual.args.iter()) {
+            match (expected_arg, actual_arg) {
+                (TypeArg::Type(expected_ty), TypeArg::Type(actual_ty)) => {
+                    if !type_satisfies_bound_inner(
+                        actual_ty,
+                        expected_ty,
+                        declared_record_types,
+                        seen,
+                    ) {
+                        return false;
+                    }
+                }
+                (TypeArg::String(expected), TypeArg::String(actual)) if expected == actual => {}
+                (TypeArg::Number(expected), TypeArg::Number(actual)) if expected == actual => {}
+                _ => return false,
+            }
+        }
+
+        return true;
+    }
+
+    let key = (actual.to_string(), bound.to_string());
+    if !seen.insert(key) {
+        return true;
+    }
+
+    let Some(actual_schema) = declared_record_types.get(actual.head()) else {
+        return false;
+    };
+    let Some(bound_schema) = declared_record_types.get(bound.head()) else {
+        return false;
+    };
+
+    if actual_schema.generics.len() != actual.args.len() {
+        return false;
+    }
+    if bound_schema.generics.len() != bound.args.len() {
+        return false;
+    }
+
+    for (field_name, bound_field_type) in &bound_schema.fields {
+        let Some(actual_field_type) = actual_schema.fields.get(field_name) else {
+            return false;
+        };
+
+        let expected_type =
+            substitute_record_generic_type(bound_field_type, &bound_schema.generics, &bound.args);
+        let actual_type = substitute_record_generic_type(
+            actual_field_type,
+            &actual_schema.generics,
+            &actual.args,
+        );
+
+        if !type_satisfies_bound_inner(&actual_type, &expected_type, declared_record_types, seen) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn record_type_args_satisfy_bounds(
+    base: &TypeRef,
+    record_schema: &RecordSchema,
+    declared_record_types: &HashMap<String, RecordSchema>,
+) -> bool {
     record_schema.generics.iter().zip(base.args.iter()).all(
         |(generic, actual_arg)| match actual_arg {
             _ if generic.bounds.is_empty() => true,
             TypeArg::Type(actual_ty) => generic
                 .bounds
                 .iter()
-                .all(|bound| types_compatible_for_workflow_call(bound, actual_ty)),
+                .all(|bound| type_satisfies_bound(actual_ty, bound, declared_record_types)),
             TypeArg::String(_) | TypeArg::Number(_) => false,
         },
     )

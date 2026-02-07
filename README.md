@@ -22,6 +22,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
 - 记录类型：`record` 声明、字段投影与最小泛型替换（如 `Box<Answer>.value`）。
 - 泛型约束：支持 record 泛型参数 bound + 多 bound + `where` 子句（如 `record Box<T: Answer + Summary>` / `record Box<T> where T: Answer + Summary`）。
+- 结构化约束：record bound 支持 record-as-trait（字段子集 + 深度类型兼容）。
 - 类型可靠性增强：record 泛型实参数量在声明阶段静态校验（arity mismatch 直接报错）。
 - AI v1 agent 子集：`agent`（`state/policy/loop/requires/ensures/evidence`）。
 - Agent 语义增强：
@@ -35,7 +36,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`101 passed, 0 failed`
+- 结果：`104 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -54,6 +55,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 6.11: Record 泛型实参数量静态校验
 - ✅ Phase 6.12: Record 泛型约束（Bound）最小子集
 - ✅ Phase 6.13: Record 多 Bound + where 子句（最小子集）
+- ✅ Phase 6.14: Record-as-Trait 结构化 Bound + 约束诊断收敛
 - ✅ Phase 7: AI v1 Agent 最小子集
 - ✅ Phase 7.1: Agent 策略冲突解释 + 状态可达性提示
 - ✅ Phase 7.2: Agent 活性/终止性提示

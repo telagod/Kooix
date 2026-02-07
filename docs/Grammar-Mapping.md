@@ -154,6 +154,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - generic field projection substitution (e.g. `Box<Answer>.value -> Answer`)
     - declaration-level record generic arity checks across `record/fn/workflow/agent` type positions
     - declaration-level generic bound checks for record type arguments (all bounds must be satisfied)
+    - trait-like structural bound satisfaction for record bounds (field subset + deep type compatibility)
     - projection on arity-mismatched or bound-mismatched record paths keeps warning fallback for compatibility
 
 ## Record Mapping (Target, Not Implemented Yet)

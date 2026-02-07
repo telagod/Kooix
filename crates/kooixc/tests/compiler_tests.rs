@@ -806,6 +806,58 @@ fn answer(input: Query) -> Box<Answer>;
 }
 
 #[test]
+fn accepts_record_bound_structural_satisfaction() {
+    let source = r#"
+record HasText { text: Text; };
+record Answer { text: String; score: Int; };
+record Box<T: HasText> { value: T; };
+fn answer(input: Query) -> Box<Answer>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error));
+}
+
+#[test]
+fn rejects_record_bound_structural_mismatch() {
+    let source = r#"
+record HasText { text: Text; };
+record Wrong { score: Int; };
+record Box<T: HasText> { value: T; };
+fn answer(input: Query) -> Box<Wrong>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "function 'answer' return type uses record type 'Box' with generic argument 'T' as 'Wrong' but it must satisfy bound 'HasText'"
+            )
+    }));
+}
+
+#[test]
+fn rejects_record_bound_structural_multi_mismatch_aggregated() {
+    let source = r#"
+record HasText { text: Text; };
+record HasScore { score: Int; };
+record Wrong { other: Int; };
+record Box<T: HasText + HasScore> { value: T; };
+fn answer(input: Query) -> Box<Wrong>;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "function 'answer' return type uses record type 'Box' with generic argument 'T' as 'Wrong' but it must satisfy bounds 'HasText + HasScore'"
+            )
+    }));
+}
+
+#[test]
 fn warns_when_workflow_step_argument_symbol_is_unbound() {
     let source = r#"
 fn normalize(input: Query) -> Unit;
