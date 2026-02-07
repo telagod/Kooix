@@ -120,6 +120,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
   - Sema subset:
     - duplicate workflow name error
     - duplicate step id error
+    - step call target declaration warning (`fn`/`workflow`/`agent`)
     - `on_fail` action legality (`retry/fallback/abort/compensate`)
     - workflow-level `requires` top-level capability existence
     - workflow evidence trace/metrics checks
@@ -127,7 +128,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
 ## AI v1 Mapping (Target, Not Implemented Yet)
 
 - workflow `sla` block and predicate validation
-- workflow step call semantic/type validation
+- workflow step call type/signature validation
 - workflow output contract type-flow checks
 
 ### Agent top-level

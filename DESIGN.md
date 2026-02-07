@@ -235,6 +235,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、tests 与文档。
 - **决策依据**：优先支持 step 去重与失败策略合法性，再扩展 SLA/step-call 语义。
 
+### 2026-02-07 - Phase 6.1：Workflow 调用目标声明校验
+
+- **变更内容**：新增 step call 目标存在性检查；当调用目标未在顶层声明（`fn`/`workflow`/`agent`）时给出 warning。
+- **变更理由**：提前暴露编排层误拼写/漏声明问题，减少运行期才发现调用失效。
+- **影响范围**：`sema.rs`、`compiler_tests.rs` 与语法映射文档。
+- **决策依据**：先落地“声明级”校验，后续再扩展到签名与类型流校验。
+
 ### 2026-02-07 - Phase 7：AI v1 Agent 最小子集
 
 - **变更内容**：新增 `agent` 顶层声明与 `state/policy/loop` 语法，落地最小语义校验。

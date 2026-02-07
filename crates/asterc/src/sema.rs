@@ -10,6 +10,14 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     let hir = lower_program(program);
     let mut diagnostics = Vec::new();
 
+    let declared_invocable_targets: HashSet<String> = hir
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .chain(hir.workflows.iter().map(|workflow| workflow.name.clone()))
+        .chain(hir.agents.iter().map(|agent| agent.name.clone()))
+        .collect();
+
     let mut declared_capability_instances = HashSet::new();
     let mut declared_capability_heads = HashSet::new();
 
@@ -122,6 +130,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
             workflow,
             &declared_capability_heads,
             &declared_capability_instances,
+            &declared_invocable_targets,
             &mut diagnostics,
         );
     }
@@ -790,6 +799,7 @@ fn validate_workflow(
     workflow: &HirWorkflow,
     declared_capability_heads: &HashSet<String>,
     declared_capability_instances: &HashSet<String>,
+    declared_invocable_targets: &HashSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(intent) = &workflow.intent {
@@ -836,6 +846,14 @@ fn validate_workflow(
                 workflow.span,
             ));
         }
+
+        validate_workflow_step_call_target(
+            workflow,
+            &step.id,
+            &step.call,
+            declared_invocable_targets,
+            diagnostics,
+        );
 
         if let Some(action) = &step.on_fail {
             validate_workflow_step_action(workflow, &step.id, action, diagnostics);
@@ -1061,6 +1079,24 @@ fn validate_workflow_evidence(workflow: &HirWorkflow, diagnostics: &mut Vec<Diag
                 workflow.span,
             ));
         }
+    }
+}
+
+fn validate_workflow_step_call_target(
+    workflow: &HirWorkflow,
+    step_id: &str,
+    call_target: &str,
+    declared_invocable_targets: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if !declared_invocable_targets.contains(call_target) {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "workflow '{}' step '{}' calls unknown target '{}'",
+                workflow.name, step_id, call_target
+            ),
+            workflow.span,
+        ));
     }
 }
 

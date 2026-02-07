@@ -413,6 +413,51 @@ steps {
 }
 
 #[test]
+fn warns_on_unknown_workflow_step_call_target() {
+    let source = r#"
+workflow flow() -> Unit
+steps {
+  s1: ghost_call();
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("workflow 'flow' step 's1' calls unknown target 'ghost_call'")
+    }));
+}
+
+#[test]
+fn accepts_declared_workflow_step_call_targets() {
+    let source = r#"
+fn normalize(input: Query) -> Unit;
+workflow helper() -> Unit steps { s1: normalize(input); };
+agent resolver(input: Ticket) -> Resolution
+state { INIT -> DONE; }
+policy { allow_tools ["kb"]; deny_tools ["payment"]; max_iterations = 2; }
+loop { perceive -> act; stop when state == DONE; }
+;
+workflow flow(input: Query) -> Unit
+steps {
+  s1: normalize(input);
+  s2: helper();
+  s3: resolver(input);
+}
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic.message.contains("calls unknown target")
+    }));
+}
+
+#[test]
 fn rejects_workflow_requires_without_top_level_capability() {
     let source = r#"
 workflow flow() -> Unit
