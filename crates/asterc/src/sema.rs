@@ -364,6 +364,7 @@ fn validate_agent_predicate_value(
 struct AgentStateAnalysis {
     reachable_states: HashSet<String>,
     reachable_terminal_states: HashSet<String>,
+    reachable_adjacency: HashMap<String, HashSet<String>>,
 }
 
 fn validate_agent_state_reachability(
@@ -375,13 +376,13 @@ fn validate_agent_state_reachability(
     }
 
     let mut explicit_states = HashSet::new();
-    let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
+    let mut direct_adjacency: HashMap<String, Vec<String>> = HashMap::new();
     let mut any_targets = HashSet::new();
 
     for rule in &agent.state_rules {
         if rule.from != "any" {
             explicit_states.insert(rule.from.clone());
-            adjacency
+            direct_adjacency
                 .entry(rule.from.clone())
                 .or_default()
                 .extend(rule.to.iter().cloned());
@@ -393,6 +394,16 @@ fn validate_agent_state_reachability(
                 any_targets.insert(target.clone());
             }
         }
+    }
+
+    let mut full_adjacency: HashMap<String, HashSet<String>> = HashMap::new();
+    for state in &explicit_states {
+        let mut targets: HashSet<String> = HashSet::new();
+        if let Some(direct_targets) = direct_adjacency.get(state) {
+            targets.extend(direct_targets.iter().cloned());
+        }
+        targets.extend(any_targets.iter().cloned());
+        full_adjacency.insert(state.clone(), targets);
     }
 
     let mut initial_states = Vec::new();
@@ -423,17 +434,11 @@ fn validate_agent_state_reachability(
     }
 
     while let Some(state) = queue.pop_front() {
-        if let Some(targets) = adjacency.get(&state) {
+        if let Some(targets) = full_adjacency.get(&state) {
             for target in targets {
                 if reachable.insert(target.clone()) {
                     queue.push_back(target.clone());
                 }
-            }
-        }
-
-        for target in &any_targets {
-            if reachable.insert(target.clone()) {
-                queue.push_back(target.clone());
             }
         }
     }
@@ -456,7 +461,6 @@ fn validate_agent_state_reachability(
         ));
     }
 
-    let has_any_transition = !any_targets.is_empty();
     let reachable_terminal_states = explicit_states
         .iter()
         .filter(|state| {
@@ -464,19 +468,31 @@ fn validate_agent_state_reachability(
                 return false;
             }
 
-            let has_direct_outgoing = adjacency
+            full_adjacency
                 .get(*state)
-                .map(|targets| !targets.is_empty())
-                .unwrap_or(false);
-
-            !has_any_transition && !has_direct_outgoing
+                .map(|targets| targets.is_empty())
+                .unwrap_or(true)
         })
         .cloned()
+        .collect();
+
+    let reachable_adjacency = full_adjacency
+        .iter()
+        .filter(|(state, _)| reachable.contains(*state))
+        .map(|(state, targets)| {
+            let filtered_targets = targets
+                .iter()
+                .filter(|target| reachable.contains(*target))
+                .cloned()
+                .collect();
+            (state.clone(), filtered_targets)
+        })
         .collect();
 
     Some(AgentStateAnalysis {
         reachable_states: reachable,
         reachable_terminal_states,
+        reachable_adjacency,
     })
 }
 
@@ -521,6 +537,131 @@ fn extract_state_equality_target(predicate: &EnsureClause) -> Option<String> {
     }
 }
 
+fn strong_connect_state_node(
+    node: String,
+    adjacency: &HashMap<String, HashSet<String>>,
+    index: &mut usize,
+    indices: &mut HashMap<String, usize>,
+    lowlinks: &mut HashMap<String, usize>,
+    stack: &mut Vec<String>,
+    on_stack: &mut HashSet<String>,
+    components: &mut Vec<Vec<String>>,
+) {
+    let node_index = *index;
+    indices.insert(node.clone(), node_index);
+    lowlinks.insert(node.clone(), node_index);
+    *index += 1;
+
+    stack.push(node.clone());
+    on_stack.insert(node.clone());
+
+    let mut neighbors: Vec<String> = adjacency
+        .get(&node)
+        .map(|targets| targets.iter().cloned().collect())
+        .unwrap_or_default();
+    neighbors.sort();
+
+    for neighbor in neighbors {
+        if !indices.contains_key(&neighbor) {
+            strong_connect_state_node(
+                neighbor.clone(),
+                adjacency,
+                index,
+                indices,
+                lowlinks,
+                stack,
+                on_stack,
+                components,
+            );
+
+            let neighbor_lowlink = lowlinks.get(&neighbor).copied().unwrap_or(node_index);
+            if let Some(lowlink) = lowlinks.get_mut(&node) {
+                *lowlink = (*lowlink).min(neighbor_lowlink);
+            }
+        } else if on_stack.contains(&neighbor) {
+            let neighbor_index = indices.get(&neighbor).copied().unwrap_or(node_index);
+            if let Some(lowlink) = lowlinks.get_mut(&node) {
+                *lowlink = (*lowlink).min(neighbor_index);
+            }
+        }
+    }
+
+    let node_lowlink = lowlinks.get(&node).copied().unwrap_or(node_index);
+    let node_discovery_index = indices.get(&node).copied().unwrap_or(node_index);
+
+    if node_lowlink == node_discovery_index {
+        let mut component = Vec::new();
+        while let Some(stack_node) = stack.pop() {
+            on_stack.remove(&stack_node);
+            let is_root = stack_node == node;
+            component.push(stack_node);
+            if is_root {
+                break;
+            }
+        }
+        component.sort();
+        components.push(component);
+    }
+}
+
+fn find_reachable_closed_cycles(state_analysis: &AgentStateAnalysis) -> Vec<Vec<String>> {
+    let mut index = 0usize;
+    let mut indices = HashMap::new();
+    let mut lowlinks = HashMap::new();
+    let mut stack = Vec::new();
+    let mut on_stack = HashSet::new();
+    let mut components = Vec::new();
+
+    let mut nodes: Vec<String> = state_analysis.reachable_adjacency.keys().cloned().collect();
+    nodes.sort();
+
+    for node in nodes {
+        if !indices.contains_key(&node) {
+            strong_connect_state_node(
+                node,
+                &state_analysis.reachable_adjacency,
+                &mut index,
+                &mut indices,
+                &mut lowlinks,
+                &mut stack,
+                &mut on_stack,
+                &mut components,
+            );
+        }
+    }
+
+    let mut closed_cycles = Vec::new();
+
+    for component in components {
+        let has_cycle = component.len() > 1
+            || state_analysis
+                .reachable_adjacency
+                .get(&component[0])
+                .map(|targets| targets.contains(&component[0]))
+                .unwrap_or(false);
+
+        if !has_cycle {
+            continue;
+        }
+
+        let component_set: HashSet<&String> = component.iter().collect();
+        let has_exit_edge = component.iter().any(|state| {
+            state_analysis
+                .reachable_adjacency
+                .get(state)
+                .map(|targets| targets.iter().any(|target| !component_set.contains(target)))
+                .unwrap_or(false)
+        });
+
+        if !has_exit_edge {
+            closed_cycles.push(component);
+        }
+    }
+
+    closed_cycles.sort();
+    closed_cycles
+}
+
 fn validate_agent_termination(
     agent: &HirAgent,
     state_analysis: Option<&AgentStateAnalysis>,
@@ -563,6 +704,27 @@ fn validate_agent_termination(
     let has_reachable_terminal_state = state_analysis
         .map(|analysis| !analysis.reachable_terminal_states.is_empty())
         .unwrap_or(false);
+
+    let mut uncovered_closed_cycles = state_analysis
+        .map(find_reachable_closed_cycles)
+        .unwrap_or_default();
+
+    if reachable_stop_state {
+        if let Some(state) = &stop_state {
+            uncovered_closed_cycles.retain(|cycle| !cycle.iter().any(|entry| entry == state));
+        }
+    }
+
+    if let Some(cycle) = uncovered_closed_cycles.first() {
+        diagnostics.push(Diagnostic::warning(
+            format!(
+                "agent '{}' has reachable closed state cycle without exit: {}",
+                agent.name,
+                cycle.join(", ")
+            ),
+            agent.span,
+        ));
+    }
 
     if !reachable_stop_state && !has_reachable_terminal_state {
         let qualifier = if stop_state.is_some() {

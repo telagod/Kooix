@@ -147,6 +147,7 @@ The following function-level blocks are represented in AST/parser/HIR/sema.
     - policy allow/deny overlap precedence warning (`deny` > `allow`)
     - state transition reachability warning (unreachable states)
     - stop condition state target warning (unknown/unreachable state)
+    - reachable closed-cycle warning via SCC (no exit and not covered by stop state)
     - non-termination warning when no reachable terminal path and no `max_iterations` guard
     - `requires` top-level capability existence checks
     - loop/policy/ensures predicate symbol allowlist checks (`state`/`output`/params)

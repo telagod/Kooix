@@ -604,6 +604,12 @@ loop { perceive -> act; stop when state == DONE; }
                 .contains("stop condition targets unknown state 'DONE'")
     }));
     assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("closed state cycle without exit: RUNNING")
+    }));
+    assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic.severity == Severity::Warning && diagnostic.message.contains("may not terminate")
     }));
 }
@@ -631,6 +637,31 @@ loop { perceive -> act; stop when state == DONE; }
             && diagnostic
                 .message
                 .contains("stop condition targets unknown state 'DONE'")
+    }));
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning && diagnostic.message.contains("may not terminate")
+    }));
+}
+
+#[test]
+fn avoids_agent_cycle_warning_when_stop_state_is_inside_cycle() {
+    let source = r#"
+agent a() -> Unit
+state {
+  INIT -> RUNNING;
+  RUNNING -> RUNNING;
+}
+policy { allow_tools ["kb"]; deny_tools ["payment"]; }
+loop { perceive -> act; stop when state == RUNNING; }
+;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(!diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Warning
+            && diagnostic
+                .message
+                .contains("closed state cycle without exit")
     }));
     assert!(!diagnostics.iter().any(|diagnostic| {
         diagnostic.severity == Severity::Warning && diagnostic.message.contains("may not terminate")
