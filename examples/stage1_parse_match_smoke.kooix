@@ -26,8 +26,10 @@ fn main() -> Int {
                           match e {
                             Match(m) => {
                               match m.scrutinee {
-                                Path(name) => {
-                                  if name == "x" {
+                                Path(p0) => {
+                                  if p0.name == "x" {
+                                    match p0.ns {
+                                      None => {
                                     match m.arms {
                                       Cons(a0) => {
                                         match a0.head.pat {
@@ -39,7 +41,9 @@ fn main() -> Int {
                                                     Cons(a1) => {
                                                       match a1.head.pat {
                                                         Path(p2) => {
-                                                          if p2 == "Foo" {
+                                                          if p2.name == "Foo" {
+                                                            match p2.ns {
+                                                              None => {
                                                             match a1.head.value {
                                                               IntLit(n2) => {
                                                                 if n2 == "2" {
@@ -50,6 +54,9 @@ fn main() -> Int {
                                                                 } else { 23 }
                                                               };
                                                               _ => 22;
+                                                            }
+                                                              };
+                                                              _ => 25;
                                                             }
                                                           } else { 21 }
                                                         };
@@ -67,6 +74,9 @@ fn main() -> Int {
                                         }
                                       };
                                       _ => 15;
+                                    }
+                                      };
+                                      _ => 26;
                                     }
                                   } else { 14 }
                                 };
@@ -90,4 +100,3 @@ fn main() -> Int {
     };
   }
 };
-

@@ -28,18 +28,24 @@ fn main() -> Int {
                                   match beq.op {
                                     Equals => {
                                       match beq.left {
-                                        Path(lname) => {
-                                          if lname == "x" {
+                                        Path(p0) => {
+                                          if p0.name == "x" {
+                                            match p0.ns {
+                                              None => {
                                             match beq.right {
                                               Binary(badd) => {
                                                 match badd.op {
                                                   Add => {
                                                     match badd.left {
-                                                      Path(yname) => {
-                                                        if yname == "y" {
+                                                      Path(p1) => {
+                                                        if p1.name == "y" {
+                                                          match p1.ns {
+                                                            None => {
                                                           match badd.right {
-                                                            Path(zname) => {
-                                                              if zname == "z" {
+                                                            Path(p2) => {
+                                                              if p2.name == "z" {
+                                                                match p2.ns {
+                                                                  None => {
                                                                 match b.result {
                                                                   Some(re) => {
                                                                     match re {
@@ -51,9 +57,15 @@ fn main() -> Int {
                                                                   };
                                                                   _ => 28;
                                                                 }
+                                                                  };
+                                                                  _ => 31;
+                                                                }
                                                               } else { 27 }
                                                             };
                                                             _ => 26;
+                                                          }
+                                                            };
+                                                            _ => 32;
                                                           }
                                                         } else { 25 }
                                                       };
@@ -64,6 +76,9 @@ fn main() -> Int {
                                                 }
                                               };
                                               _ => 22;
+                                            }
+                                              };
+                                              _ => 33;
                                             }
                                           } else { 21 }
                                         };

@@ -4,6 +4,11 @@ record S1Program { items: List<S1Item>; };
 
 record S1Type { name: Text; args: List<S1Type>; };
 
+record S1Path {
+  ns: Option<Text>;
+  name: Text;
+};
+
 record S1GenericParam {
   name: Text;
   bounds: List<S1Type>;
@@ -90,7 +95,7 @@ record S1While {
 };
 
 enum S1Expr {
-  Path(Text);
+  Path(S1Path);
   IntLit(Text);
   StringLit(Text);
   Call(S1Call);
@@ -101,7 +106,7 @@ enum S1Expr {
 };
 
 record S1Call {
-  callee: Text;
+  callee: S1Path;
   args: List<S1Expr>;
 };
 
@@ -113,7 +118,7 @@ record S1If {
 
 enum S1Pattern {
   Wildcard;
-  Path(Text);
+  Path(S1Path);
 };
 
 record S1MatchArm {

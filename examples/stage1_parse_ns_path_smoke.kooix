@@ -1,0 +1,124 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text =
+    "import \"../stdlib/prelude\"; fn main() -> Int { prelude::id(1); match x { prelude::Foo => 0; _ => 1; }; 2 };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Import(im) => {
+                  if im.ns == "prelude" {
+                    match i0.tail {
+                      Cons(i1) => {
+                        match i1.head {
+                          Function(f) => {
+                            match f.body {
+                              Some(b) => {
+                                match b.stmts {
+                                  Cons(s0) => {
+                                    match s0.head {
+                                      ExprStmt(e0) => {
+                                        match e0 {
+                                          Call(c0) => {
+                                            if c0.callee.name == "id" {
+                                              match c0.callee.ns {
+                                                Some(ns0) => {
+                                                  if ns0 == "prelude" {
+                                                    match c0.args {
+                                                      Cons(a0) => {
+                                                        match a0.head {
+                                                          IntLit(n) => {
+                                                            if n == "1" {
+                                                              match a0.tail {
+                                                                Nil => {
+                                                                  // second stmt: match
+                                                                  match s0.tail {
+                                                                    Cons(s1) => {
+                                                                      match s1.head {
+                                                                        ExprStmt(e1) => {
+                                                                          match e1 {
+                                                                            Match(m) => {
+                                                                              match m.arms {
+                                                                                Cons(arm0) => {
+                                                                                  match arm0.head.pat {
+                                                                                    Path(pat0) => {
+                                                                                      if pat0.name == "Foo" {
+                                                                                        match pat0.ns {
+                                                                                          Some(ns1) => {
+                                                                                            if ns1 == "prelude" { 0 } else { 41 }
+                                                                                          };
+                                                                                          _ => 40;
+                                                                                        }
+                                                                                      } else { 39 }
+                                                                                    };
+                                                                                    _ => 38;
+                                                                                  }
+                                                                                };
+                                                                                _ => 37;
+                                                                              }
+                                                                            };
+                                                                            _ => 36;
+                                                                          }
+                                                                        };
+                                                                        _ => 35;
+                                                                      }
+                                                                    };
+                                                                    _ => 34;
+                                                                  }
+                                                                };
+                                                                _ => 33;
+                                                              }
+                                                            } else { 32 }
+                                                          };
+                                                          _ => 31;
+                                                        }
+                                                      };
+                                                      _ => 30;
+                                                    }
+                                                  } else { 29 }
+                                                };
+                                                _ => 28;
+                                              }
+                                            } else { 27 }
+                                          };
+                                          _ => 26;
+                                        }
+                                      };
+                                      _ => 25;
+                                    }
+                                  };
+                                  _ => 24;
+                                }
+                              };
+                              _ => 23;
+                            }
+                          };
+                          _ => 22;
+                        }
+                      };
+                      _ => 21;
+                    }
+                  } else { 20 }
+                };
+                _ => 10;
+              }
+            };
+            _ => 11;
+          }
+        };
+      }
+    };
+  }
+};
+

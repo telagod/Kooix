@@ -3,6 +3,64 @@ import "diag";
 import "token";
 import "ast";
 
+fn s1_empty_path() -> S1Path {
+  let ns: Option<Text> = None;
+  S1Path { ns: ns; name: ""; }
+};
+
+fn s1_simple_path(name: Text) -> S1Path {
+  let ns: Option<Text> = None;
+  S1Path { ns: ns; name: name; }
+};
+
+fn s1_ns_path(ns_name: Text, name: Text) -> S1Path {
+  let ns: Option<Text> = Some(ns_name);
+  S1Path { ns: ns; name: name; }
+};
+
+fn s1_parse_path_tail(first: Text, rest: List<S1Token>) -> Pair<S1Path, List<S1Token>> {
+  let path: S1Path = s1_simple_path(first);
+  let cur: List<S1Token> = rest;
+
+  match rest {
+    Cons(c0) => {
+      match c0.head.kind {
+        Colon => {
+          match c0.tail {
+            Cons(c1) => {
+              match c1.head.kind {
+                Colon => {
+                  match c1.tail {
+                    Cons(c2) => {
+                      match c2.head.kind {
+                        Ident(name) => {
+                          path = s1_ns_path(first, name);
+                          cur = c2.tail;
+                          0
+                        };
+                        _ => 0;
+                      }
+                    };
+                    _ => 0;
+                  };
+                  0
+                };
+                _ => 0;
+              }
+            };
+            _ => 0;
+          };
+          0
+        };
+        _ => 0;
+      }
+    };
+    _ => 0;
+  };
+
+  Pair<S1Path, List<S1Token>> { a: path; b: cur; }
+};
+
 fn s1_reverse_items(xs: List<S1Item>) -> List<S1Item> {
   let acc: List<S1Item> = Nil;
   let cur: List<S1Item> = xs;
@@ -608,7 +666,7 @@ fn s1_parse_equality(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
 
-  let left: S1Expr = S1Expr.Path("");
+  let left: S1Expr = S1Expr.Path(s1_empty_path());
   let rest: List<S1Token> = tokens;
 
   let parsed_l: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
@@ -634,7 +692,7 @@ fn s1_parse_equality(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>
           match opcell.head.kind {
             EqEq => {
               rest = opcell.tail;
-              let rhs: S1Expr = S1Expr.Path("");
+              let rhs: S1Expr = S1Expr.Path(s1_empty_path());
               let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
                 s1_parse_additive(rest);
               match parsed_r {
@@ -657,7 +715,7 @@ fn s1_parse_equality(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>
             };
             NotEq => {
               rest = opcell.tail;
-              let rhs: S1Expr = S1Expr.Path("");
+              let rhs: S1Expr = S1Expr.Path(s1_empty_path());
               let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
                 s1_parse_additive(rest);
               match parsed_r {
@@ -704,7 +762,7 @@ fn s1_parse_additive(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
 
-  let left: S1Expr = S1Expr.Path("");
+  let left: S1Expr = S1Expr.Path(s1_empty_path());
   let rest: List<S1Token> = tokens;
 
   let parsed_l: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
@@ -730,7 +788,7 @@ fn s1_parse_additive(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>
           match opcell.head.kind {
             Plus => {
               rest = opcell.tail;
-              let rhs: S1Expr = S1Expr.Path("");
+              let rhs: S1Expr = S1Expr.Path(s1_empty_path());
               let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
                 s1_parse_primary_expr(rest);
               match parsed_r {
@@ -777,7 +835,7 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
 
-  let expr: S1Expr = S1Expr.Path("");
+  let expr: S1Expr = S1Expr.Path(s1_empty_path());
   let rest: List<S1Token> = tokens;
 
   match tokens {
@@ -789,7 +847,7 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
       match cell0.head.kind {
         KwIf => {
           rest = cell0.tail;
-          let cond: S1Expr = S1Expr.Path("");
+          let cond: S1Expr = S1Expr.Path(s1_empty_path());
           let empty_stmts: List<S1Stmt> = Nil;
           let empty_result: Option<S1Expr> = None;
           let then_block: S1Block = S1Block { stmts: empty_stmts; result: empty_result; };
@@ -907,7 +965,7 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
         };
         KwMatch => {
           rest = cell0.tail;
-          let scrutinee: S1Expr = S1Expr.Path("");
+          let scrutinee: S1Expr = S1Expr.Path(s1_empty_path());
           let arms_rev: List<S1MatchArm> = Nil;
 
           // scrutinee expr
@@ -970,15 +1028,18 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
                       0
                     };
                     Ident(pname) => {
-                      let pat: S1Pattern = S1Pattern.Path(pname);
+                      let pat: S1Pattern = Wildcard;
                       if pname == "_" {
                         pat = Wildcard;
+                        rest = a0.tail;
                         0
                       } else {
-                        pat = S1Pattern.Path(pname);
+                        let parsed_pat: Pair<S1Path, List<S1Token>> =
+                          s1_parse_path_tail(pname, a0.tail);
+                        pat = S1Pattern.Path(parsed_pat.a);
+                        rest = parsed_pat.b;
                         0
                       };
-                      rest = a0.tail;
 
                       // =>
                       if ok == true {
@@ -1007,7 +1068,7 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
                       } else { 0 };
 
                       // expr
-                      let value: S1Expr = S1Expr.Path("");
+                      let value: S1Expr = S1Expr.Path(s1_empty_path());
                       if ok == true {
                         let parsed_v: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
                           s1_parse_expr(rest);
@@ -1091,8 +1152,10 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
         };
         Ident(name) => {
           // Path or Call
-          rest = cell0.tail;
-          expr = S1Expr.Path(name);
+          let parsed_path: Pair<S1Path, List<S1Token>> = s1_parse_path_tail(name, cell0.tail);
+          let path: S1Path = parsed_path.a;
+          rest = parsed_path.b;
+          expr = S1Expr.Path(path);
 
           match rest {
             Cons(cell1) => {
@@ -1175,7 +1238,7 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
 
                   if ok == true {
                     let args: List<S1Expr> = s1_reverse_exprs(args_rev);
-                    expr = Call(S1Call { callee: name; args: args; });
+                    expr = Call(S1Call { callee: path; args: args; });
                     0
                   } else {
                     0
@@ -1255,7 +1318,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             let name: Text = "";
             let empty_args: List<S1Type> = Nil;
             let ty: S1Type = S1Type { name: ""; args: empty_args; };
-            let value: S1Expr = S1Expr.Path("");
+            let value: S1Expr = S1Expr.Path(s1_empty_path());
 
             // name
             match cur {
@@ -1407,7 +1470,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
           };
           KwWhile => {
             cur = cell0.tail;
-            let cond: S1Expr = S1Expr.Path("");
+            let cond: S1Expr = S1Expr.Path(s1_empty_path());
             let empty_stmts: List<S1Stmt> = Nil;
             let empty_result: Option<S1Expr> = None;
             let body: S1Block = S1Block { stmts: empty_stmts; result: empty_result; };
@@ -1504,7 +1567,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
           };
           KwReturn => {
             cur = cell0.tail;
-            let value: S1Expr = S1Expr.Path("");
+            let value: S1Expr = S1Expr.Path(s1_empty_path());
 
             let parsed: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
               s1_parse_expr(cur);
@@ -1558,7 +1621,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             // expr, assignment, expr stmt, or block result
             let parsed: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
               s1_parse_expr(cur);
-            let expr: S1Expr = S1Expr.Path("");
+            let expr: S1Expr = S1Expr.Path(s1_empty_path());
             let rest: List<S1Token> = cur;
 
             match parsed {
@@ -1577,102 +1640,141 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
 
             if ok == true {
               match expr {
-                Path(name) => {
-                  match rest {
-                    Cons(cell1) => {
-                      match cell1.head.kind {
-                        Eq => {
-                          // assignment
-                          rest = cell1.tail;
-                          let rhs: S1Expr = S1Expr.Path("");
-                          let parsed_rhs: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
-                            s1_parse_expr(rest);
-                          match parsed_rhs {
-                            Err(e) => {
-                              ok = false;
-                              diag = e;
-                              done = true;
-                              0
-                            };
-                            Ok(pair) => {
-                              rhs = pair.a;
-                              rest = pair.b;
-                              0
-                            };
-                          };
-
-                          if ok == true {
-                            match rest {
-                              Nil => {
-                                ok = false;
-                                diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' after assignment");
-                                done = true;
-                                0
+                Path(p) => {
+                  match p.ns {
+                    None => {
+                      let name: Text = p.name;
+                      match rest {
+                        Cons(cell1) => {
+                          match cell1.head.kind {
+                            Eq => {
+                              // assignment
+                              rest = cell1.tail;
+                              let rhs: S1Expr = S1Expr.Path(s1_empty_path());
+                              let parsed_rhs: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                                s1_parse_expr(rest);
+                              match parsed_rhs {
+                                Err(e) => {
+                                  ok = false;
+                                  diag = e;
+                                  done = true;
+                                  0
+                                };
+                                Ok(pair) => {
+                                  rhs = pair.a;
+                                  rest = pair.b;
+                                  0
+                                };
                               };
-                              Cons(cell2) => {
-                                match cell2.head.kind {
-                                  Semicolon => {
-                                    cur = cell2.tail;
-                                    let st: S1Stmt = Assign(S1Assign { name: name; value: rhs; });
-                                    stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
-                                    0
-                                  };
-                                  _ => {
+
+                              if ok == true {
+                                match rest {
+                                  Nil => {
                                     ok = false;
-                                    diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' after assignment");
+                                    diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' after assignment");
                                     done = true;
                                     0
                                   };
+                                  Cons(cell2) => {
+                                    match cell2.head.kind {
+                                      Semicolon => {
+                                        cur = cell2.tail;
+                                        let st: S1Stmt = Assign(S1Assign { name: name; value: rhs; });
+                                        stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
+                                        0
+                                      };
+                                      _ => {
+                                        ok = false;
+                                        diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' after assignment");
+                                        done = true;
+                                        0
+                                      };
+                                    }
+                                  };
                                 }
+                              } else { 0 };
+                              0
+                            };
+                            _ => {
+                              // not assignment; treat as expr stmt or result
+                              match rest {
+                                Cons(cell2) => {
+                                  match cell2.head.kind {
+                                    Semicolon => {
+                                      cur = cell2.tail;
+                                      let st: S1Stmt = ExprStmt(expr);
+                                      stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
+                                      0
+                                    };
+                                    RBrace => {
+                                      result = Some(expr);
+                                      cur = cell2.tail;
+                                      done = true;
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' or '}' after expression");
+                                      done = true;
+                                      0
+                                    };
+                                  }
+                                };
+                                Nil => {
+                                  ok = false;
+                                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' or '}' after expression");
+                                  done = true;
+                                  0
+                                };
                               };
-                            }
-                          } else { 0 };
-                          0
+                              0
+                            };
+                          }
                         };
                         _ => {
-                          // not assignment; treat as expr stmt or result
-                          match rest {
-                            Cons(cell2) => {
-                              match cell2.head.kind {
-                                Semicolon => {
-                                  cur = cell2.tail;
-                                  let st: S1Stmt = ExprStmt(expr);
-                                  stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
-                                  0
-                                };
-                                RBrace => {
-                                  result = Some(expr);
-                                  cur = cell2.tail;
-                                  done = true;
-                                  0
-                                };
-                                _ => {
-                                  ok = false;
-                                  diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' or '}' after expression");
-                                  done = true;
-                                  0
-                                };
-                              }
+                          ok = false;
+                          diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' or '}' after expression");
+                          done = true;
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => {
+                      // qualified path can't be assignment target in Stage1
+                      match rest {
+                        Cons(cell2) => {
+                          match cell2.head.kind {
+                            Semicolon => {
+                              cur = cell2.tail;
+                              let st: S1Stmt = ExprStmt(expr);
+                              stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
+                              0
                             };
-                            Nil => {
-                              ok = false;
-                              diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' or '}' after expression");
+                            RBrace => {
+                              result = Some(expr);
+                              cur = cell2.tail;
                               done = true;
                               0
                             };
-                          };
+                            _ => {
+                              ok = false;
+                              diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' or '}' after expression");
+                              done = true;
+                              0
+                            };
+                          }
+                        };
+                        Nil => {
+                          ok = false;
+                          diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' or '}' after expression");
+                          done = true;
                           0
                         };
-                      }
-                    };
-                    _ => {
-                      ok = false;
-                      diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' or '}' after expression");
-                      done = true;
+                      };
                       0
                     };
-                  };
-                  0
+                  }
                 };
                 _ => {
                   // expr stmt or result

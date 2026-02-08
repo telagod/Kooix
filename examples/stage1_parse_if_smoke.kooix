@@ -26,35 +26,40 @@ fn main() -> Int {
                           match e {
                             If(i) => {
                               match i.cond {
-                                Path(name) => {
-                                  if name == "cond" {
-                                    match i.then_block.result {
-                                      Some(te) => {
-                                        match te {
-                                          IntLit(n1) => {
-                                            if n1 == "1" {
-                                              match i.else_block {
-                                                None => 20;
-                                                Some(eb) => {
-                                                  match eb.result {
-                                                    Some(ee) => {
-                                                      match ee {
-                                                        IntLit(n2) => {
-                                                          if n2 == "2" { 0 } else { 23 }
+                                Path(p) => {
+                                  if p.name == "cond" {
+                                    match p.ns {
+                                      None => {
+                                        match i.then_block.result {
+                                          Some(te) => {
+                                            match te {
+                                              IntLit(n1) => {
+                                                if n1 == "1" {
+                                                  match i.else_block {
+                                                    None => 20;
+                                                    Some(eb) => {
+                                                      match eb.result {
+                                                        Some(ee) => {
+                                                          match ee {
+                                                            IntLit(n2) => {
+                                                              if n2 == "2" { 0 } else { 23 }
+                                                            };
+                                                            _ => 22;
+                                                          }
                                                         };
-                                                        _ => 22;
+                                                        _ => 21;
                                                       }
                                                     };
-                                                    _ => 21;
                                                   }
-                                                };
-                                              }
-                                            } else { 19 }
+                                                } else { 19 }
+                                              };
+                                              _ => 18;
+                                            }
                                           };
-                                          _ => 18;
+                                          _ => 17;
                                         }
                                       };
-                                      _ => 17;
+                                      _ => 24;
                                     }
                                   } else { 16 }
                                 };
@@ -78,4 +83,3 @@ fn main() -> Int {
     };
   }
 };
-

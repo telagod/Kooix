@@ -24,15 +24,22 @@ fn main() -> Int {
                           match s0.head {
                             While(w) => {
                               match w.cond {
-                                Path(name) => {
-                                  if name == "cond" {
+                                Path(p0) => {
+                                  if p0.name == "cond" {
+                                    match p0.ns {
+                                      None => {
                                     match w.body.stmts {
                                       Cons(ws0) => {
                                         match ws0.head {
                                           ExprStmt(e) => {
                                             match e {
                                               Call(c) => {
-                                                if c.callee == "tick" { 0 } else { 21 }
+                                                if c.callee.name == "tick" {
+                                                  match c.callee.ns {
+                                                    None => 0;
+                                                    _ => 22;
+                                                  }
+                                                } else { 21 }
                                               };
                                               _ => 20;
                                             }
@@ -41,6 +48,9 @@ fn main() -> Int {
                                         }
                                       };
                                       _ => 18;
+                                    }
+                                      };
+                                      _ => 23;
                                     }
                                   } else { 17 }
                                 };
@@ -66,4 +76,3 @@ fn main() -> Int {
     };
   }
 };
-
