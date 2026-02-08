@@ -53,6 +53,68 @@ evidence {
             done = true;
             0
           };
+          KwImport => {
+            // Parse: import <String> ;
+            let imp_start: Int = cell0.head.span.start;
+            cur = cell0.tail;
+
+            let path: Text = "";
+
+            match cur {
+              Nil => {
+                ok = false;
+                diag = s1_diag(Error, imp_start, imp_start, "parser: expected import path string");
+                done = true;
+                0
+              };
+              Cons(cell1) => {
+                match cell1.head.kind {
+                  String(s) => {
+                    path = s;
+                    cur = cell1.tail;
+                    0
+                  };
+                  _ => {
+                    ok = false;
+                    diag = s1_diag(Error, cell1.head.span.start, cell1.head.span.end, "parser: expected import path string");
+                    done = true;
+                    0
+                  };
+                }
+              };
+            };
+
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, imp_start, imp_start, "parser: expected ';' after import");
+                  done = true;
+                  0
+                };
+                Cons(cell2) => {
+                  match cell2.head.kind {
+                    Semicolon => {
+                      cur = cell2.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected ';' after import");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            if ok == true {
+              let item: S1Item = Import(S1Import { path: path; });
+              items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
+              0
+            } else { 0 }
+          };
           KwFn => {
             // Parse: fn <Ident> ( ) -> <Ident> ;
             let fn_start: Int = cell0.head.span.start;

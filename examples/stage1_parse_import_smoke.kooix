@@ -1,0 +1,42 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex("import \"lib\"; fn main() -> Int;");
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Import(imp) => {
+                  if imp.path == "lib" {
+                    match i0.tail {
+                      Cons(i1) => {
+                        match i1.head {
+                          Function(f) => {
+                            if f.name == "main" { 0 } else { 5 }
+                          };
+                          _ => 6;
+                        }
+                      };
+                      Nil => 4;
+                    }
+                  } else { 3 }
+                };
+                _ => 7;
+              }
+            };
+            _ => 8;
+          }
+        };
+      }
+    };
+  }
+};
