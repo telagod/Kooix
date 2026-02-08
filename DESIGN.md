@@ -433,3 +433,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：移除“全局 variant 名唯一”限制，避免 stdlib/编译器 AST 被迫使用难读前缀命名；同时让代码语义更显式，AI 读取更像文档。
 - **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与语法文档。
 - **决策依据**：先以语法级 namespacing 提供可用的冲突消解手段，后续再演进为 module/namespace/export 体系。
+
+### 2026-02-08 - Phase 8.9：函数泛型语法 + 显式 call type args（最小子集）
+
+- **变更内容**：为 `fn` 增加泛型参数列表语法 `fn id<T>(...)`；调用表达式支持 `foo<T>(...)` 的 type args；sema 支持显式 type args 的泛型函数调用（暂不做自动推导），并执行 bound 校验与类型替换；interpreter 放宽泛型参数/返回类型的运行期类型一致性检查（依赖编译期保证）。
+- **变更理由**：为 Stage1 编译器所需的可复用抽象（如 `map<T>`/`fold<T>`）打基础，同时保持规则可审计、可验证。
+- **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与 README。
+- **决策依据**：先落地“语法 + 显式实例化”闭环，再逐步引入推导与后端 monomorphization/erasure 策略。

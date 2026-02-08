@@ -33,6 +33,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
 - Record types: `record` declarations, field projection, and minimal generic substitution (e.g. `Box<Answer>.value`).
+- Function generics (explicit type args): `fn id<T>(x: T) -> T { ... }` and `id<Int>(1)`; inference is not implemented yet.
 - Generic bounds: record generic parameter bounds + multi-bound + `where` clause.
 - Structural constraints: record-as-trait structural bounds (field subset + deep type compatibility).
 - Type reliability: generic arity mismatch is rejected at declaration checking time.
@@ -54,7 +55,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `141 passed, 0 failed`
+- Result: `142 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -87,8 +88,9 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.6: Minimal multi-file import loading (include-style)
 - ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
 - ✅ Phase 8.8: Enum variant namespacing (`Enum.Variant`) + allow cross-enum duplicates
+- ✅ Phase 8.9: Function generics syntax + explicit call type args (minimal subset)
 
-See also: `DESIGN.md`
+See also: `DESIGN.md` / `BOOTSTRAP.md`
 
 ---
 

@@ -6,4 +6,4 @@ resolver = "2"
 edition = "2021"
 license = "MIT"
 version = "0.1.0"
-authors = ["kx-lang contributors"]
+authors = ["Kooix contributors"]
