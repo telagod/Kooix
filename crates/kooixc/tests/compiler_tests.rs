@@ -261,6 +261,72 @@ fn main() -> Int {
 }
 
 #[test]
+fn runs_interpreter_with_namespaced_enum_variants() {
+    let source = r#"
+enum Option<T> { Some(T); None; };
+enum Maybe<T> { Some(T); None; };
+
+fn unwrap(x: Option<Int>) -> Int {
+  match x {
+    Some(v) => v;
+    None => 0;
+  }
+};
+
+fn main() -> Int {
+  let x: Option<Int> = Option.Some(42);
+  unwrap(x)
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(42));
+}
+
+#[test]
+fn fails_when_unqualified_enum_variant_is_ambiguous() {
+    let source = r#"
+enum Option<T> { Some(T); None; };
+enum Maybe<T> { Some(T); None; };
+
+fn take(x: Option<Int>) -> Int { 0 };
+
+fn main() -> Int { take(Some(1)) };
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains("ambiguous enum variant 'Some'")
+    }));
+}
+
+#[test]
+fn fails_when_namespaced_match_pattern_targets_wrong_enum() {
+    let source = r#"
+enum Option<T> { Some(T); None; };
+enum Maybe<T> { Some(T); None; };
+
+fn main() -> Int {
+  let x: Option<Int> = Option.Some(42);
+  match x {
+    Maybe.Some(v) => v;
+    None => 0;
+  }
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic.message.contains(
+                "pattern 'Maybe.Some' targets enum 'Maybe' but scrutinee type is 'Option'",
+            )
+    }));
+}
+
+#[test]
 fn fails_when_if_expression_branch_types_differ() {
     let source = r#"
 fn main() -> Int { if true { 1 } else { false } };

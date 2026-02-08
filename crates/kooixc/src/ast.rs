@@ -126,7 +126,10 @@ pub struct MatchArm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MatchPattern {
     Wildcard,
-    Variant { name: String, bind: Option<String> },
+    Variant {
+        path: Vec<String>,
+        bind: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,7 +149,7 @@ pub enum Expr {
         fields: Vec<RecordLitField>,
     },
     Call {
-        target: String,
+        target: Vec<String>,
         args: Vec<Expr>,
     },
     If {

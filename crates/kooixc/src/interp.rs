@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{BinaryOp, Block, Expr, MatchArmBody, MatchPattern, Program, Statement, TypeRef};
 use crate::error::{Diagnostic, Span};
@@ -38,6 +38,23 @@ impl std::fmt::Display for Value {
 struct EnumVariantInfo {
     enum_name: String,
     has_payload: bool,
+}
+
+#[derive(Debug, Clone)]
+struct VariantRegistry {
+    qualified: HashMap<String, EnumVariantInfo>,
+    unqualified: HashMap<String, EnumVariantInfo>,
+}
+
+impl VariantRegistry {
+    fn get_unqualified(&self, variant: &str) -> Option<&EnumVariantInfo> {
+        self.unqualified.get(variant)
+    }
+
+    fn get_qualified(&self, enum_name: &str, variant: &str) -> Option<&EnumVariantInfo> {
+        let key = format!("{enum_name}.{variant}");
+        self.qualified.get(&key)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -96,18 +113,34 @@ pub fn run_program(program: &Program) -> Result<Value, Diagnostic> {
         functions.insert(function.name.clone(), function.clone());
     }
 
-    let mut variants: HashMap<String, EnumVariantInfo> = HashMap::new();
+    let mut qualified_variants: HashMap<String, EnumVariantInfo> = HashMap::new();
+    let mut unqualified_variants: HashMap<String, EnumVariantInfo> = HashMap::new();
+    let mut duplicate_unqualified: HashSet<String> = HashSet::new();
     for enum_decl in &hir.enums {
         for variant in &enum_decl.variants {
-            variants.insert(
-                variant.name.clone(),
-                EnumVariantInfo {
-                    enum_name: enum_decl.name.clone(),
-                    has_payload: variant.payload.is_some(),
-                },
-            );
+            let info = EnumVariantInfo {
+                enum_name: enum_decl.name.clone(),
+                has_payload: variant.payload.is_some(),
+            };
+
+            qualified_variants.insert(format!("{}.{}", enum_decl.name, variant.name), info.clone());
+
+            if duplicate_unqualified.contains(&variant.name) {
+                continue;
+            }
+            if unqualified_variants
+                .insert(variant.name.clone(), info)
+                .is_some()
+            {
+                unqualified_variants.remove(&variant.name);
+                duplicate_unqualified.insert(variant.name.clone());
+            }
         }
     }
+    let variants = VariantRegistry {
+        qualified: qualified_variants,
+        unqualified: unqualified_variants,
+    };
 
     let Some(main) = functions.get("main") else {
         return Err(Diagnostic::error(
@@ -132,7 +165,7 @@ pub fn run_program(program: &Program) -> Result<Value, Diagnostic> {
 fn eval_function(
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
-    variants: &HashMap<String, EnumVariantInfo>,
+    variants: &VariantRegistry,
     args: &[Value],
     depth: usize,
 ) -> Result<Value, Diagnostic> {
@@ -267,7 +300,7 @@ fn eval_expr(
     expr: &Expr,
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
-    variants: &HashMap<String, EnumVariantInfo>,
+    variants: &VariantRegistry,
     env: &mut Env,
     depth: usize,
 ) -> Result<Value, Diagnostic> {
@@ -296,78 +329,125 @@ fn eval_expr(
                 return Err(Diagnostic::error("expected identifier path", function.span));
             };
 
-            let mut value = match env.get(name) {
-                Some(value) => value,
-                None if segments.len() == 1 => match variants.get(name.as_str()) {
-                    Some(info) if !info.has_payload => Value::Enum {
-                        name: info.enum_name.clone(),
-                        variant: name.clone(),
-                        payload: None,
-                    },
-                    Some(_) => {
-                        return Err(Diagnostic::error(
-                            format!("enum variant '{name}' requires a payload (use '{name}(...)')"),
-                            function.span,
-                        ));
-                    }
-                    None => {
-                        return Err(Diagnostic::error(
-                            format!("unknown variable '{name}'"),
-                            function.span,
-                        ));
-                    }
-                },
-                None => {
-                    return Err(Diagnostic::error(
-                        format!("unknown variable '{name}'"),
-                        function.span,
-                    ));
-                }
-            };
-
-            for member in segments.iter().skip(1) {
-                match value {
-                    Value::Record { fields, .. } => {
-                        value = fields.get(member).cloned().ok_or_else(|| {
-                            Diagnostic::error(
-                                format!("unknown member '{member}' on record value"),
+            if let Some(value) = env.get(name) {
+                let mut value = value;
+                for member in segments.iter().skip(1) {
+                    match value {
+                        Value::Record { fields, .. } => {
+                            value = fields.get(member).cloned().ok_or_else(|| {
+                                Diagnostic::error(
+                                    format!("unknown member '{member}' on record value"),
+                                    function.span,
+                                )
+                            })?;
+                        }
+                        other => {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "cannot access member '{}' on value of type '{}'",
+                                    member,
+                                    value_type_name(&other)
+                                ),
                                 function.span,
-                            )
-                        })?;
+                            ));
+                        }
                     }
-                    other => {
+                }
+
+                return Ok(value);
+            }
+
+            match segments.as_slice() {
+                [variant] => match variants.get_unqualified(variant) {
+                    Some(info) if !info.has_payload => Ok(Value::Enum {
+                        name: info.enum_name.clone(),
+                        variant: variant.clone(),
+                        payload: None,
+                    }),
+                    Some(_) => Err(Diagnostic::error(
+                        format!(
+                            "enum variant '{variant}' requires a payload (use '{variant}(...)')"
+                        ),
+                        function.span,
+                    )),
+                    None => Err(Diagnostic::error(
+                        format!("unknown variable '{}'", segments.join(".")),
+                        function.span,
+                    )),
+                },
+                [enum_name, variant] => match variants.get_qualified(enum_name, variant) {
+                    Some(info) if !info.has_payload => Ok(Value::Enum {
+                        name: info.enum_name.clone(),
+                        variant: variant.clone(),
+                        payload: None,
+                    }),
+                    Some(_) => Err(Diagnostic::error(
+                        format!(
+                            "enum variant '{}.{}' requires a payload (use '{}.{}(...)')",
+                            enum_name, variant, enum_name, variant
+                        ),
+                        function.span,
+                    )),
+                    None => Err(Diagnostic::error(
+                        format!("unknown variable '{}'", segments.join(".")),
+                        function.span,
+                    )),
+                },
+                _ => Err(Diagnostic::error(
+                    format!("unknown variable '{}'", segments.join(".")),
+                    function.span,
+                )),
+            }
+        }
+        Expr::Call { target, args } => {
+            let target_display = target.join(".");
+
+            if target.len() == 1 {
+                let name = target[0].as_str();
+                if let Some(callee) = functions.get(name) {
+                    let mut values = Vec::new();
+                    for arg in args {
+                        values.push(eval_expr(arg, function, functions, variants, env, depth)?);
+                    }
+
+                    return eval_function(callee, functions, variants, &values, depth + 1);
+                }
+            }
+
+            let (info, variant_name, variant_display) = match target.as_slice() {
+                [variant] => {
+                    let Some(info) = variants.get_unqualified(variant) else {
                         return Err(Diagnostic::error(
                             format!(
-                                "cannot access member '{}' on value of type '{}'",
-                                member,
-                                value_type_name(&other)
+                                "function '{}' calls unknown target '{}'",
+                                function.name, target_display
                             ),
                             function.span,
                         ));
-                    }
+                    };
+                    (info, variant, variant.clone())
                 }
-            }
-
-            Ok(value)
-        }
-        Expr::Call { target, args } => {
-            if let Some(callee) = functions.get(target) {
-                let mut values = Vec::new();
-                for arg in args {
-                    values.push(eval_expr(arg, function, functions, variants, env, depth)?);
+                [enum_name, variant] => {
+                    let Some(info) = variants.get_qualified(enum_name, variant) else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}'",
+                                function.name, target_display
+                            ),
+                            function.span,
+                        ));
+                    };
+                    (info, variant, format!("{}.{}", enum_name, variant))
                 }
-
-                return eval_function(callee, functions, variants, &values, depth + 1);
-            }
-
-            let Some(info) = variants.get(target.as_str()) else {
-                return Err(Diagnostic::error(
-                    format!(
-                        "function '{}' calls unknown target '{}'",
-                        function.name, target
-                    ),
-                    function.span,
-                ));
+                _ => {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "function '{}' calls unknown target '{}'",
+                            function.name, target_display
+                        ),
+                        function.span,
+                    ));
+                }
             };
 
             let payload = if info.has_payload {
@@ -375,7 +455,7 @@ fn eval_expr(
                     return Err(Diagnostic::error(
                         format!(
                             "enum variant '{}' expects 1 payload argument but got {}",
-                            target,
+                            variant_display,
                             args.len()
                         ),
                         function.span,
@@ -390,7 +470,7 @@ fn eval_expr(
                     return Err(Diagnostic::error(
                         format!(
                             "enum variant '{}' expects 0 arguments but got {}",
-                            target,
+                            variant_display,
                             args.len()
                         ),
                         function.span,
@@ -401,7 +481,7 @@ fn eval_expr(
 
             Ok(Value::Enum {
                 name: info.enum_name.clone(),
-                variant: target.clone(),
+                variant: variant_name.clone(),
                 payload,
             })
         }
@@ -479,8 +559,17 @@ fn eval_expr(
             for arm in arms {
                 let is_match = match &arm.pattern {
                     MatchPattern::Wildcard => true,
-                    MatchPattern::Variant { name, .. } => match &scrutinee {
-                        Value::Enum { variant, .. } => variant == name,
+                    MatchPattern::Variant { path, .. } => match &scrutinee {
+                        Value::Enum { name, variant, .. } => match path.as_slice() {
+                            [pat_variant] => variant == pat_variant,
+                            [pat_enum, pat_variant] => name == pat_enum && variant == pat_variant,
+                            _ => {
+                                return Err(Diagnostic::error(
+                                    format!("match arm uses invalid pattern '{}'", path.join(".")),
+                                    function.span,
+                                ));
+                            }
+                        },
                         other => {
                             return Err(Diagnostic::error(
                                 format!(
@@ -498,26 +587,83 @@ fn eval_expr(
                 }
 
                 env.push_scope();
-                if let MatchPattern::Variant { name, bind } = &arm.pattern {
+                if let MatchPattern::Variant { path, bind } = &arm.pattern {
                     if let Some(bind_name) = bind {
+                        let pattern_display = path.join(".");
                         match &scrutinee {
                             Value::Enum {
+                                name,
                                 variant,
                                 payload: Some(payload),
                                 ..
-                            } if variant == name => {
+                            } => {
+                                let matches = match path.as_slice() {
+                                    [pat_variant] => variant == pat_variant,
+                                    [pat_enum, pat_variant] => {
+                                        name == pat_enum && variant == pat_variant
+                                    }
+                                    _ => {
+                                        env.pop_scope();
+                                        return Err(Diagnostic::error(
+                                            format!(
+                                                "match arm uses invalid pattern '{}'",
+                                                pattern_display
+                                            ),
+                                            function.span,
+                                        ));
+                                    }
+                                };
+
+                                if !matches {
+                                    env.pop_scope();
+                                    return Err(Diagnostic::error(
+                                        format!(
+                                            "match scrutinee evaluated to '<{}::{}>' but expected enum variant '{}'",
+                                            name, variant, pattern_display
+                                        ),
+                                        function.span,
+                                    ));
+                                }
                                 env.insert(bind_name.clone(), (**payload).clone());
                             }
                             Value::Enum {
+                                name,
                                 variant,
                                 payload: None,
                                 ..
-                            } if variant == name => {
+                            } => {
+                                let matches = match path.as_slice() {
+                                    [pat_variant] => variant == pat_variant,
+                                    [pat_enum, pat_variant] => {
+                                        name == pat_enum && variant == pat_variant
+                                    }
+                                    _ => {
+                                        env.pop_scope();
+                                        return Err(Diagnostic::error(
+                                            format!(
+                                                "match arm uses invalid pattern '{}'",
+                                                pattern_display
+                                            ),
+                                            function.span,
+                                        ));
+                                    }
+                                };
+
+                                if !matches {
+                                    env.pop_scope();
+                                    return Err(Diagnostic::error(
+                                        format!(
+                                            "match scrutinee evaluated to '<{}::{}>' but expected enum variant '{}'",
+                                            name, variant, pattern_display
+                                        ),
+                                        function.span,
+                                    ));
+                                }
                                 env.pop_scope();
                                 return Err(Diagnostic::error(
                                     format!(
                                         "match arm '{}' binds '{}' but variant has no payload",
-                                        name, bind_name
+                                        pattern_display, bind_name
                                     ),
                                     function.span,
                                 ));
@@ -528,7 +674,7 @@ fn eval_expr(
                                     format!(
                                         "match scrutinee evaluated to '{}' but expected enum variant '{}'",
                                         value_type_name(other),
-                                        name
+                                        pattern_display
                                     ),
                                     function.span,
                                 ));
@@ -592,7 +738,7 @@ fn eval_block_expr(
     block: &Block,
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
-    variants: &HashMap<String, EnumVariantInfo>,
+    variants: &VariantRegistry,
     env: &mut Env,
     depth: usize,
 ) -> Result<Value, Diagnostic> {

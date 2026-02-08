@@ -1313,7 +1313,14 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Bool(false));
         }
 
-        if let Some(ident) = self.take_ident() {
+        if let Some(first) = self.take_ident() {
+            let mut segments = vec![first];
+            while self.at_dot() {
+                self.advance();
+                let (next, _) = self.expect_ident()?;
+                segments.push(next);
+            }
+
             if self.at_lparen() {
                 self.advance();
                 let mut args = Vec::new();
@@ -1329,55 +1336,57 @@ impl<'a> Parser<'a> {
                 }
                 self.expect_rparen()?;
                 return Ok(Expr::Call {
-                    target: ident,
+                    target: segments,
                     args,
                 });
             }
 
-            let mut type_args = Vec::new();
-            if self.at_langle() && self.looks_like_generic_record_literal() {
-                self.expect_langle()?;
-                if !self.at_rangle() {
-                    loop {
-                        type_args.push(self.parse_type_arg()?);
-                        if self.at_comma() {
-                            self.advance();
-                            continue;
+            if segments.len() == 1 {
+                let ident = segments
+                    .pop()
+                    .expect("segments has exactly one element above");
+
+                let mut type_args = Vec::new();
+                if self.at_langle() && self.looks_like_generic_record_literal() {
+                    self.expect_langle()?;
+                    if !self.at_rangle() {
+                        loop {
+                            type_args.push(self.parse_type_arg()?);
+                            if self.at_comma() {
+                                self.advance();
+                                continue;
+                            }
+                            break;
                         }
-                        break;
                     }
-                }
-                self.expect_rangle()?;
-            }
-
-            if self.at_lbrace() {
-                self.expect_lbrace()?;
-                let mut fields = Vec::new();
-
-                while !self.at_rbrace() {
-                    let (name, _) = self.expect_ident()?;
-                    self.expect_colon()?;
-                    let value = self.parse_expr()?;
-                    self.expect_semicolon()?;
-                    fields.push(RecordLitField { name, value });
+                    self.expect_rangle()?;
                 }
 
-                self.expect_rbrace()?;
-                return Ok(Expr::RecordLit {
-                    ty: TypeRef {
-                        name: ident,
-                        args: type_args,
-                    },
-                    fields,
-                });
+                if self.at_lbrace() {
+                    self.expect_lbrace()?;
+                    let mut fields = Vec::new();
+
+                    while !self.at_rbrace() {
+                        let (name, _) = self.expect_ident()?;
+                        self.expect_colon()?;
+                        let value = self.parse_expr()?;
+                        self.expect_semicolon()?;
+                        fields.push(RecordLitField { name, value });
+                    }
+
+                    self.expect_rbrace()?;
+                    return Ok(Expr::RecordLit {
+                        ty: TypeRef {
+                            name: ident,
+                            args: type_args,
+                        },
+                        fields,
+                    });
+                }
+
+                return Ok(Expr::Path(vec![ident]));
             }
 
-            let mut segments = vec![ident];
-            while self.at_dot() {
-                self.advance();
-                let (next, _) = self.expect_ident()?;
-                segments.push(next);
-            }
             return Ok(Expr::Path(segments));
         }
 
@@ -1425,7 +1434,14 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Bool(false));
         }
 
-        if let Some(ident) = self.take_ident() {
+        if let Some(first) = self.take_ident() {
+            let mut segments = vec![first];
+            while self.at_dot() {
+                self.advance();
+                let (next, _) = self.expect_ident()?;
+                segments.push(next);
+            }
+
             if self.at_lparen() {
                 self.advance();
                 let mut args = Vec::new();
@@ -1441,17 +1457,11 @@ impl<'a> Parser<'a> {
                 }
                 self.expect_rparen()?;
                 return Ok(Expr::Call {
-                    target: ident,
+                    target: segments,
                     args,
                 });
             }
 
-            let mut segments = vec![ident];
-            while self.at_dot() {
-                self.advance();
-                let (next, _) = self.expect_ident()?;
-                segments.push(next);
-            }
             return Ok(Expr::Path(segments));
         }
 
@@ -1499,7 +1509,13 @@ impl<'a> Parser<'a> {
                 self.advance();
                 MatchPattern::Wildcard
             } else {
-                let (name, _) = self.expect_ident()?;
+                let (first, _) = self.expect_ident()?;
+                let mut path = vec![first];
+                if self.at_dot() {
+                    self.advance();
+                    let (second, _) = self.expect_ident()?;
+                    path.push(second);
+                }
                 let bind = if self.at_lparen() {
                     self.expect_lparen()?;
                     let (bind, _) = self.expect_ident()?;
@@ -1508,7 +1524,7 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-                MatchPattern::Variant { name, bind }
+                MatchPattern::Variant { path, bind }
             };
 
             self.expect_fat_arrow()?;

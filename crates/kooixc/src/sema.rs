@@ -350,7 +350,6 @@ fn validate_enum_declarations(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> HashMap<String, EnumSchema> {
     let mut declared_enum_types: HashMap<String, EnumSchema> = HashMap::new();
-    let mut declared_variant_names: HashMap<String, String> = HashMap::new();
 
     for enum_decl in enums {
         if declared_enum_types.contains_key(&enum_decl.name) {
@@ -427,18 +426,6 @@ fn validate_enum_declarations(
                     ),
                     enum_decl.span,
                 ));
-            }
-
-            if let Some(existing_enum) = declared_variant_names.get(&variant.name) {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "enum '{}' variant '{}' conflicts with variant declared in enum '{}'",
-                        enum_decl.name, variant.name, existing_enum
-                    ),
-                    enum_decl.span,
-                ));
-            } else {
-                declared_variant_names.insert(variant.name.clone(), enum_decl.name.clone());
             }
 
             if variants
@@ -2113,16 +2100,53 @@ fn infer_expr_type(
     )
 }
 
-fn resolve_enum_variant<'a>(
+enum EnumVariantResolution<'a> {
+    Missing,
+    Unique {
+        enum_name: &'a str,
+        schema: &'a EnumSchema,
+        payload: Option<&'a TypeRef>,
+    },
+    Ambiguous {
+        enum_names: Vec<&'a str>,
+    },
+}
+
+fn resolve_enum_variant_unqualified<'a>(
     variant: &str,
     declared_enum_types: &'a HashMap<String, EnumSchema>,
-) -> Option<(&'a str, &'a EnumSchema, Option<&'a TypeRef>)> {
+) -> EnumVariantResolution<'a> {
+    let mut matches = Vec::new();
     for (enum_name, schema) in declared_enum_types {
         if let Some(payload) = schema.variants.get(variant) {
-            return Some((enum_name.as_str(), schema, payload.as_ref()));
+            matches.push((enum_name.as_str(), schema, payload.as_ref()));
         }
     }
-    None
+
+    match matches.as_slice() {
+        [] => EnumVariantResolution::Missing,
+        [(enum_name, schema, payload)] => EnumVariantResolution::Unique {
+            enum_name,
+            schema,
+            payload: *payload,
+        },
+        _ => {
+            let mut enum_names: Vec<&'a str> = matches.iter().map(|(name, _, _)| *name).collect();
+            enum_names.sort();
+            enum_names.dedup();
+            EnumVariantResolution::Ambiguous { enum_names }
+        }
+    }
+}
+
+fn resolve_enum_variant_qualified<'a>(
+    enum_name: &str,
+    variant: &str,
+    declared_enum_types: &'a HashMap<String, EnumSchema>,
+) -> Option<(&'a EnumSchema, Option<&'a TypeRef>)> {
+    let schema = declared_enum_types.get(enum_name)?;
+    let payload = schema.variants.get(variant)?;
+    Some((schema, payload.as_ref()))
 }
 
 fn infer_expr_type_with_expected(
@@ -2355,113 +2379,233 @@ fn infer_expr_type_with_expected(
             }
 
             if segments.len() == 1 {
-                if let Some((enum_name, enum_schema, payload)) =
-                    resolve_enum_variant(name, declared_enum_types)
-                {
-                    if payload.is_some() {
+                match resolve_enum_variant_unqualified(name, declared_enum_types) {
+                    EnumVariantResolution::Missing => {}
+                    EnumVariantResolution::Ambiguous { enum_names } => {
                         diagnostics.push(Diagnostic::error(
                             format!(
-                                "function '{}' uses enum variant '{}' without a payload (expected '{}(<expr>)')",
-                                function.name, name, name
+                                "function '{}' uses ambiguous enum variant '{}'; qualify it as '<Enum>.{}' (candidates: {})",
+                                function.name,
+                                name,
+                                name,
+                                enum_names.join(", ")
                             ),
                             function.span,
                         ));
                         return None;
                     }
-
-                    if enum_schema.generics.is_empty() {
-                        return Some(TypeRef {
-                            name: enum_name.to_string(),
-                            args: Vec::new(),
-                        });
-                    }
-
-                    if let Some(expected) = expected {
-                        if expected.head() == enum_name {
-                            return Some(expected.clone());
+                    EnumVariantResolution::Unique {
+                        enum_name,
+                        schema,
+                        payload,
+                    } => {
+                        if payload.is_some() {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses enum variant '{}' without a payload (expected '{}(<expr>)')",
+                                    function.name, name, name
+                                ),
+                                function.span,
+                            ));
+                            return None;
                         }
-                    }
 
+                        if schema.generics.is_empty() {
+                            return Some(TypeRef {
+                                name: enum_name.to_string(),
+                                args: Vec::new(),
+                            });
+                        }
+
+                        if let Some(expected) = expected {
+                            if expected.head() == enum_name {
+                                return Some(expected.clone());
+                            }
+                        }
+
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
+                                function.name, enum_name, name
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                }
+            } else if segments.len() == 2 {
+                let enum_name = segments[0].as_str();
+                let variant = segments[1].as_str();
+                let Some((schema, payload)) =
+                    resolve_enum_variant_qualified(enum_name, variant, declared_enum_types)
+                else {
                     diagnostics.push(Diagnostic::error(
                         format!(
-                            "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
-                            function.name, enum_name, name
+                            "function '{}' uses unknown variable '{}' in body",
+                            function.name,
+                            segments.join(".")
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                };
+
+                if payload.is_some() {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses enum variant '{}.{}' without a payload (expected '{}.{}(<expr>)')",
+                            function.name, enum_name, variant, enum_name, variant
                         ),
                         function.span,
                     ));
                     return None;
                 }
+
+                if schema.generics.is_empty() {
+                    return Some(TypeRef {
+                        name: enum_name.to_string(),
+                        args: Vec::new(),
+                    });
+                }
+
+                if let Some(expected) = expected {
+                    if expected.head() == enum_name {
+                        return Some(expected.clone());
+                    }
+                }
+
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
+                        function.name, enum_name, variant
+                    ),
+                    function.span,
+                ));
+                return None;
             }
 
             diagnostics.push(Diagnostic::error(
                 format!(
                     "function '{}' uses unknown variable '{}' in body",
-                    function.name, name
+                    function.name,
+                    segments.join(".")
                 ),
                 function.span,
             ));
             None
         }
         Expr::Call { target, args } => {
-            if let Some(signature) = signatures.get(target) {
-                if signature.params.len() != args.len() {
+            let target_display = target.join(".");
+
+            if target.len() == 1 {
+                let name = target[0].as_str();
+                if let Some(signature) = signatures.get(name) {
+                    if signature.params.len() != args.len() {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls '{}' with {} args but expected {}",
+                                function.name,
+                                name,
+                                args.len(),
+                                signature.params.len()
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+
+                    for (index, (arg, expected_ty)) in
+                        args.iter().zip(signature.params.iter()).enumerate()
+                    {
+                        let Some(actual_ty) = infer_expr_type_with_expected(
+                            function,
+                            arg,
+                            env,
+                            signatures,
+                            declared_record_types,
+                            declared_enum_types,
+                            Some(expected_ty),
+                            diagnostics,
+                        ) else {
+                            continue;
+                        };
+                        if actual_ty != *expected_ty {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' calls '{}' arg {} as '{}' but expected '{}'",
+                                    function.name,
+                                    name,
+                                    index + 1,
+                                    actual_ty,
+                                    expected_ty
+                                ),
+                                function.span,
+                            ));
+                        }
+                    }
+
+                    return Some(signature.return_type.clone());
+                }
+            }
+
+            let (enum_name, enum_schema, payload_template, variant_display) = match target
+                .as_slice()
+            {
+                [variant] => match resolve_enum_variant_unqualified(variant, declared_enum_types) {
+                    EnumVariantResolution::Missing => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}' in body",
+                                function.name, variant
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                    EnumVariantResolution::Ambiguous { enum_names } => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls ambiguous enum variant '{}'; qualify it as '<Enum>.{}' (candidates: {})",
+                                function.name,
+                                variant,
+                                variant,
+                                enum_names.join(", ")
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                    EnumVariantResolution::Unique {
+                        enum_name,
+                        schema,
+                        payload,
+                    } => (enum_name, schema, payload, variant.as_str()),
+                },
+                [enum_name, variant] => {
+                    let Some((schema, payload)) =
+                        resolve_enum_variant_qualified(enum_name, variant, declared_enum_types)
+                    else {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}' in body",
+                                function.name, target_display
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    };
+                    (enum_name.as_str(), schema, payload, target_display.as_str())
+                }
+                _ => {
                     diagnostics.push(Diagnostic::error(
                         format!(
-                            "function '{}' calls '{}' with {} args but expected {}",
-                            function.name,
-                            target,
-                            args.len(),
-                            signature.params.len()
+                            "function '{}' calls unknown target '{}' in body",
+                            function.name, target_display
                         ),
                         function.span,
                     ));
                     return None;
                 }
-
-                for (index, (arg, expected_ty)) in
-                    args.iter().zip(signature.params.iter()).enumerate()
-                {
-                    let Some(actual_ty) = infer_expr_type_with_expected(
-                        function,
-                        arg,
-                        env,
-                        signatures,
-                        declared_record_types,
-                        declared_enum_types,
-                        Some(expected_ty),
-                        diagnostics,
-                    ) else {
-                        continue;
-                    };
-                    if actual_ty != *expected_ty {
-                        diagnostics.push(Diagnostic::error(
-                            format!(
-                                "function '{}' calls '{}' arg {} as '{}' but expected '{}'",
-                                function.name,
-                                target,
-                                index + 1,
-                                actual_ty,
-                                expected_ty
-                            ),
-                            function.span,
-                        ));
-                    }
-                }
-
-                return Some(signature.return_type.clone());
-            }
-
-            let Some((enum_name, enum_schema, payload_template)) =
-                resolve_enum_variant(target, declared_enum_types)
-            else {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "function '{}' calls unknown target '{}' in body",
-                        function.name, target
-                    ),
-                    function.span,
-                ));
-                return None;
             };
 
             let return_type = if enum_schema.generics.is_empty() {
@@ -2474,7 +2618,7 @@ fn infer_expr_type_with_expected(
                     diagnostics.push(Diagnostic::error(
                         format!(
                             "function '{}' uses enum variant '{}' but expected type '{}' does not match enum '{}'",
-                            function.name, target, expected, enum_name
+                            function.name, variant_display, expected, enum_name
                         ),
                         function.span,
                     ));
@@ -2485,7 +2629,7 @@ fn infer_expr_type_with_expected(
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
-                        function.name, enum_name, target
+                        function.name, enum_name, variant_display
                     ),
                     function.span,
                 ));
@@ -2499,7 +2643,7 @@ fn infer_expr_type_with_expected(
                             format!(
                                 "function '{}' calls enum variant '{}' with {} args but expected 1",
                                 function.name,
-                                target,
+                                variant_display,
                                 args.len()
                             ),
                             function.span,
@@ -2530,7 +2674,7 @@ fn infer_expr_type_with_expected(
                         diagnostics.push(Diagnostic::error(
                             format!(
                                 "function '{}' calls enum variant '{}' with payload '{}' but expected '{}'",
-                                function.name, target, actual_payload_ty, payload_ty
+                                function.name, variant_display, actual_payload_ty, payload_ty
                             ),
                             function.span,
                         ));
@@ -2543,7 +2687,7 @@ fn infer_expr_type_with_expected(
                             format!(
                                 "function '{}' calls enum variant '{}' with {} args but expected 0",
                                 function.name,
-                                target,
+                                variant_display,
                                 args.len()
                             ),
                             function.span,
@@ -2721,23 +2865,55 @@ fn infer_expr_type_with_expected(
                         }
                         saw_wildcard = true;
                     }
-                    MatchPattern::Variant { name, bind } => {
-                        if !seen_variants.insert(name.clone()) {
+                    MatchPattern::Variant { path, bind } => {
+                        let (enum_qual, variant_name) = match path.as_slice() {
+                            [variant] => (None, variant),
+                            [enum_name, variant] => (Some(enum_name.as_str()), variant),
+                            _ => {
+                                diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "function '{}' match expression uses invalid pattern '{}'",
+                                        function.name,
+                                        path.join(".")
+                                    ),
+                                    function.span,
+                                ));
+                                continue;
+                            }
+                        };
+
+                        if let Some(enum_qual) = enum_qual {
+                            if enum_qual != value_ty.head() {
+                                diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "function '{}' match expression pattern '{}' targets enum '{}' but scrutinee type is '{}'",
+                                        function.name,
+                                        path.join("."),
+                                        enum_qual,
+                                        value_ty.head()
+                                    ),
+                                    function.span,
+                                ));
+                                continue;
+                            }
+                        }
+
+                        if !seen_variants.insert(variant_name.clone()) {
                             diagnostics.push(Diagnostic::error(
                                 format!(
                                     "function '{}' match expression repeats variant arm '{}'",
-                                    function.name, name
+                                    function.name, variant_name
                                 ),
                                 function.span,
                             ));
                         }
 
-                        let Some(payload_template) = enum_schema.variants.get(name) else {
+                        let Some(payload_template) = enum_schema.variants.get(variant_name) else {
                             diagnostics.push(Diagnostic::error(
                                 format!(
                                     "function '{}' match expression uses unknown variant '{}' for enum '{}'",
                                     function.name,
-                                    name,
+                                    variant_name,
                                     value_ty.head()
                                 ),
                                 function.span,
@@ -2759,7 +2935,7 @@ fn infer_expr_type_with_expected(
                                     diagnostics.push(Diagnostic::error(
                                         format!(
                                             "function '{}' match arm '{}' binds '{}' but variant has no payload",
-                                            function.name, name, bind_name
+                                            function.name, variant_name, bind_name
                                         ),
                                         function.span,
                                     ));
