@@ -2332,6 +2332,24 @@ fn stage1_compiler_skeleton_typechecks_and_runs() {
 }
 
 #[test]
+fn interpreter_intrinsics_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/intrinsics_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("intrinsics smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "intrinsics smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined).expect("intrinsics smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;

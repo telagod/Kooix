@@ -1,0 +1,15 @@
+// Intrinsics are implemented by the Stage0 interpreter/runtime.
+// They are declared here (no bodies) so sema can typecheck programs that use them.
+
+fn text_len(s: Text) -> Int;
+fn text_byte_at(s: Text, index: Int) -> Option<Int>;
+fn text_slice(s: Text, start: Int, end: Int) -> Option<Text>;
+fn text_starts_with(s: Text, prefix: Text) -> Bool;
+
+fn byte_is_ascii_whitespace(b: Int) -> Bool;
+fn byte_is_ascii_digit(b: Int) -> Bool;
+fn byte_is_ascii_alpha(b: Int) -> Bool;
+fn byte_is_ascii_alnum(b: Int) -> Bool;
+fn byte_is_ascii_ident_start(b: Int) -> Bool;
+fn byte_is_ascii_ident_continue(b: Int) -> Bool;
+

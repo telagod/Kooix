@@ -1,3 +1,5 @@
+import "intrinsics";
+
 enum Option<T> { Some(T); None; };
 
 enum Result<T, E> { Ok(T); Err(E); };
@@ -24,4 +26,3 @@ fn option_unwrap_or_int(value: Option<Int>, default: Int) -> Int {
     None => default;
   }
 };
-

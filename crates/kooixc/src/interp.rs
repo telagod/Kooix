@@ -203,6 +203,9 @@ fn eval_function(
     }
 
     let Some(body) = &function.body else {
+        if let Some(result) = eval_intrinsic_function(function, args) {
+            return result;
+        }
         return Err(Diagnostic::error(
             format!("function '{}' has no body to execute", function.name),
             function.span,
@@ -294,6 +297,173 @@ fn eval_function(
     }
 
     Ok(value)
+}
+
+fn eval_intrinsic_function(
+    function: &HirFunction,
+    args: &[Value],
+) -> Option<Result<Value, Diagnostic>> {
+    let name = function.name.as_str();
+    Some(match name {
+        "text_len" => {
+            let [Value::Text(s)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "text_len expects (Text)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Int(s.len() as i64))
+        }
+        "text_byte_at" => {
+            let [Value::Text(s), Value::Int(index)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "text_byte_at expects (Text, Int)",
+                    function.span,
+                )));
+            };
+            if *index < 0 {
+                Ok(option_none())
+            } else {
+                let idx = *index as usize;
+                match s.as_bytes().get(idx) {
+                    Some(byte) => Ok(option_some(Value::Int(*byte as i64))),
+                    None => Ok(option_none()),
+                }
+            }
+        }
+        "text_slice" => {
+            let [Value::Text(s), Value::Int(start), Value::Int(end)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "text_slice expects (Text, Int, Int)",
+                    function.span,
+                )));
+            };
+            if *start < 0 || *end < 0 {
+                return Some(Ok(option_none()));
+            }
+            let start = *start as usize;
+            let end = *end as usize;
+            if start > end || end > s.len() {
+                return Some(Ok(option_none()));
+            }
+            if !s.is_char_boundary(start) || !s.is_char_boundary(end) {
+                return Some(Ok(option_none()));
+            }
+            Ok(option_some(Value::Text(s[start..end].to_string())))
+        }
+        "text_starts_with" => {
+            let [Value::Text(s), Value::Text(prefix)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "text_starts_with expects (Text, Text)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(s.starts_with(prefix)))
+        }
+        "byte_is_ascii_whitespace" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_whitespace expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_whitespace(*b)))
+        }
+        "byte_is_ascii_digit" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_digit expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_digit(*b)))
+        }
+        "byte_is_ascii_alpha" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_alpha expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_alpha(*b)))
+        }
+        "byte_is_ascii_alnum" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_alnum expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_alnum(*b)))
+        }
+        "byte_is_ascii_ident_start" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_ident_start expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_ident_start(*b)))
+        }
+        "byte_is_ascii_ident_continue" => {
+            let [Value::Int(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "byte_is_ascii_ident_continue expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Bool(is_ascii_ident_continue(*b)))
+        }
+        _ => return None,
+    })
+}
+
+fn option_some(value: Value) -> Value {
+    Value::Enum {
+        name: "Option".to_string(),
+        variant: "Some".to_string(),
+        payload: Some(Box::new(value)),
+    }
+}
+
+fn option_none() -> Value {
+    Value::Enum {
+        name: "Option".to_string(),
+        variant: "None".to_string(),
+        payload: None,
+    }
+}
+
+fn normalize_byte(b: i64) -> Option<u8> {
+    if (0..=255).contains(&b) {
+        Some(b as u8)
+    } else {
+        None
+    }
+}
+
+fn is_ascii_whitespace(b: i64) -> bool {
+    matches!(normalize_byte(b), Some(b' ' | b'\n' | b'\r' | b'\t'))
+}
+
+fn is_ascii_digit(b: i64) -> bool {
+    matches!(normalize_byte(b), Some(b'0'..=b'9'))
+}
+
+fn is_ascii_alpha(b: i64) -> bool {
+    matches!(normalize_byte(b), Some(b'a'..=b'z' | b'A'..=b'Z'))
+}
+
+fn is_ascii_alnum(b: i64) -> bool {
+    is_ascii_alpha(b) || is_ascii_digit(b)
+}
+
+fn is_ascii_ident_start(b: i64) -> bool {
+    is_ascii_alpha(b) || matches!(normalize_byte(b), Some(b'_'))
+}
+
+fn is_ascii_ident_continue(b: i64) -> bool {
+    is_ascii_alnum(b) || matches!(normalize_byte(b), Some(b'_'))
 }
 
 fn value_conforms_to_type_in_function(value: &Value, ty: &TypeRef, function: &HirFunction) -> bool {

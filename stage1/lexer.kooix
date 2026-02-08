@@ -10,7 +10,7 @@ evidence {
 }
 {
   // Skeleton only: Text scanning intrinsics come later.
-  let _ignore: Text = source;
-  Ok(Nil)
+  let _n: Int = text_len(source);
+  let tokens: List<S1Token> = Nil;
+  Ok(tokens)
 };
-
