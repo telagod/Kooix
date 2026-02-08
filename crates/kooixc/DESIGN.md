@@ -13,23 +13,25 @@
 - `hir.rs`：AST->HIR 降层。
 - `mir.rs`：HIR->MIR 降层。
 - `sema.rs`：语义规则检查。
+- `interp.rs`：解释执行（Kooix-Core 函数体子集）。
 - `llvm.rs`：LLVM IR 文本输出。
 - `native.rs`：调用系统 `llc` 与 `clang` 输出本地二进制，并支持执行。
 - `main.rs`：CLI。
 
 ## 关键决策
 
-1. 先支持声明级语法，不解析表达式/函数体。
-2. 使用 `Diagnostic` 统一错误/警告输出。
-3. 通过 HIR/MIR 保持后续分析与后端输入稳定。
-4. 通过 effect->capability 映射与 capability shape 校验实现最小权限校验。
-5. LLVM 后端先实现文本 IR 骨架，默认返回值用于端到端验证。
-6. native 输出复用系统 `llc/clang`，不引入额外 crate 依赖。
+1. 先支持声明级语法 + Kooix-Core 函数体最小子集（block/let/assign/return/expr）。
+2. 在函数体 MIR/LLVM lowering 未实现前，`mir/llvm/native` 对含函数体程序直接报错（避免误编译）。
+3. 使用 `Diagnostic` 统一错误/警告输出。
+4. 通过 HIR/MIR 保持后续分析与后端输入稳定。
+5. 通过 effect->capability 映射与 capability shape 校验实现最小权限校验。
+6. LLVM 后端先实现文本 IR 骨架，默认返回值用于端到端验证。
+7. native 输出复用系统 `llc/clang`，不引入额外 crate 依赖。
 
 ## 已知限制
 
 - 仅支持单文件输入。
-- 未实现 LLVM codegen。
+- 函数体仅支持 interpreter；未接入 MIR/LLVM lowering 与真实 codegen。
 - capability 匹配为类型名级别（非实例级）。
 - LLVM 输出尚未接入优化与真实函数体语义。
 - native 命令依赖本机 `llc` 与 `clang`。
@@ -50,3 +52,8 @@
 - 增加 native `--run --stdin <file>` 输入注入模式。
 - 增加 native `--run --stdin -` 标准输入流注入模式。
 - 增加 native `--run --timeout <ms>` 运行超时控制。
+
+### 2026-02-08
+
+- 增加 Kooix-Core 函数体最小子集（`let`/assignment/`return`/基础表达式/`if`/`while`）。
+- 增加 interpreter `run` 闭环（纯函数体子集，禁止 effects）。

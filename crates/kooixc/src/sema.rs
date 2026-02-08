@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, LetStmt, PredicateValue,
-    Program, RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef, WorkflowCallArg,
+    AssignStmt, BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, LetStmt,
+    PredicateValue, Program, RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef,
+    WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{
@@ -1639,6 +1640,34 @@ fn validate_function_body(
                     env.insert(name.clone(), value_type);
                 }
             }
+            Statement::Assign(AssignStmt { name, value }) => {
+                let Some(existing_ty) = env.get(name).cloned() else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' assigns to unknown variable '{}' in body",
+                            function.name, name
+                        ),
+                        function.span,
+                    ));
+                    continue;
+                };
+
+                let Some(actual_ty) =
+                    infer_expr_type(function, value, &env, signatures, diagnostics)
+                else {
+                    continue;
+                };
+
+                if actual_ty != existing_ty {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' assigns '{}' as '{}' but variable is '{}'",
+                            function.name, name, actual_ty, existing_ty
+                        ),
+                        function.span,
+                    ));
+                }
+            }
             Statement::Return(ReturnStmt { value }) => {
                 ends_with_return = true;
 
@@ -1865,6 +1894,25 @@ fn infer_expr_type(
 
             Some(then_ty)
         }
+        Expr::While { cond, body } => {
+            let Some(cond_ty) = infer_expr_type(function, cond.as_ref(), env, signatures, diagnostics)
+            else {
+                return None;
+            };
+            if cond_ty.head() != "Bool" {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses while condition of type '{}' but expected 'Bool'",
+                        function.name, cond_ty
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            let _ = infer_block_expr_type(function, body.as_ref(), env, signatures, diagnostics)?;
+            Some(unit_type())
+        }
         Expr::Binary { op, left, right } => {
             let left_ty = infer_expr_type(function, left, env, signatures, diagnostics)?;
             let right_ty = infer_expr_type(function, right, env, signatures, diagnostics)?;
@@ -1946,6 +1994,31 @@ fn infer_block_expr_type(
                     local_env.insert(name.clone(), explicit.clone());
                 } else {
                     local_env.insert(name.clone(), value_ty);
+                }
+            }
+            Statement::Assign(AssignStmt { name, value }) => {
+                let Some(existing_ty) = local_env.get(name).cloned() else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' assigns to unknown variable '{}' in block expression",
+                            function.name, name
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                };
+
+                let actual_ty =
+                    infer_expr_type(function, value, &local_env, signatures, diagnostics)?;
+                if actual_ty != existing_ty {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' assigns '{}' as '{}' but variable is '{}'",
+                            function.name, name, actual_ty, existing_ty
+                        ),
+                        function.span,
+                    ));
+                    return None;
                 }
             }
             Statement::Return(ReturnStmt { .. }) => {

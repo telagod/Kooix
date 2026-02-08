@@ -384,3 +384,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：补齐编译器自举所需的最小控制流能力，为后续 `while/match` 与更复杂的类型推导打基础。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、tests 与文档。
 - **决策依据**：先从 `if/else` 起步（最小可验证闭环），并强制类型收敛避免隐式动态类型/运行期分支类型漂移。
+
+### 2026-02-08 - Phase 8.3：`while` + assignment（类型校验 + interpreter）
+
+- **变更内容**：新增 `while` 表达式与赋值语句 `x = expr;`；sema 增加 `while` 条件必须为 `Bool`、assignment 必须写入已声明变量且类型一致；interpreter 引入作用域栈（block 内 `let` 不泄漏、assignment 可更新外层变量），并对 `while` 增加最大迭代次数保护避免非终止挂死。
+- **变更理由**：为自举所需的最小“可迭代状态机”能力铺路：仅靠 `if` 很难实现迭代算法/解释器自身的循环执行；同时保持强类型与可审计（assignment 不允许隐式声明或变更类型）。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与 grammar 示例。
+- **决策依据**：先落地最小可用的循环 + 变量更新（仍保持语义简单），后续再引入 `break/continue`、`mut`、更严谨的 borrow/liveness 规则。

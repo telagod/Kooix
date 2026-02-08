@@ -35,6 +35,7 @@ pub enum TokenKind {
     KwFalse,
     KwIf,
     KwElse,
+    KwWhile,
     Ident(String),
     StringLiteral(String),
     Number(String),

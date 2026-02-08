@@ -29,6 +29,18 @@ fn add(x: Int, y: Int) -> Int { x + y };
 fn main() -> Int { if true { 1 } else { 2 } };
 ```
 
+### Valid: while loop + assignment (Kooix-Core subset)
+
+```kooix
+fn main() -> Int {
+  let i: Int = 0;
+  while i != 10 {
+    i = i + 1;
+  };
+  i
+};
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix

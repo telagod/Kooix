@@ -187,6 +187,23 @@ fn main() -> Int { if true { 1 } else { 2 } };
 }
 
 #[test]
+fn runs_interpreter_with_while_and_assignment() {
+    let source = r#"
+fn main() -> Int {
+  let i: Int = 0;
+  while i != 10 {
+    i = i + 1;
+  };
+  i
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(10));
+}
+
+#[test]
 fn fails_when_if_expression_branch_types_differ() {
     let source = r#"
 fn main() -> Int { if true { 1 } else { false } };
@@ -198,6 +215,61 @@ fn main() -> Int { if true { 1 } else { false } };
             && diagnostic
                 .message
                 .contains("if expression branches return 'Int' and 'Bool'")
+    }));
+}
+
+#[test]
+fn fails_when_while_condition_is_not_bool() {
+    let source = r#"
+fn main() -> Int {
+  while 1 { 0 };
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("uses while condition of type 'Int' but expected 'Bool'")
+    }));
+}
+
+#[test]
+fn fails_when_assignment_type_mismatches() {
+    let source = r#"
+fn main() -> Int {
+  let x: Bool = true;
+  x = 1;
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("assigns 'x' as 'Int' but variable is 'Bool'")
+    }));
+}
+
+#[test]
+fn fails_when_assignment_target_is_unknown() {
+    let source = r#"
+fn main() -> Int {
+  x = 1;
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("assigns to unknown variable 'x' in body")
     }));
 }
 

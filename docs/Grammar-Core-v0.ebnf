@@ -179,11 +179,14 @@ Block              = "{"
                    ;
 
 Statement          = LetStmt
+                  |  AssignStmt
                   |  ReturnStmt
                   |  Expr
                   ;
 
 LetStmt            = "let" Identifier [ ":" TypeRef ] "=" Expr ;
+
+AssignStmt         = Identifier "=" Expr ;
 
 ReturnStmt         = "return" [ Expr ] ;
 
@@ -195,6 +198,7 @@ AddExpr            = PrimaryExpr { "+" PrimaryExpr } ;
 
 PrimaryExpr        = SymbolPath
                   |  IfExpr
+                  |  WhileExpr
                   |  CallExpr
                   |  NumberLiteral
                   |  StringLiteral
@@ -204,6 +208,8 @@ PrimaryExpr        = SymbolPath
                   ;
 
 IfExpr             = "if" Expr Block [ "else" Block ] ;
+
+WhileExpr          = "while" Expr Block ;
 
 CallExpr           = Identifier "(" [ Expr { "," Expr } ] ")" ;
 

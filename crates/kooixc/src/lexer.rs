@@ -178,6 +178,7 @@ impl<'a> Lexer<'a> {
             "false" => TokenKind::KwFalse,
             "if" => TokenKind::KwIf,
             "else" => TokenKind::KwElse,
+            "while" => TokenKind::KwWhile,
             _ => TokenKind::Ident(value.to_string()),
         };
         Token::new(kind, Span::new(start, self.pos))

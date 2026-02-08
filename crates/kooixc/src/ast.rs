@@ -66,6 +66,7 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Let(LetStmt),
+    Assign(AssignStmt),
     Return(ReturnStmt),
     Expr(Expr),
 }
@@ -74,6 +75,12 @@ pub enum Statement {
 pub struct LetStmt {
     pub name: String,
     pub ty: Option<TypeRef>,
+    pub value: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssignStmt {
+    pub name: String,
     pub value: Expr,
 }
 
@@ -96,6 +103,10 @@ pub enum Expr {
         cond: Box<Expr>,
         then_block: Box<Block>,
         else_block: Option<Box<Block>>,
+    },
+    While {
+        cond: Box<Expr>,
+        body: Box<Block>,
     },
     Binary {
         op: BinaryOp,

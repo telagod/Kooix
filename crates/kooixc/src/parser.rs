@@ -1,5 +1,5 @@
 use crate::ast::{
-    AgentDecl, AgentPolicy, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
+    AgentDecl, AgentPolicy, AssignStmt, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
     EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy, FailureRule, FailureValue,
     FunctionDecl, Item, LetStmt, LoopSpec, OutputField, Param, PredicateOp, PredicateValue,
     Program, RecordDecl, RecordField, RecordGenericParam, ReturnStmt, StateRule, Statement,
@@ -986,6 +986,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            if self.at_ident() && self.peek_kind_is_eq() {
+                statements.push(Statement::Assign(self.parse_assign_stmt()?));
+                self.expect_semicolon()?;
+                continue;
+            }
+
             if self.at_kw_return() {
                 statements.push(Statement::Return(self.parse_return_stmt()?));
                 self.expect_semicolon()?;
@@ -1022,6 +1028,20 @@ impl<'a> Parser<'a> {
         let value = self.parse_expr()?;
 
         Ok(LetStmt { name, ty, value })
+    }
+
+    fn parse_assign_stmt(&mut self) -> Result<AssignStmt, Diagnostic> {
+        let Some(name) = self.take_ident() else {
+            return Err(Diagnostic::error(
+                format!("expected identifier, found {}", self.current_kind_name()),
+                self.current().span,
+            ));
+        };
+
+        self.expect_eq()?;
+        let value = self.parse_expr()?;
+
+        Ok(AssignStmt { name, value })
     }
 
     fn parse_return_stmt(&mut self) -> Result<ReturnStmt, Diagnostic> {
@@ -1085,6 +1105,10 @@ impl<'a> Parser<'a> {
 
         if self.at_kw_if() {
             return self.parse_if_expr();
+        }
+
+        if self.at_kw_while() {
+            return self.parse_while_expr();
         }
 
         if let Some(value) = self.take_number() {
@@ -1158,6 +1182,16 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_while_expr(&mut self) -> Result<Expr, Diagnostic> {
+        self.expect_kw_while()?;
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Expr::While {
+            cond: Box::new(cond),
+            body: Box::new(body),
+        })
+    }
+
     fn expect_kw_cap(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_cap, "'cap'")
     }
@@ -1200,6 +1234,10 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_else(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_else, "'else'")
+    }
+
+    fn expect_kw_while(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_while, "'while'")
     }
 
     fn expect_kw_intent(&mut self) -> Result<Span, Diagnostic> {
@@ -1465,6 +1503,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwElse)
     }
 
+    fn at_kw_while(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwWhile)
+    }
+
     fn at_kw_intent(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwIntent)
     }
@@ -1667,6 +1709,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwFalse => "'false'",
             TokenKind::KwIf => "'if'",
             TokenKind::KwElse => "'else'",
+            TokenKind::KwWhile => "'while'",
             TokenKind::Ident(_) => "identifier",
             TokenKind::StringLiteral(_) => "string literal",
             TokenKind::Number(_) => "number",
