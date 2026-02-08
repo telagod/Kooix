@@ -2420,6 +2420,31 @@ fn main() -> Int {
 }
 
 #[test]
+fn compiles_and_runs_native_binary_with_record_literal_and_projection() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 20; b: 22; };
+  p.a + p.b
+};
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-record-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(42));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_args() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

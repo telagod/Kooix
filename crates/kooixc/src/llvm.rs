@@ -3,13 +3,26 @@ use std::fmt::Write;
 
 use crate::ast::{BinaryOp, TypeRef};
 use crate::mir::{
-    MirBlock, MirFunction, MirOperand, MirProgram, MirRvalue, MirStatement, MirTerminator,
+    MirBlock, MirFunction, MirOperand, MirProgram, MirRecord, MirRvalue, MirStatement, MirTerminator,
 };
 
 pub fn emit_program(program: &MirProgram) -> String {
     let mut output = String::new();
     output.push_str("; ModuleID = 'kooix_mvp'\n");
     output.push_str("source_filename = \"kooix\"\n\n");
+
+    let records: HashMap<&str, &MirRecord> = program
+        .records
+        .iter()
+        .map(|record| (record.name.as_str(), record))
+        .collect();
+
+    for record in &program.records {
+        emit_record_decl(record, &records, &mut output);
+    }
+    if !program.records.is_empty() {
+        output.push('\n');
+    }
 
     let signatures: HashMap<&str, (&TypeRef, Vec<&TypeRef>)> = program
         .functions
@@ -26,7 +39,7 @@ pub fn emit_program(program: &MirProgram) -> String {
         .collect();
 
     for function in &program.functions {
-        emit_function(function, &signatures, &mut output);
+        emit_function(function, &records, &signatures, &mut output);
         output.push('\n');
     }
 
@@ -35,14 +48,21 @@ pub fn emit_program(program: &MirProgram) -> String {
 
 fn emit_function(
     function: &MirFunction,
+    records: &HashMap<&str, &MirRecord>,
     signatures: &HashMap<&str, (&TypeRef, Vec<&TypeRef>)>,
     output: &mut String,
 ) {
-    let return_type = llvm_type(&function.return_type);
+    let return_type = llvm_type(&function.return_type, records);
     let params = function
         .params
         .iter()
-        .map(|param| format!("{} %{}", llvm_type(&param.ty), sanitize_symbol(&param.name)))
+        .map(|param| {
+            format!(
+                "{} %{}",
+                llvm_type(&param.ty, records),
+                sanitize_symbol(&param.name)
+            )
+        })
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -51,7 +71,11 @@ fn emit_function(
 
     if function.blocks.is_empty() {
         let _ = writeln!(output, "entry:");
-        let _ = writeln!(output, "  {}", return_default_instruction(&function.return_type));
+        let _ = writeln!(
+            output,
+            "  {}",
+            return_default_instruction(&function.return_type, records)
+        );
         let _ = writeln!(output, "}}");
         return;
     }
@@ -61,7 +85,7 @@ fn emit_function(
         .iter()
         .enumerate()
         .map(|(index, local)| {
-            if llvm_type(&local.ty) == "void" {
+            if llvm_type(&local.ty, records) == "void" {
                 None
             } else {
                 Some(format!("%l{index}"))
@@ -71,6 +95,7 @@ fn emit_function(
 
     let mut emitter = FunctionEmitter {
         function,
+        records,
         signatures,
         local_ptrs,
         next_tmp: 0,
@@ -85,6 +110,7 @@ fn emit_function(
 
 struct FunctionEmitter<'a> {
     function: &'a MirFunction,
+    records: &'a HashMap<&'a str, &'a MirRecord>,
     signatures: &'a HashMap<&'a str, (&'a TypeRef, Vec<&'a TypeRef>)>,
     local_ptrs: Vec<Option<String>>,
     next_tmp: usize,
@@ -113,7 +139,7 @@ impl<'a> FunctionEmitter<'a> {
             let Some(ptr_name) = &self.local_ptrs[index] else {
                 continue;
             };
-            let ty = llvm_type(&local.ty);
+            let ty = llvm_type(&local.ty, self.records);
             let _ = writeln!(output, "  {ptr_name} = alloca {ty}");
         }
 
@@ -121,7 +147,7 @@ impl<'a> FunctionEmitter<'a> {
             let Some(ptr_name) = &self.local_ptrs[param.local] else {
                 continue;
             };
-            let ty = llvm_type(&param.ty);
+            let ty = llvm_type(&param.ty, self.records);
             let param_name = format!("%{}", sanitize_symbol(&param.name));
             let _ = writeln!(output, "  store {ty} {param_name}, {ty}* {ptr_name}");
         }
@@ -131,7 +157,7 @@ impl<'a> FunctionEmitter<'a> {
         match statement {
             MirStatement::Assign { dst, rvalue } => {
                 let dst_ty = &self.function.locals[*dst].ty;
-                if llvm_type(dst_ty) == "void" {
+                if llvm_type(dst_ty, self.records) == "void" {
                     self.emit_rvalue(rvalue, output);
                     return;
                 }
@@ -141,7 +167,7 @@ impl<'a> FunctionEmitter<'a> {
                     self.emit_rvalue(rvalue, output);
                     return;
                 };
-                let dst_llvm_ty = llvm_type(dst_ty);
+                let dst_llvm_ty = llvm_type(dst_ty, self.records);
                 let value = self.emit_rvalue_value(rvalue, output);
                 let _ = writeln!(
                     output,
@@ -161,13 +187,18 @@ impl<'a> FunctionEmitter<'a> {
                     let _ = writeln!(output, "  ret void");
                 }
                 Some(operand) => {
-                    let ty = llvm_type(&self.function.return_type);
-                    let value = self.emit_operand_value(operand, &self.function.return_type, output);
+                    let ty = llvm_type(&self.function.return_type, self.records);
+                    let value =
+                        self.emit_operand_value(operand, &self.function.return_type, output);
                     let _ = writeln!(output, "  ret {ty} {value}");
                 }
             },
             MirTerminator::ReturnDefault(ty) => {
-                let _ = writeln!(output, "  {}", return_default_instruction(ty));
+                let _ = writeln!(
+                    output,
+                    "  {}",
+                    return_default_instruction(ty, self.records)
+                );
             }
             MirTerminator::Goto { target } => {
                 let _ = writeln!(output, "  br label %{}", sanitize_label(target));
@@ -219,14 +250,14 @@ impl<'a> FunctionEmitter<'a> {
                         let _ = writeln!(output, "  {tmp} = add i64 {left_value}, {right_value}");
                     }
                     BinaryOp::Eq => {
-                        let ty = llvm_type(&left_ty);
+                        let ty = llvm_type(&left_ty, self.records);
                         let _ = writeln!(
                             output,
                             "  {tmp} = icmp eq {ty} {left_value}, {right_value}"
                         );
                     }
                     BinaryOp::NotEq => {
-                        let ty = llvm_type(&left_ty);
+                        let ty = llvm_type(&left_ty, self.records);
                         let _ = writeln!(
                             output,
                             "  {tmp} = icmp ne {ty} {left_value}, {right_value}"
@@ -256,13 +287,13 @@ impl<'a> FunctionEmitter<'a> {
                         let param_ty =
                             param_tys.get(index).copied().unwrap_or(&default_param_ty);
                         let value = self.emit_operand_value(arg, param_ty, output);
-                        format!("{} {value}", llvm_type(param_ty))
+                        format!("{} {value}", llvm_type(param_ty, self.records))
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
 
                 let fn_name = sanitize_symbol(callee);
-                let ret_llvm_ty = llvm_type(return_ty);
+                let ret_llvm_ty = llvm_type(return_ty, self.records);
                 if ret_llvm_ty == "void" {
                     let _ = writeln!(output, "  call void @{fn_name}({call_args})");
                     "0".to_string()
@@ -272,6 +303,45 @@ impl<'a> FunctionEmitter<'a> {
                         writeln!(output, "  {tmp} = call {ret_llvm_ty} @{fn_name}({call_args})");
                     tmp
                 }
+            }
+            MirRvalue::RecordLit { record, fields } => {
+                let Some(schema) = self.records.get(record.as_str()) else {
+                    return "zeroinitializer".to_string();
+                };
+                let record_ty = llvm_named_record_type(record);
+                let mut current = "zeroinitializer".to_string();
+                for (index, operand) in fields.iter().enumerate() {
+                    let Some(field_schema) = schema.fields.get(index) else {
+                        continue;
+                    };
+                    let field_ty = llvm_type(&field_schema.ty, self.records);
+                    let field_value = self.emit_operand_value(operand, &field_schema.ty, output);
+                    let tmp = self.fresh_tmp();
+                    let _ = writeln!(
+                        output,
+                        "  {tmp} = insertvalue {record_ty} {current}, {field_ty} {field_value}, {index}"
+                    );
+                    current = tmp;
+                }
+                current
+            }
+            MirRvalue::ProjectField {
+                base,
+                record,
+                index,
+            } => {
+                let record_ty = llvm_named_record_type(record);
+                let base_ty = TypeRef {
+                    name: record.clone(),
+                    args: Vec::new(),
+                };
+                let base_value = self.emit_operand_value(base, &base_ty, output);
+                let tmp = self.fresh_tmp();
+                let _ = writeln!(
+                    output,
+                    "  {tmp} = extractvalue {record_ty} {base_value}, {index}"
+                );
+                tmp
             }
         }
     }
@@ -312,7 +382,7 @@ impl<'a> FunctionEmitter<'a> {
                 let Some(ptr_name) = self.local_ptrs.get(*index).and_then(|v| v.clone()) else {
                     return "0".to_string();
                 };
-                let llvm_ty = llvm_type(ty);
+                let llvm_ty = llvm_type(ty, self.records);
                 let tmp = self.fresh_tmp();
                 let _ = writeln!(output, "  {tmp} = load {llvm_ty}, {llvm_ty}* {ptr_name}");
                 tmp
@@ -327,24 +397,46 @@ impl<'a> FunctionEmitter<'a> {
     }
 }
 
-fn llvm_type(ty: &TypeRef) -> &'static str {
+fn emit_record_decl(record: &MirRecord, records: &HashMap<&str, &MirRecord>, output: &mut String) {
+    let name = llvm_named_record_type(&record.name);
+    let fields = record
+        .fields
+        .iter()
+        .map(|field| llvm_type(&field.ty, records))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let _ = writeln!(output, "{name} = type {{ {fields} }}");
+}
+
+fn llvm_named_record_type(raw: &str) -> String {
+    format!("%{}", sanitize_symbol(raw))
+}
+
+fn llvm_type(ty: &TypeRef, records: &HashMap<&str, &MirRecord>) -> String {
     match ty.head() {
-        "Unit" => "void",
-        "Int" => "i64",
-        "Bool" => "i1",
-        "Float" => "double",
-        "String" => "i8*",
-        _ => "i8*",
+        "Unit" => "void".to_string(),
+        "Int" => "i64".to_string(),
+        "Bool" => "i1".to_string(),
+        "Float" => "double".to_string(),
+        "String" | "Text" => "i8*".to_string(),
+        other => {
+            if ty.args.is_empty() && records.contains_key(other) {
+                llvm_named_record_type(other)
+            } else {
+                "i8*".to_string()
+            }
+        }
     }
 }
 
-fn return_default_instruction(ty: &TypeRef) -> String {
-    match llvm_type(ty) {
+fn return_default_instruction(ty: &TypeRef, records: &HashMap<&str, &MirRecord>) -> String {
+    match llvm_type(ty, records).as_str() {
         "void" => "ret void".to_string(),
         "i64" => "ret i64 0".to_string(),
         "i1" => "ret i1 0".to_string(),
         "double" => "ret double 0.0".to_string(),
-        _ => "ret i8* null".to_string(),
+        "i8*" => "ret i8* null".to_string(),
+        other => format!("ret {other} zeroinitializer"),
     }
 }
 

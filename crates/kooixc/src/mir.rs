@@ -6,7 +6,20 @@ use crate::hir::{HirFunction, HirProgram};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirProgram {
+    pub records: Vec<MirRecord>,
     pub functions: Vec<MirFunction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirRecord {
+    pub name: String,
+    pub fields: Vec<MirRecordField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirRecordField {
+    pub name: String,
+    pub ty: TypeRef,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +67,12 @@ pub enum MirRvalue {
         right: MirOperand,
     },
     Call { callee: String, args: Vec<MirOperand> },
+    RecordLit { record: String, fields: Vec<MirOperand> },
+    ProjectField {
+        base: MirOperand,
+        record: String,
+        index: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,21 +103,52 @@ struct FunctionSignature {
 
 pub fn lower_hir(program: &HirProgram) -> Result<MirProgram, Vec<Diagnostic>> {
     let signatures = build_signatures(program);
+    let records = build_native_records(program);
+    let record_map: HashMap<String, MirRecord> = records
+        .iter()
+        .cloned()
+        .map(|record| (record.name.clone(), record))
+        .collect();
     let mut diagnostics = Vec::new();
     let mut functions = Vec::new();
 
     for function in &program.functions {
-        match lower_function(function, &signatures) {
+        match lower_function(function, &signatures, &record_map) {
             Ok(mir_function) => functions.push(mir_function),
             Err(mut errors) => diagnostics.append(&mut errors),
         }
     }
 
     if diagnostics.is_empty() {
-        Ok(MirProgram { functions })
+        Ok(MirProgram { records, functions })
     } else {
         Err(diagnostics)
     }
+}
+
+fn build_native_records(program: &HirProgram) -> Vec<MirRecord> {
+    program
+        .records
+        .iter()
+        .filter(|record| record.generics.is_empty())
+        .filter(|record| {
+            record
+                .fields
+                .iter()
+                .all(|field| is_native_struct_field_type(&field.ty))
+        })
+        .map(|record| MirRecord {
+            name: record.name.clone(),
+            fields: record
+                .fields
+                .iter()
+                .map(|field| MirRecordField {
+                    name: field.name.clone(),
+                    ty: field.ty.clone(),
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 fn build_signatures(program: &HirProgram) -> HashMap<String, FunctionSignature> {
@@ -131,6 +181,7 @@ fn build_signatures(program: &HirProgram) -> HashMap<String, FunctionSignature> 
 fn lower_function(
     function: &HirFunction,
     signatures: &HashMap<String, FunctionSignature>,
+    records: &HashMap<String, MirRecord>,
 ) -> Result<MirFunction, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
 
@@ -156,7 +207,7 @@ fn lower_function(
 
     if function.body.is_some() {
         for param in &function.params {
-            if !is_native_scalar_type(&param.ty) {
+            if !is_native_type(&param.ty, records) {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "function '{}' parameter '{}' uses type '{}' which is not supported by native lowering yet",
@@ -167,7 +218,7 @@ fn lower_function(
             }
         }
 
-        if !is_native_scalar_type(&function.return_type) {
+        if !is_native_type(&function.return_type, records) {
             diagnostics.push(Diagnostic::error(
                 format!(
                     "function '{}' return type '{}' is not supported by native lowering yet",
@@ -182,7 +233,7 @@ fn lower_function(
         return Err(diagnostics);
     }
 
-    let mut builder = MirBuilder::new(function, signatures);
+    let mut builder = MirBuilder::new(function, signatures, records);
     match &function.body {
         None => {
             builder.emit_stub_body();
@@ -201,9 +252,22 @@ fn is_native_scalar_type(ty: &TypeRef) -> bool {
     matches!(ty.head(), "Int" | "Bool" | "Unit")
 }
 
+fn is_native_struct_field_type(ty: &TypeRef) -> bool {
+    matches!(ty.head(), "Int" | "Bool")
+}
+
+fn is_native_type(ty: &TypeRef, records: &HashMap<String, MirRecord>) -> bool {
+    if is_native_scalar_type(ty) {
+        return true;
+    }
+
+    ty.args.is_empty() && records.contains_key(ty.head())
+}
+
 struct MirBuilder<'a> {
     function: &'a HirFunction,
     signatures: &'a HashMap<String, FunctionSignature>,
+    records: &'a HashMap<String, MirRecord>,
     params: Vec<MirParam>,
     locals: Vec<MirLocal>,
     local_map: HashMap<String, usize>,
@@ -213,7 +277,11 @@ struct MirBuilder<'a> {
 }
 
 impl<'a> MirBuilder<'a> {
-    fn new(function: &'a HirFunction, signatures: &'a HashMap<String, FunctionSignature>) -> Self {
+    fn new(
+        function: &'a HirFunction,
+        signatures: &'a HashMap<String, FunctionSignature>,
+        records: &'a HashMap<String, MirRecord>,
+    ) -> Self {
         let mut locals = Vec::new();
         let mut params = Vec::new();
         let mut local_map = HashMap::new();
@@ -244,6 +312,7 @@ impl<'a> MirBuilder<'a> {
         Self {
             function,
             signatures,
+            records,
             params,
             locals,
             local_map,
@@ -317,7 +386,7 @@ impl<'a> MirBuilder<'a> {
                     } else {
                         self.infer_expr_type(&stmt.value)?
                     };
-                    if !is_native_scalar_type(&ty) {
+                    if !is_native_type(&ty, self.records) {
                         return Err(Diagnostic::error(
                             format!(
                                 "function '{}' uses let-binding '{}' with type '{}' which is not supported by native lowering yet",
@@ -432,31 +501,106 @@ impl<'a> MirBuilder<'a> {
                 self.function.span,
             )),
             Expr::Path(segments) => {
-                if segments.len() != 1 {
-                    return Err(Diagnostic::error(
+                match segments.as_slice() {
+                    [name] => {
+                        let Some(&local) = self.local_map.get(name.as_str()) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, name
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        let ty = self.locals[local].ty.clone();
+                        Ok(ExprValue {
+                            ty,
+                            operand: Some(MirOperand::Local(local)),
+                        })
+                    }
+                    [base, field] => {
+                        let Some(&base_local) = self.local_map.get(base.as_str()) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, base
+                                ),
+                                self.function.span,
+                            ));
+                        };
+
+                        let base_ty = self.locals[base_local].ty.clone();
+                        if base_ty.args.is_empty() && self.records.contains_key(base_ty.head()) {
+                            let Some(record) = self.records.get(base_ty.head()) else {
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "function '{}' uses record type '{}' which is not supported by native lowering yet",
+                                        self.function.name, base_ty
+                                    ),
+                                    self.function.span,
+                                ));
+                            };
+
+                            let Some((field_index, field_schema)) = record
+                                .fields
+                                .iter()
+                                .enumerate()
+                                .find(|(_, schema)| schema.name == *field)
+                            else {
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "function '{}' uses unknown field '{}' on record '{}'",
+                                        self.function.name, field, base_ty
+                                    ),
+                                    self.function.span,
+                                ));
+                            };
+
+                            if !is_native_struct_field_type(&field_schema.ty) {
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "function '{}' projects field '{}.{}' of unsupported type '{}'",
+                                        self.function.name, base_ty, field, field_schema.ty
+                                    ),
+                                    self.function.span,
+                                ));
+                            }
+
+                            let temp = self.new_temp_local(field_schema.ty.clone());
+                            self.current_block_mut()
+                                .statements
+                                .push(MirStatement::Assign {
+                                    dst: temp,
+                                    rvalue: MirRvalue::ProjectField {
+                                        base: MirOperand::Local(base_local),
+                                        record: record.name.clone(),
+                                        index: field_index,
+                                    },
+                                });
+                            Ok(ExprValue {
+                                ty: field_schema.ty.clone(),
+                                operand: Some(MirOperand::Local(temp)),
+                            })
+                        } else {
+                            Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses path '{}' which is not supported by native lowering yet",
+                                    self.function.name,
+                                    segments.join(".")
+                                ),
+                                self.function.span,
+                            ))
+                        }
+                    }
+                    _ => Err(Diagnostic::error(
                         format!(
                             "function '{}' uses path '{}' which is not supported by native lowering yet",
                             self.function.name,
                             segments.join(".")
                         ),
                         self.function.span,
-                    ));
+                    )),
                 }
-                let name = segments[0].as_str();
-                let Some(&local) = self.local_map.get(name) else {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' uses unknown local '{}' in body",
-                            self.function.name, name
-                        ),
-                        self.function.span,
-                    ));
-                };
-                let ty = self.locals[local].ty.clone();
-                Ok(ExprValue {
-                    ty,
-                    operand: Some(MirOperand::Local(local)),
-                })
             }
             Expr::Binary { op, left, right } => {
                 let left_value = self.lower_expr(left)?;
@@ -562,7 +706,7 @@ impl<'a> MirBuilder<'a> {
                 }
 
                 let return_ty = signature.return_type.clone();
-                if !is_native_scalar_type(&return_ty) {
+                if !is_native_type(&return_ty, self.records) {
                     return Err(Diagnostic::error(
                         format!(
                             "function '{}' calls '{}' returning '{}' which is not supported by native lowering yet",
@@ -610,7 +754,68 @@ impl<'a> MirBuilder<'a> {
                 else_block,
             } => self.lower_if_expr(cond, then_block, else_block.as_deref()),
             Expr::While { cond, body } => self.lower_while_expr(cond, body),
-            Expr::RecordLit { .. } | Expr::Match { .. } => Err(Diagnostic::error(
+            Expr::RecordLit { ty, fields } => {
+                if !ty.args.is_empty() {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "function '{}' uses generic record literal '{}', which native lowering does not support yet",
+                            self.function.name, ty
+                        ),
+                        self.function.span,
+                    ));
+                }
+
+                let Some(record) = self.records.get(ty.head()) else {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "function '{}' uses record literal of unsupported type '{}'",
+                            self.function.name,
+                            ty.head()
+                        ),
+                        self.function.span,
+                    ));
+                };
+
+                let mut lowered_fields: HashMap<&str, MirOperand> = HashMap::new();
+                for field in fields {
+                    let value = self.lower_expr(&field.value)?;
+                    lowered_fields.insert(
+                        field.name.as_str(),
+                        value.into_operand_or_unit(self.function)?,
+                    );
+                }
+
+                let mut ordered = Vec::new();
+                for schema_field in &record.fields {
+                    let Some(value) = lowered_fields.get(schema_field.name.as_str()) else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' record literal missing field '{}' for type '{}'",
+                                self.function.name, schema_field.name, record.name
+                            ),
+                            self.function.span,
+                        ));
+                    };
+                    ordered.push(value.clone());
+                }
+
+                let temp = self.new_temp_local(ty.clone());
+                self.current_block_mut()
+                    .statements
+                    .push(MirStatement::Assign {
+                        dst: temp,
+                        rvalue: MirRvalue::RecordLit {
+                            record: record.name.clone(),
+                            fields: ordered,
+                        },
+                    });
+
+                Ok(ExprValue {
+                    ty: ty.clone(),
+                    operand: Some(MirOperand::Local(temp)),
+                })
+            }
+            Expr::Match { .. } => Err(Diagnostic::error(
                 format!(
                     "function '{}' uses expression form not supported by native lowering yet",
                     self.function.name
@@ -639,7 +844,7 @@ impl<'a> MirBuilder<'a> {
         let cond_operand = cond_value.into_operand_or_unit(self.function)?;
 
         let result_ty = self.infer_if_result_type(then_block, else_block)?;
-        if !is_native_scalar_type(&result_ty) {
+        if !is_native_type(&result_ty, self.records) {
             return Err(Diagnostic::error(
                 format!(
                     "function '{}' if expression returns '{}' which is not supported by native lowering yet",
@@ -750,27 +955,64 @@ impl<'a> MirBuilder<'a> {
                 args: Vec::new(),
             }),
             Expr::Path(segments) => {
-                if segments.len() != 1 {
-                    return Err(Diagnostic::error(
+                match segments.as_slice() {
+                    [name] => {
+                        let Some(&local) = self.local_map.get(name.as_str()) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, name
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        Ok(self.locals[local].ty.clone())
+                    }
+                    [base, field] => {
+                        let Some(&base_local) = self.local_map.get(base.as_str()) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, base
+                                ),
+                                self.function.span,
+                            ));
+                        };
+
+                        let base_ty = self.locals[base_local].ty.clone();
+                        let Some(record) = self.records.get(base_ty.head()) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses path '{}' which is not supported by native lowering yet",
+                                    self.function.name,
+                                    segments.join(".")
+                                ),
+                                self.function.span,
+                            ));
+                        };
+
+                        let Some(field_schema) =
+                            record.fields.iter().find(|schema| schema.name == *field)
+                        else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown field '{}' on record '{}'",
+                                    self.function.name, field, base_ty
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        Ok(field_schema.ty.clone())
+                    }
+                    _ => Err(Diagnostic::error(
                         format!(
                             "function '{}' uses path '{}' which is not supported by native lowering yet",
                             self.function.name,
                             segments.join(".")
                         ),
                         self.function.span,
-                    ));
+                    )),
                 }
-                let name = segments[0].as_str();
-                let Some(&local) = self.local_map.get(name) else {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' uses unknown local '{}' in body",
-                            self.function.name, name
-                        ),
-                        self.function.span,
-                    ));
-                };
-                Ok(self.locals[local].ty.clone())
             }
             Expr::Binary { op, .. } => Ok(match op {
                 BinaryOp::Add => TypeRef {
