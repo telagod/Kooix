@@ -149,18 +149,18 @@ fn main() -> Int {
 }
 
 #[test]
-fn rejects_llvm_emission_for_function_body_until_lowering_is_implemented() {
+fn emits_llvm_ir_for_function_bodies() {
     let source = r#"
-fn main() -> Int { 0 };
+fn add(a: Int, b: Int) -> Int { a + b };
+fn main() -> Int { add(20, 22) };
 "#;
 
-    let result = emit_llvm_ir_source(source);
-    assert!(
-        matches!(result, Err(diagnostics) if diagnostics.iter().any(|diagnostic| {
-            diagnostic.severity == Severity::Error
-                && diagnostic.message.contains("MIR/LLVM lowering is not implemented yet")
-        }))
-    );
+    let ir = emit_llvm_ir_source(source).expect("source should emit llvm ir");
+    assert!(ir.contains("define i64 @add(i64 %a, i64 %b)"));
+    assert!(ir.contains("add i64"));
+    assert!(ir.contains("define i64 @main()"));
+    assert!(ir.contains("call i64 @add"));
+    assert!(ir.contains("ret i64"));
 }
 
 #[test]
@@ -2273,7 +2273,8 @@ fn ping() -> Unit !{net} requires [Net<"api.openai.com">];
     let mir = lower_to_mir_source(source).expect("source should lower to mir");
     assert_eq!(mir.functions.len(), 1);
     assert_eq!(mir.functions[0].name, "ping");
-    assert_eq!(mir.functions[0].entry.label, "entry");
+    assert!(!mir.functions[0].blocks.is_empty());
+    assert_eq!(mir.functions[0].blocks[0].label, "bb0");
 }
 
 #[test]
@@ -2347,6 +2348,73 @@ fn main() -> Int;
     let run_output =
         compile_and_run_native_source(source, &output).expect("compile+run should work");
     assert_eq!(run_output.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn compiles_and_runs_native_binary_with_function_body() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn add(a: Int, b: Int) -> Int { a + b };
+fn main() -> Int { add(20, 22) };
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-body-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(42));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn compiles_and_runs_native_binary_with_if_expression() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn main() -> Int { if true { 1 } else { 2 } };
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-if-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(1));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn compiles_and_runs_native_binary_with_while_loop() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn main() -> Int {
+  let i: Int = 0;
+  while i != 10 {
+    i = i + 1;
+  };
+  i
+};
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-while-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(10));
 
     let _ = std::fs::remove_file(&output);
 }

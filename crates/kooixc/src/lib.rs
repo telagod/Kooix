@@ -12,7 +12,7 @@ pub mod sema;
 pub mod token;
 
 use crate::error::Severity;
-use ast::{Item, Program};
+use ast::Program;
 use error::Diagnostic;
 use hir::HirProgram;
 use mir::MirProgram;
@@ -45,27 +45,14 @@ pub fn lower_to_mir_source(source: &str) -> Result<MirProgram, Vec<Diagnostic>> 
         return Err(diagnostics);
     }
 
-    let mut unsupported = false;
-    for item in &program.items {
-        if let Item::Function(function) = item {
-            if function.body.is_some() {
-                unsupported = true;
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "function '{}' has a body but MIR/LLVM lowering is not implemented yet",
-                        function.name
-                    ),
-                    function.span,
-                ));
-            }
+    let hir_program = hir::lower_program(&program);
+    match mir::lower_hir(&hir_program) {
+        Ok(mir_program) => Ok(mir_program),
+        Err(mut lowering_errors) => {
+            diagnostics.append(&mut lowering_errors);
+            Err(diagnostics)
         }
     }
-    if unsupported {
-        return Err(diagnostics);
-    }
-
-    let hir_program = hir::lower_program(&program);
-    Ok(mir::lower_hir(&hir_program))
 }
 
 pub fn emit_llvm_ir_source(source: &str) -> Result<String, Vec<Diagnostic>> {
