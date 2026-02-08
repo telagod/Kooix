@@ -10,7 +10,7 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 
 ---
 
-## Current Status (as of 2026-02-07)
+## Current Status (as of 2026-02-08)
 
 Kooix already has a runnable minimal compiler pipeline:
 
@@ -21,19 +21,24 @@ Kooix already has a runnable minimal compiler pipeline:
 - Core language skeleton: top-level `cap`, `fn`.
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
+- Record types: `record` declarations, field projection, and minimal generic substitution (e.g. `Box<Answer>.value`).
+- Generic bounds: record generic parameter bounds + multi-bound + `where` clause.
+- Structural constraints: record-as-trait structural bounds (field subset + deep type compatibility).
+- Type reliability: generic arity mismatch is rejected at declaration checking time.
 - AI v1 agent subset: `agent` (`state/policy/loop/requires/ensures/evidence`).
 - Agent semantic enhancements:
   - allow/deny conflict detection (error) + deny precedence report (warning).
   - state reachability warning (unreachable states).
   - stop condition target validation (unknown/unreachable state warning).
   - non-termination warning when there is no `max_iterations` guard and no reachable terminal path.
+  - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `native`.
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `57 passed, 0 failed`
+- Result: `116 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -47,9 +52,16 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 4: LLVM IR text backend + native build/run pipeline
 - ✅ Phase 5: AI v1 function contract subset (intent/ensures/failure/evidence)
 - ✅ Phase 6: AI v1 workflow minimal subset
+- ✅ Phase 6.9: `record` declarations + member projection
+- ✅ Phase 6.10: record generic member projection (minimal subset)
+- ✅ Phase 6.11: record generic arity static validation
+- ✅ Phase 6.12: record generic bounds (minimal subset)
+- ✅ Phase 6.13: multi-bound + `where` clause (minimal subset)
+- ✅ Phase 6.14: record-as-trait structural bounds + diagnostic convergence
 - ✅ Phase 7: AI v1 agent minimal subset
 - ✅ Phase 7.1: Agent policy conflict explanation + state reachability hints
 - ✅ Phase 7.2: Agent liveness/termination hints
+- ✅ Phase 7.3: Agent SCC cycle liveness validation
 
 See also: `DESIGN.md`
 
@@ -107,6 +119,9 @@ cargo test -p kooixc
   - AI v1: `docs/Grammar-AI-v1.ebnf`
   - Mapping: `docs/Grammar-Mapping.md`
   - Positive/negative examples: `docs/Grammar-Examples.md`
+- Toward self-hosting:
+  - Bootstrap gates and stage artifacts: `docs/BOOTSTRAP.md`
+  - Roadmap and milestones: `docs/ROADMAP-SELFHOST.md`
 
 ---
 
@@ -124,9 +139,9 @@ cargo test -p kooixc
 
 Recommended order:
 
-1. Stronger agent state-machine checks (SCC/cycle reachability, terminal coverage)
-2. Workflow step-call semantic checks (signature/type-flow)
-3. Core expression/type-system expansion (preparing real codegen)
+1. Core expression system + type inference expansion (preparing real codegen)
+2. Constraint system evolution (trait-like bounds / `where` normalization / constraint solving)
+3. Module system + import/linking (multi-file compilation loop)
 4. Diagnostic levels + CI policy gates (warning → configurable gate)
 
 ---

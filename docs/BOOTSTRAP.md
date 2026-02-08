@@ -1,0 +1,69 @@
+# Bootstrap (Self-Hosting) Playbook
+
+本文件定义 Kooix 的 bootstrap / self-hosting 路线、阶段产物（Stage0/1/2）与 CI 门禁标准。
+
+## 术语与目标
+
+- **Stage0 (`kooixc0`)**：当前 Rust 实现的编译器（仓库内 `crates/kooixc`）。
+- **Stage1 (`kooixc1`)**：用 Kooix 编写的编译器（未来新增 `compiler/` 或 `src/`）。
+- **Stage2 (`kooixc2`)**：用 `kooixc1` 编译 `kooixc1` 得到的下一代产物，用于验证 bootstrap 闭环与一致性。
+
+自举不是单点事件，而是一条连续可验证的路径。建议将“自举程度”分层定义：
+
+1. **L0 Self-Parse**：`kooixc0` 能解析 `kooixc1` 源码（语法闭环）。
+2. **L1 Self-Check**：`kooixc0` 能对 `kooixc1` 做语义/类型检查（类型系统闭环）。
+3. **L2 Self-Compile (Bootstrap)**：`kooixc0` 编译出 `kooixc1`，且 `kooixc1` 能编译自身得到 `kooixc2`。
+4. **L3 Reproducible Bootstrap**：`kooixc1` 与 `kooixc2` 对同一输入产生可比对输出（语义等价为底线，bit-identical 为进阶）。
+
+## 当前状态（截至 2026-02-08）
+
+- 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导，但尚未实现函数体/表达式与完整运行语义。
+- 结论：距离 **L2** 还差一个完整可编程的 `Kooix-Core`（能写编译器本体）以及可运行的 runtime/stdlib。
+
+## 产物与目录约定（建议）
+
+为减少 Stage0 与 Stage1 的耦合，建议采用“清晰分层 + 可并行演进”的目录结构：
+
+- `crates/kooixc/`：Stage0（Rust），负责最短闭环与 bootstrap 的生成器角色。
+- `compiler/kooixc/`：Stage1（Kooix），编译器本体（parser/typecheck/lowering）。
+- `stdlib/`：Kooix 标准库（Text/Vec/Map/IO 等）。
+- `tests/fixtures/`：bootstrap fixtures（输入程序、golden output）。
+
+## Bootstrap Pipeline（推荐最短闭环）
+
+### Step A: `kooixc0` -> `kooixc1`
+
+目标：`kooixc0` 能把 `compiler/kooixc/` 编译为一个可运行的 `kooixc1`。
+
+- 允许的最小实现（推荐）：先走 **VM/bytecode** 或 **解释器** 路线，让 `kooixc1` 能跑起来。
+- 进阶目标：`kooixc1` 产出 MIR/LLVM IR 并走 native 链路。
+
+### Step B: `kooixc1` -> `kooixc2`
+
+目标：`kooixc1` 编译自身得到 `kooixc2`，并做一致性验证。
+
+- 基线：对同一套 fixtures，`kooixc1` 与 `kooixc2` 的诊断输出与 IR 输出语义等价。
+- 进阶：引入 deterministic build（稳定哈希、稳定遍历顺序、固定格式化与序列化）。
+
+## CI 门禁（从现在开始就可执行）
+
+### Gate 0（立即启用）
+
+- `cargo fmt --all --check`
+- `cargo test -p kooixc`
+
+### Gate 1（Stage1 落地后启用）
+
+- `kooixc0` 编译 `kooixc1`（生成可运行产物）
+- `kooixc1` 对 fixtures 进行 `check` / `emit IR`
+
+### Gate 2（Bootstrap 闭环后启用）
+
+- `kooixc1` 编译 `kooixc1` → `kooixc2`
+- `kooixc1` vs `kooixc2` 差分验证（diagnostics/IR 的稳定性门禁）
+
+## 风险与取舍
+
+- **最大风险：stdlib/runtime**。没有 `Text/Vec/Map/IO`，编译器写不动；但一上来实现 borrow checker/全 LLVM codegen 会拖垮闭环节奏。
+- **建议取舍：先可运行，再完美**。先让 `kooixc1` 在 VM/解释器上跑通自举闭环，再逐步替换为更强后端。
+

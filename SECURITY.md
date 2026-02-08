@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Aster is currently in MVP stage. Security fixes are applied on a best-effort basis to the latest `main` branch.
+Kooix is currently in MVP stage. Security fixes are applied on a best-effort basis to the latest `main` branch.
 
 | Version | Supported |
 |---------|-----------|
