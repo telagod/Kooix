@@ -20,7 +20,7 @@ Kooix 的自举不是“能写 hello world”，而是**编译器可以用自己
 
 ### 硬门槛（没有就无法自举）
 
-1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（当前 `mir/llvm/native` 会拒绝带函数体的程序）。
+1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（已支持 `Int/Bool/Unit` 的最小子集；`record/enum/Text/match` 仍未进入 native lowering）。
 2. **Runtime（关键）**：可支撑编译器数据结构的最小内存模型（至少 `Text` / `List<T>` / `Record` / `Enum`）。
 3. **Module/System**：从 include 风格 `import "path"` 演进到最小 module/namespace/export（编译器本身无法长期容忍全局命名空间）。
 4. **Generics**：generic fn + generic record/enum（编译器会大量复用 AST/Token/Result/Option 等泛型结构）。
@@ -52,11 +52,11 @@ cargo test -p kooixc
 
 建议覆盖顺序（按依赖拓扑）：
 
-1. `Int/Bool/Unit` + `return`
-2. `let`/locals + 简单 `+`/`==`/`!=`
-3. `if/else` 表达式（phi 合流）
-4. `while`（基础块 + branch）
-5. `call`（函数调用约定）
+1. ✅ `Int/Bool/Unit` + `return`
+2. ✅ `let`/locals + 简单 `+`/`==`/`!=`
+3. ✅ `if/else` 表达式（alloca 汇合）
+4. ✅ `while`（基础块 + branch）
+5. ✅ `call`（函数调用约定）
 6. `record`/member（聚合类型）
 7. `enum`/`match`（tag + payload + switch）
 8. `Text`（最小 runtime 支持）
@@ -121,4 +121,3 @@ cargo run -p kooixc -- native stage1/compiler_main.kooix /tmp/kooixc-stage1 --ru
 - **Backend 复杂度爆炸**：建议坚持“最小可运行子集 + 渐进覆盖”。
 - **Runtime/内存安全**：可先用简单引用计数（RC）/区域分配（arena）落地，再逐步优化。
 - **模块系统演进成本**：先引入 `module`/`export` 的最小语义，避免过早设计完整包管理。
-

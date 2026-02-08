@@ -29,7 +29,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`x = ...`/`return`, basic expressions (literal/path/call/record literal/member projection `x.y`/`if/else`/`while`/`match`/`+`/`==`/`!=`), and return-type checking.
 - Branching: `match` (patterns `_` / `Variant(bind?)`, arm type convergence, exhaustiveness checking).
 - Algebraic data types: `enum` declarations + variant construction (unit + payload; generic enums rely on expected type context for minimal inference).
-- Limitation: programs with function bodies are currently rejected by `mir/llvm/native` (MIR/LLVM lowering is not implemented yet).
+- Native lowering v1: supports a function-body subset for `Int/Bool/Unit` in `mir/llvm/native` (`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=`); `Text`/`record`/`enum`/`match` are not lowered to native yet.
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
 - Record types: `record` declarations, field projection, and minimal generic substitution (e.g. `Box<Answer>.value`).
@@ -55,7 +55,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `142 passed, 0 failed`
+- Result: `145 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -89,6 +89,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
 - ✅ Phase 8.8: Enum variant namespacing (`Enum.Variant`) + allow cross-enum duplicates
 - ✅ Phase 8.9: Function generics syntax + explicit call type args (minimal subset)
+- ✅ Phase 9.0: MIR/LLVM lowering for function bodies (Int/Bool/Unit subset) + native runnable loop
 
 See also: `DESIGN.md` / `BOOTSTRAP.md`
 

@@ -440,3 +440,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：为 Stage1 编译器所需的可复用抽象（如 `map<T>`/`fold<T>`）打基础，同时保持规则可审计、可验证。
 - **影响范围**：`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与 README。
 - **决策依据**：先落地“语法 + 显式实例化”闭环，再逐步引入推导与后端 monomorphization/erasure 策略。
+
+### 2026-02-08 - Phase 9.0：函数体 MIR/LLVM lowering（Int/Bool/Unit 子集）
+
+- **变更内容**：移除 `mir/llvm/native` 对“带函数体程序”的硬拒绝；重写 `crates/kooixc/src/mir.rs` 为 CFG + locals 的 lowering（`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=` 最小子集）；重写 `crates/kooixc/src/llvm.rs` 支持 block/branch/load/store/call 发射（alloca-based，不引入 SSA/phi）；新增 native compile+run 回归测试覆盖函数体/if/while。
+- **变更理由**：自举链路的第一道硬门槛是“编译器本体能被 native 编译并运行”，必须先打通函数体进入后端的可执行闭环。
+- **影响范围**：`crates/kooixc/src/lib.rs`、`crates/kooixc/src/mir.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/tests/compiler_tests.rs` 与 README。
+- **决策依据**：优先选择 alloca-based 方案降低实现复杂度与调试成本，先保证语义正确与可审计，再逐步优化为 SSA/更丰富类型运行时。
