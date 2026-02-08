@@ -17,8 +17,8 @@
 
 ## 当前状态（截至 2026-02-08）
 
-- 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导，但尚未实现函数体/表达式与完整运行语义。
-- 结论：距离 **L2** 还差一个完整可编程的 `Kooix-Core`（能写编译器本体）以及可运行的 runtime/stdlib。
+- 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导；已支持函数体/基础表达式的解析与类型检查（Frontend），但尚未实现可运行语义（VM/解释器或真正 MIR/LLVM lowering）。
+- 结论：距离 **L2** 仍差一个可运行的 runtime/stdlib，以及更完整的 `Kooix-Core`（控制流/enum/match/module 等，能写编译器本体）。
 
 ## 产物与目录约定（建议）
 
@@ -66,4 +66,3 @@
 
 - **最大风险：stdlib/runtime**。没有 `Text/Vec/Map/IO`，编译器写不动；但一上来实现 borrow checker/全 LLVM codegen 会拖垮闭环节奏。
 - **建议取舍：先可运行，再完美**。先让 `kooixc1` 在 VM/解释器上跑通自举闭环，再逐步替换为更强后端。
-

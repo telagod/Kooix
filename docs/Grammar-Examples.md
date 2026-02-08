@@ -4,7 +4,7 @@
 
 ### Valid: capability + function with effects/requires
 
-```aster
+```kooix
 cap Net<"api.openai.com">;
 cap Model<"openai", "gpt-4o-mini", 1000>;
 
@@ -13,13 +13,13 @@ fn summarize(doc: Text) -> Summary !{model(openai), net} requires [Model<"openai
 
 ### Valid: pure function
 
-```aster
+```kooix
 fn add(x: Int, y: Int) -> Int;
 ```
 
 ### Invalid: malformed capability shape
 
-```aster
+```kooix
 cap Model<"openai", "gpt-4o-mini">;
 fn summarize(doc: Text) -> Summary !{model(openai)} requires [Model<"openai", "gpt-4o-mini">];
 ```
@@ -32,7 +32,7 @@ Expected category: semantic error (capability arity mismatch).
 
 ### Valid now: function with intent + ensures + failure
 
-```aster
+```kooix
 fn summarize(doc: Text) -> Summary
 intent "compress input document into an actionable summary"
 ensures [output.confidence >= 0]
@@ -51,7 +51,7 @@ evidence {
 
 ### Valid now: minimal workflow
 
-```aster
+```kooix
 cap Tool<"vector_search", "read-only">;
 
 workflow ingest_and_answer(input: Query) -> Answer
@@ -73,7 +73,7 @@ evidence {
 
 ### Valid now: minimal agent
 
-```aster
+```kooix
 cap Tool<"kb_search", "read-only">;
 
 agent support_agent(input: Ticket) -> Resolution
@@ -101,7 +101,7 @@ evidence {
 
 ### Function (AI-native contract)
 
-```aster
+```kooix
 fn summarize(doc: Text) -> Summary
 intent "compress input document into an actionable summary"
 requires [cap Model<"openai", "gpt-4o-mini", 1000>, cap Net<"api.openai.com">]
@@ -120,7 +120,7 @@ evidence {
 
 ### Workflow (explicit step graph)
 
-```aster
+```kooix
 workflow ingest_and_answer(input: Query) -> Answer
 intent "retrieve context and generate grounded answer"
 requires [cap Tool<"vector_search", "read-only">, cap Model<"openai", "gpt-4o-mini", 2000>]
@@ -146,7 +146,7 @@ evidence {
 
 ### Agent (state + policy + loop)
 
-```aster
+```kooix
 agent support_agent(input: Ticket) -> Resolution
 intent "resolve support tickets within policy boundaries"
 state {
@@ -173,7 +173,7 @@ evidence {
 
 ### Invalid: unknown failure action
 
-```aster
+```kooix
 fn f(x: Int) -> Int
 failure {
   timeout -> teleport("nowhere");
@@ -185,7 +185,7 @@ Expected category: parser/sema error (unknown failure action).
 
 ### Invalid: evidence metrics empty
 
-```aster
+```kooix
 fn f(x: Int) -> Int
 evidence {
   trace "f.v1";
@@ -198,7 +198,7 @@ Expected category: semantic error or warning (empty metrics list).
 
 ### Invalid: agent policy conflict
 
-```aster
+```kooix
 agent a(input: Ticket) -> Resolution
 state { INIT -> DONE; }
 policy {

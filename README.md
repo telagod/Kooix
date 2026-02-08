@@ -18,6 +18,8 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 已可用能力
 
 - Core 语言骨架：`cap`、`fn` 顶层声明。
+- Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`return`、基础表达式（literal/path/call/`+`/`==`/`!=`）与返回类型静态校验。
+- 限制：含函数体的程序暂不支持 `mir/llvm/native`（MIR/LLVM lowering 尚未实现）。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
 - 记录类型：`record` 声明、字段投影与最小泛型替换（如 `Box<Answer>.value`）。
@@ -36,7 +38,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`116 passed, 0 failed`
+- 结果：`120 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -60,6 +62,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 7.1: Agent 策略冲突解释 + 状态可达性提示
 - ✅ Phase 7.2: Agent 活性/终止性提示
 - ✅ Phase 7.3: Agent SCC 循环活性校验
+- ✅ Phase 8.0: Kooix-Core 函数体 Frontend（block/let/return/expr）
 
 详见：`DESIGN.md`
 
@@ -128,7 +131,8 @@ cargo test -p kooixc
 以下能力尚未进入当前 MVP：
 
 - borrow checker
-- 完整表达式系统与类型推导
+- 完整表达式系统与类型推导（当前仅实现函数体最小子集）
+- 函数体的 MIR/LLVM lowering 与运行语义
 - 模块系统 / 包管理
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
 - 运行时与标准库设计
@@ -139,10 +143,11 @@ cargo test -p kooixc
 
 建议优先级：
 
-1. Core 表达式系统与类型推导扩展（为真实 codegen 做准备）
-2. 约束系统演进（trait-like bounds / where 规范化 / 约束求解）
+1. Kooix-Core runtime：VM/解释器 + 最小 stdlib（为 self-host 做准备）
+2. Core 表达式/控制流扩展（`if/while/match`）+ 类型推导增强
 3. 模块系统与 import/linking（多文件编译闭环）
-4. 诊断分级与 CI 门禁（warning 策略可配置）
+4. 约束系统演进（trait-like bounds / where 规范化 / 约束求解）
+5. 诊断分级与 CI 门禁（warning 策略可配置）
 
 ---
 

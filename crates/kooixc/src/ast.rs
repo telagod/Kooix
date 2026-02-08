@@ -53,7 +53,57 @@ pub struct FunctionDecl {
     pub ensures: Vec<EnsureClause>,
     pub failure: Option<FailurePolicy>,
     pub evidence: Option<EvidenceSpec>,
+    pub body: Option<Block>,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+    pub tail: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Statement {
+    Let(LetStmt),
+    Return(ReturnStmt),
+    Expr(Expr),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LetStmt {
+    pub name: String,
+    pub ty: Option<TypeRef>,
+    pub value: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReturnStmt {
+    pub value: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr {
+    Path(Vec<String>),
+    String(String),
+    Number(String),
+    Bool(bool),
+    Call {
+        target: String,
+        args: Vec<Expr>,
+    },
+    Binary {
+        op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Eq,
+    NotEq,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

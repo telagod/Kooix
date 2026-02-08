@@ -5,8 +5,8 @@ use crate::mir::{MirFunction, MirProgram, MirTerminator};
 
 pub fn emit_program(program: &MirProgram) -> String {
     let mut output = String::new();
-    output.push_str("; ModuleID = 'aster_mvp'\n");
-    output.push_str("source_filename = \"aster\"\n\n");
+    output.push_str("; ModuleID = 'kooix_mvp'\n");
+    output.push_str("source_filename = \"kooix\"\n\n");
 
     for function in &program.functions {
         emit_function(function, &mut output);

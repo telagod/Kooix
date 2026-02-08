@@ -11,7 +11,7 @@
 - **L2 Self-Compile**：编译器能编译自己（bootstrap 闭环）。
 - **L3 Reproducible**：两代编译器产物一致（稳定性与可复现）。
 
-Kooix 目前处于“声明级 DSL + 语义检查”的 MVP 阶段，离 L2 的关键缺口在于：
+Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已开始落地 `Kooix-Core` 函数体（Frontend）。离 L2 的关键缺口在于：
 
 1. **可写编译器的 Core 语言子集（Kooix-Core）**
 2. **足够用的 stdlib/runtime（至少 Text/Vec/Map/IO）**
@@ -59,6 +59,11 @@ Kooix 目前处于“声明级 DSL + 语义检查”的 MVP 阶段，离 L2 的�
 - `kooixc0` 支持函数体/表达式 AST、类型检查、最小控制流
 - 有固定 fixtures（正反例）与 diagnostics 稳定
 
+当前落地进度（截至 2026-02-08）：
+
+- 已实现：`fn ... { ... }`、`let`/`return`、基础表达式（literal/path/call/`+`/`==`/`!=`）与返回类型静态校验。
+- 未实现：控制流（`if/while/match`）、赋值、模块系统，以及可运行语义（VM/解释器或真正 lowering）。
+
 ### M2：Kooix-Core Runtime
 
 - VM/解释器可运行 `kooix` 程序（先不追求性能）
@@ -89,4 +94,3 @@ Kooix 目前处于“声明级 DSL + 语义检查”的 MVP 阶段，离 L2 的�
 
 - 建立 `docs/BOOTSTRAP.md` 并把 CI Gate0/1/2 写死（Gate0 已可用）
 - 拆出 `Kooix-Core` 的 Grammar 与实现优先级（表达式/enum/match/runtime）
-

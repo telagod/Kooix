@@ -1,5 +1,5 @@
 use crate::ast::{
-    AgentPolicy, EnsureClause, EvidenceSpec, FailureAction, FailurePolicy, Item, LoopSpec,
+    AgentPolicy, Block, EnsureClause, EvidenceSpec, FailureAction, FailurePolicy, Item, LoopSpec,
     OutputField, Program, RecordField, RecordGenericParam, StateRule, TypeRef, WorkflowCall,
 };
 use crate::error::Span;
@@ -30,6 +30,7 @@ pub struct HirFunction {
     pub ensures: Vec<EnsureClause>,
     pub failure: Option<FailurePolicy>,
     pub evidence: Option<EvidenceSpec>,
+    pub body: Option<Block>,
     pub span: Span,
 }
 
@@ -129,6 +130,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
                     ensures: function_decl.ensures.clone(),
                     failure: function_decl.failure.clone(),
                     evidence: function_decl.evidence.clone(),
+                    body: function_decl.body.clone(),
                     span: function_decl.span,
                 });
             }

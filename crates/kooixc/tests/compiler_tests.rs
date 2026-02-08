@@ -1,4 +1,4 @@
-use kooixc::ast::{FailureValue, Item, PredicateOp, PredicateValue};
+use kooixc::ast::{Expr, FailureValue, Item, PredicateOp, PredicateValue, Statement};
 use kooixc::error::Severity;
 use kooixc::native::{
     compile_llvm_ir_to_executable, compile_llvm_ir_to_executable_with_tools,
@@ -91,6 +91,75 @@ fn summarize(doc: Text) -> Summary evidence { trace "summarize.v1"; metrics [lat
     let evidence = function.evidence.as_ref().expect("evidence should exist");
     assert_eq!(evidence.trace.as_deref(), Some("summarize.v1"));
     assert_eq!(evidence.metrics.len(), 3);
+}
+
+#[test]
+fn parses_function_with_body_block() {
+    let source = r#"
+fn add(a: Int, b: Int) -> Int {
+  let c: Int = a + b;
+  c
+};
+"#;
+
+    let program = parse_source(source).expect("program should parse");
+    let function = match &program.items[0] {
+        Item::Function(function) => function,
+        _ => panic!("expected first item to be function"),
+    };
+
+    let body = function.body.as_ref().expect("body should exist");
+    assert_eq!(body.statements.len(), 1);
+    assert!(matches!(body.statements[0], Statement::Let(_)));
+    assert!(matches!(body.tail, Some(Expr::Path(_))));
+}
+
+#[test]
+fn fails_when_function_body_return_type_mismatches() {
+    let source = r#"
+fn main() -> Int { true };
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("body evaluates to 'Bool' but expected 'Int'")
+    }));
+}
+
+#[test]
+fn fails_when_function_body_let_type_mismatches() {
+    let source = r#"
+fn main() -> Int {
+  let x: Bool = 1;
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("declares type 'Bool' but value is 'Int'")
+    }));
+}
+
+#[test]
+fn rejects_llvm_emission_for_function_body_until_lowering_is_implemented() {
+    let source = r#"
+fn main() -> Int { 0 };
+"#;
+
+    let result = emit_llvm_ir_source(source);
+    assert!(
+        matches!(result, Err(diagnostics) if diagnostics.iter().any(|diagnostic| {
+            diagnostic.severity == Severity::Error
+                && diagnostic.message.contains("MIR/LLVM lowering is not implemented yet")
+        }))
+    );
 }
 
 #[test]

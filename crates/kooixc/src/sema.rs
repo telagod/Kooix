@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    EnsureClause, FailureAction, FailureValue, PredicateValue, Program, RecordGenericParam,
-    TypeArg, TypeRef, WorkflowCallArg,
+    BinaryOp, EnsureClause, Expr, FailureAction, FailureValue, LetStmt, PredicateValue, Program,
+    RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef, WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{
@@ -161,6 +161,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         validate_ensures(function, &mut diagnostics);
         validate_failure(function, &mut diagnostics);
         validate_evidence(function, &mut diagnostics);
+        validate_function_body(function, &declared_invocable_signatures, &mut diagnostics);
     }
 
     let mut declared_workflows = HashSet::new();
@@ -1581,6 +1582,270 @@ fn validate_evidence(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) 
                 ),
                 function.span,
             ));
+        }
+    }
+}
+
+fn validate_function_body(
+    function: &HirFunction,
+    signatures: &HashMap<String, InvocableSignature>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(body) = &function.body else {
+        return;
+    };
+
+    let mut env: HashMap<String, TypeRef> = HashMap::new();
+    for param in &function.params {
+        env.insert(param.name.clone(), param.ty.clone());
+    }
+
+    let mut ends_with_return = false;
+
+    for statement in &body.statements {
+        ends_with_return = false;
+        match statement {
+            Statement::Let(LetStmt { name, ty, value }) => {
+                if env.contains_key(name) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' redefines variable '{}' in body",
+                            function.name, name
+                        ),
+                        function.span,
+                    ));
+                    continue;
+                }
+
+                let Some(value_type) =
+                    infer_expr_type(function, value, &env, signatures, diagnostics)
+                else {
+                    continue;
+                };
+
+                if let Some(explicit) = ty {
+                    if *explicit != value_type {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' let '{}' declares type '{}' but value is '{}'",
+                                function.name, name, explicit, value_type
+                            ),
+                            function.span,
+                        ));
+                        continue;
+                    }
+                    env.insert(name.clone(), explicit.clone());
+                } else {
+                    env.insert(name.clone(), value_type);
+                }
+            }
+            Statement::Return(ReturnStmt { value }) => {
+                ends_with_return = true;
+
+                let expected = &function.return_type;
+                match value {
+                    None => {
+                        if expected.head() != "Unit" {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' returns nothing but expected '{}'",
+                                    function.name, expected
+                                ),
+                                function.span,
+                            ));
+                        }
+                    }
+                    Some(expr) => {
+                        let Some(actual) =
+                            infer_expr_type(function, expr, &env, signatures, diagnostics)
+                        else {
+                            continue;
+                        };
+                        if actual != *expected {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' returns '{}' but expected '{}'",
+                                    function.name, actual, expected
+                                ),
+                                function.span,
+                            ));
+                        }
+                    }
+                }
+            }
+            Statement::Expr(expr) => {
+                let _ = infer_expr_type(function, expr, &env, signatures, diagnostics);
+            }
+        }
+    }
+
+    let expected = &function.return_type;
+    if expected.head() == "Unit" {
+        return;
+    }
+
+    if ends_with_return {
+        return;
+    }
+
+    let tail_type = match &body.tail {
+        Some(expr) => infer_expr_type(function, expr, &env, signatures, diagnostics),
+        None => None,
+    };
+
+    if let Some(tail_ty) = tail_type {
+        if tail_ty != *expected {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "function '{}' body evaluates to '{}' but expected '{}'",
+                    function.name, tail_ty, expected
+                ),
+                function.span,
+            ));
+        }
+        return;
+    }
+
+    diagnostics.push(Diagnostic::error(
+        format!(
+            "function '{}' body does not return a value of type '{}'",
+            function.name, expected
+        ),
+        function.span,
+    ));
+}
+
+fn infer_expr_type(
+    function: &HirFunction,
+    expr: &Expr,
+    env: &HashMap<String, TypeRef>,
+    signatures: &HashMap<String, InvocableSignature>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<TypeRef> {
+    match expr {
+        Expr::Number(_) => Some(TypeRef {
+            name: "Int".to_string(),
+            args: Vec::new(),
+        }),
+        Expr::String(_) => Some(TypeRef {
+            name: "Text".to_string(),
+            args: Vec::new(),
+        }),
+        Expr::Bool(_) => Some(TypeRef {
+            name: "Bool".to_string(),
+            args: Vec::new(),
+        }),
+        Expr::Path(segments) => {
+            if segments.len() != 1 {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses unsupported member path '{}' in body",
+                        function.name,
+                        segments.join(".")
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            let name = &segments[0];
+            env.get(name).cloned().or_else(|| {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses unknown variable '{}' in body",
+                        function.name, name
+                    ),
+                    function.span,
+                ));
+                None
+            })
+        }
+        Expr::Call { target, args } => {
+            let Some(signature) = signatures.get(target) else {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' calls unknown target '{}' in body",
+                        function.name, target
+                    ),
+                    function.span,
+                ));
+                return None;
+            };
+
+            if signature.params.len() != args.len() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' calls '{}' with {} args but expected {}",
+                        function.name,
+                        target,
+                        args.len(),
+                        signature.params.len()
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            for (index, (arg, expected_ty)) in args.iter().zip(signature.params.iter()).enumerate()
+            {
+                let Some(actual_ty) = infer_expr_type(function, arg, env, signatures, diagnostics)
+                else {
+                    continue;
+                };
+                if actual_ty != *expected_ty {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' calls '{}' arg {} as '{}' but expected '{}'",
+                            function.name,
+                            target,
+                            index + 1,
+                            actual_ty,
+                            expected_ty
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+
+            Some(signature.return_type.clone())
+        }
+        Expr::Binary { op, left, right } => {
+            let left_ty = infer_expr_type(function, left, env, signatures, diagnostics)?;
+            let right_ty = infer_expr_type(function, right, env, signatures, diagnostics)?;
+            match op {
+                BinaryOp::Add => {
+                    if left_ty.head() != "Int" || right_ty.head() != "Int" {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' uses '+' with '{}' and '{}'; expected Int + Int",
+                                function.name, left_ty, right_ty
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                    Some(TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    })
+                }
+                BinaryOp::Eq | BinaryOp::NotEq => {
+                    if left_ty != right_ty {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' compares '{}' and '{}' but types differ",
+                                function.name, left_ty, right_ty
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                    Some(TypeRef {
+                        name: "Bool".to_string(),
+                        args: Vec::new(),
+                    })
+                }
+            }
         }
     }
 }

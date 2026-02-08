@@ -48,6 +48,7 @@ fn <name>(<params>) -> <TypeRef>
   [ensures [<predicate>[, ...]]]
   [failure {<condition> -> <action>(...); ...}]
   [evidence {trace "..."; metrics [m1, ...];}]
+  [{ ... }]
 ;
 
 workflow <name>(<params>) -> <TypeRef>
@@ -95,7 +96,7 @@ agent <name>(<params>) -> <TypeRef>
 
 ## 已知限制
 
-- 暂不支持函数体和表达式 AST。
+- 支持函数体与基础表达式 AST 的解析与类型检查（Frontend），但暂不支持 MIR/LLVM lowering 与运行语义。
 - 仅支持有限的 capability schema（Model/Net/Tool/Io）。
 - `ensures` 当前仅支持简单谓词：`Path|String|Number` 两侧比较（`== != < <= > >= in`）。
 - `failure` 当前仅支持规则子集：`condition -> action(args);`，action 支持 `retry/fallback/abort/compensate`。
@@ -360,3 +361,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：提升对隐式死循环场景的静态洞察，补齐仅靠终态/stop 检查的盲区。
 - **影响范围**：`sema.rs`、`compiler_tests.rs` 与文档。
 - **决策依据**：在不改变语法的前提下增强语义检查强度，继续保持向后兼容。
+
+### 2026-02-08 - Phase 8.0：Kooix-Core 函数体 Frontend（M1）
+
+- **变更内容**：为 `fn` 增加可选函数体 block：`{ ... }`；支持 `let`/`return` 与基础表达式（literal/path/call/`+`/`==`/`!=`）；新增函数体返回类型与调用签名静态校验；为避免误编译，含函数体的程序在 `mir/llvm/native` 阶段直接报错（MIR/LLVM lowering 尚未实现）。
+- **变更理由**：把 Kooix 从“声明级 DSL”推进到“可写编译器的 Kooix-Core”起点，为后续 VM/解释器路线与自举（self-hosting）铺路。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`lib.rs` 与 tests。
+- **决策依据**：先落地可解析+可类型检查的最小函数体子集（M1），并用明确门禁阻断后端误用；后续在 M2 引入 VM/解释器或真正 MIR lowering。

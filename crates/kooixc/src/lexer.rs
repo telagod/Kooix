@@ -172,6 +172,10 @@ impl<'a> Lexer<'a> {
             "in" => TokenKind::KwIn,
             "requires" => TokenKind::KwRequires,
             "where" => TokenKind::KwWhere,
+            "let" => TokenKind::KwLet,
+            "return" => TokenKind::KwReturn,
+            "true" => TokenKind::KwTrue,
+            "false" => TokenKind::KwFalse,
             _ => TokenKind::Ident(value.to_string()),
         };
         Token::new(kind, Span::new(start, self.pos))

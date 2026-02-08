@@ -1,9 +1,9 @@
 use crate::ast::{
-    AgentDecl, AgentPolicy, CapabilityDecl, EffectSpec, EnsureClause, EvidenceSpec, FailureAction,
-    FailureActionArg, FailurePolicy, FailureRule, FailureValue, FunctionDecl, Item, LoopSpec,
-    OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl, RecordField,
-    RecordGenericParam, StateRule, TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl,
-    WorkflowStep,
+    AgentDecl, AgentPolicy, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
+    EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy, FailureRule, FailureValue,
+    FunctionDecl, Item, LetStmt, LoopSpec, OutputField, Param, PredicateOp, PredicateValue,
+    Program, RecordDecl, RecordField, RecordGenericParam, ReturnStmt, StateRule, Statement,
+    TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -222,6 +222,12 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let body = if self.at_lbrace() {
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
+
         let end = self.expect_semicolon()?.end;
 
         Ok(FunctionDecl {
@@ -234,6 +240,7 @@ impl<'a> Parser<'a> {
             ensures,
             failure,
             evidence,
+            body,
             span: Span::new(start, end),
         })
     }
@@ -967,6 +974,169 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_block(&mut self) -> Result<Block, Diagnostic> {
+        self.expect_lbrace()?;
+        let mut statements = Vec::new();
+        let mut tail = None;
+
+        while !self.at_rbrace() {
+            if self.at_kw_let() {
+                statements.push(Statement::Let(self.parse_let_stmt()?));
+                self.expect_semicolon()?;
+                continue;
+            }
+
+            if self.at_kw_return() {
+                statements.push(Statement::Return(self.parse_return_stmt()?));
+                self.expect_semicolon()?;
+                continue;
+            }
+
+            let expr = self.parse_expr()?;
+            if self.at_semicolon() {
+                self.advance();
+                statements.push(Statement::Expr(expr));
+                continue;
+            }
+
+            tail = Some(expr);
+            break;
+        }
+
+        self.expect_rbrace()?;
+        Ok(Block { statements, tail })
+    }
+
+    fn parse_let_stmt(&mut self) -> Result<LetStmt, Diagnostic> {
+        self.expect_kw_let()?;
+        let (name, _) = self.expect_ident()?;
+
+        let ty = if self.at_colon() {
+            self.advance();
+            Some(self.parse_type_ref()?)
+        } else {
+            None
+        };
+
+        self.expect_eq()?;
+        let value = self.parse_expr()?;
+
+        Ok(LetStmt { name, ty, value })
+    }
+
+    fn parse_return_stmt(&mut self) -> Result<ReturnStmt, Diagnostic> {
+        self.expect_kw_return()?;
+        let value = if self.at_semicolon() {
+            None
+        } else {
+            Some(self.parse_expr()?)
+        };
+        Ok(ReturnStmt { value })
+    }
+
+    fn parse_expr(&mut self) -> Result<Expr, Diagnostic> {
+        self.parse_equality_expr()
+    }
+
+    fn parse_equality_expr(&mut self) -> Result<Expr, Diagnostic> {
+        let mut expr = self.parse_add_expr()?;
+        loop {
+            let op = if self.at_eqeq() {
+                self.advance();
+                BinaryOp::Eq
+            } else if self.at_noteq() {
+                self.advance();
+                BinaryOp::NotEq
+            } else {
+                break;
+            };
+
+            let right = self.parse_add_expr()?;
+            expr = Expr::Binary {
+                op,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_add_expr(&mut self) -> Result<Expr, Diagnostic> {
+        let mut expr = self.parse_primary_expr()?;
+        while self.at_plus() {
+            self.advance();
+            let right = self.parse_primary_expr()?;
+            expr = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_primary_expr(&mut self) -> Result<Expr, Diagnostic> {
+        if self.at_lparen() {
+            self.advance();
+            let expr = self.parse_expr()?;
+            self.expect_rparen()?;
+            return Ok(expr);
+        }
+
+        if let Some(value) = self.take_number() {
+            return Ok(Expr::Number(value));
+        }
+
+        if let Some(value) = self.take_string() {
+            return Ok(Expr::String(value));
+        }
+
+        if self.at_kw_true() {
+            self.advance();
+            return Ok(Expr::Bool(true));
+        }
+
+        if self.at_kw_false() {
+            self.advance();
+            return Ok(Expr::Bool(false));
+        }
+
+        if let Some(ident) = self.take_ident() {
+            if self.at_lparen() {
+                self.advance();
+                let mut args = Vec::new();
+                if !self.at_rparen() {
+                    loop {
+                        args.push(self.parse_expr()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect_rparen()?;
+                return Ok(Expr::Call {
+                    target: ident,
+                    args,
+                });
+            }
+
+            let mut segments = vec![ident];
+            while self.at_dot() {
+                self.advance();
+                let (next, _) = self.expect_ident()?;
+                segments.push(next);
+            }
+            return Ok(Expr::Path(segments));
+        }
+
+        Err(Diagnostic::error(
+            format!("expected expression, found {}", self.current_kind_name()),
+            self.current().span,
+        ))
+    }
+
     fn expect_kw_cap(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_cap, "'cap'")
     }
@@ -993,6 +1163,14 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_where(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_where, "'where'")
+    }
+
+    fn expect_kw_let(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_let, "'let'")
+    }
+
+    fn expect_kw_return(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_return, "'return'")
     }
 
     fn expect_kw_intent(&mut self) -> Result<Span, Diagnostic> {
@@ -1234,6 +1412,22 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwWhere)
     }
 
+    fn at_kw_let(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwLet)
+    }
+
+    fn at_kw_return(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwReturn)
+    }
+
+    fn at_kw_true(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwTrue)
+    }
+
+    fn at_kw_false(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwFalse)
+    }
+
     fn at_kw_intent(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwIntent)
     }
@@ -1430,6 +1624,10 @@ impl<'a> Parser<'a> {
             TokenKind::KwIn => "'in'",
             TokenKind::KwRequires => "'requires'",
             TokenKind::KwWhere => "'where'",
+            TokenKind::KwLet => "'let'",
+            TokenKind::KwReturn => "'return'",
+            TokenKind::KwTrue => "'true'",
+            TokenKind::KwFalse => "'false'",
             TokenKind::Ident(_) => "identifier",
             TokenKind::StringLiteral(_) => "string literal",
             TokenKind::Number(_) => "number",
