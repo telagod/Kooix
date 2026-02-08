@@ -18,6 +18,7 @@ record S1Import {
 
 record S1Function {
   name: Text;
+  generics: List<Text>;
   params: List<S1Param>;
   return_type: S1Type;
   body_tokens: Option<List<S1Token>>;
@@ -30,6 +31,7 @@ record S1Param {
 
 record S1Record {
   name: Text;
+  generics: List<Text>;
   fields: List<S1RecordField>;
 };
 
@@ -40,6 +42,7 @@ record S1RecordField {
 
 record S1Enum {
   name: Text;
+  generics: List<Text>;
   variants: List<S1EnumVariant>;
 };
 

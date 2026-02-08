@@ -1,0 +1,100 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text =
+    "enum Option<T> { None; Some(T); }; record Pair<A, B> { a: A; b: B; }; fn id<T>(x: T) -> T { x };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Enum(e) => {
+                  if e.name == "Option" {
+                    match e.generics {
+                      Cons(g0) => {
+                        if g0.head == "T" {
+                          match g0.tail {
+                            Nil => {
+                              match i0.tail {
+                                Cons(i1) => {
+                                  match i1.head {
+                                    Record(r) => {
+                                      if r.name == "Pair" {
+                                        match r.generics {
+                                          Cons(ra) => {
+                                            if ra.head == "A" {
+                                              match ra.tail {
+                                                Cons(rb) => {
+                                                  if rb.head == "B" {
+                                                    match rb.tail {
+                                                      Nil => {
+                                                        match i1.tail {
+                                                          Cons(i2) => {
+                                                            match i2.head {
+                                                              Function(f) => {
+                                                                if f.name == "id" {
+                                                                  match f.generics {
+                                                                    Cons(fg) => {
+                                                                      if fg.head == "T" {
+                                                                        match fg.tail {
+                                                                          Nil => 0;
+                                                                          _ => 90;
+                                                                        }
+                                                                      } else { 89 }
+                                                                    };
+                                                                    _ => 88;
+                                                                  }
+                                                                } else { 87 }
+                                                              };
+                                                              _ => 86;
+                                                            }
+                                                          };
+                                                          _ => 85;
+                                                        }
+                                                      };
+                                                      _ => 84;
+                                                    }
+                                                  } else { 83 }
+                                                };
+                                                _ => 82;
+                                              }
+                                            } else { 81 }
+                                          };
+                                          _ => 80;
+                                        }
+                                      } else { 79 }
+                                    };
+                                    _ => 78;
+                                  }
+                                };
+                                _ => 77;
+                              }
+                            };
+                            _ => 76;
+                          }
+                        } else { 75 }
+                      };
+                      _ => 74;
+                    }
+                  } else { 73 }
+                };
+                _ => 72;
+              }
+            };
+            _ => 71;
+          }
+        };
+      }
+    };
+  }
+};
+

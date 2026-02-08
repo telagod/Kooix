@@ -91,6 +91,28 @@ fn s1_reverse_tokens_for_parser(xs: List<S1Token>) -> List<S1Token> {
   acc
 };
 
+fn s1_reverse_texts(xs: List<Text>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<Text> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_reverse_types(xs: List<S1Type>) -> List<S1Type> {
   let acc: List<S1Type> = Nil;
   let cur: List<S1Type> = xs;
@@ -133,6 +155,124 @@ fn s1_reverse_params(xs: List<S1Param>) -> List<S1Param> {
   };
 
   acc
+};
+
+fn s1_parse_generic_params(
+  tokens: List<S1Token>
+) -> Result<Pair<List<Text>, List<S1Token>>, S1Diagnostic> {
+  // Parse: <T, U, ...>
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected generic parameter list");
+
+  let cur: List<S1Token> = tokens;
+  let params_rev: List<Text> = Nil;
+
+  match cur {
+    Nil => {
+      ok = false;
+      diag = s1_diag(Error, 0, 0, "parser: expected '<' for generic parameters");
+      0
+    };
+    Cons(c0) => {
+      match c0.head.kind {
+        LAngle => {
+          cur = c0.tail;
+          0
+        };
+        _ => {
+          ok = false;
+          diag = s1_diag(
+            Error,
+            c0.head.span.start,
+            c0.head.span.end,
+            "parser: expected '<' for generic parameters"
+          );
+          0
+        };
+      }
+    };
+  };
+
+  if ok == true {
+    let done: Bool = false;
+    while done == false {
+      match cur {
+        Nil => {
+          ok = false;
+          diag = s1_diag(Error, 0, 0, "parser: expected generic parameter name or '>'");
+          done = true;
+          0
+        };
+        Cons(c1) => {
+          match c1.head.kind {
+            Ident(name) => {
+              params_rev = Cons(ListCons<Text> { head: name; tail: params_rev; });
+              cur = c1.tail;
+              0
+            };
+            _ => {
+              ok = false;
+              diag = s1_diag(
+                Error,
+                c1.head.span.start,
+                c1.head.span.end,
+                "parser: expected generic parameter name"
+              );
+              done = true;
+              0
+            };
+          }
+        };
+      };
+
+      if ok == true {
+        match cur {
+          Nil => {
+            ok = false;
+            diag = s1_diag(Error, 0, 0, "parser: expected ',' or '>' after generic parameter");
+            done = true;
+            0
+          };
+          Cons(c2) => {
+            match c2.head.kind {
+              Comma => {
+                cur = c2.tail;
+                0
+              };
+              RAngle => {
+                cur = c2.tail;
+                done = true;
+                0
+              };
+              _ => {
+                ok = false;
+                diag = s1_diag(
+                  Error,
+                  c2.head.span.start,
+                  c2.head.span.end,
+                  "parser: expected ',' or '>' after generic parameter"
+                );
+                done = true;
+                0
+              };
+            }
+          };
+        }
+      } else {
+        done = true;
+        0
+      }
+    };
+  } else {
+    0;
+  };
+
+  let out: Result<Pair<List<Text>, List<S1Token>>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    let params: List<Text> = s1_reverse_texts(params_rev);
+    out = Ok(Pair<List<Text>, List<S1Token>> { a: params; b: cur; });
+  };
+  out
 };
 
 fn s1_parse_type(tokens: List<S1Token>) -> Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> {
@@ -360,6 +500,7 @@ evidence {
             cur = cell0.tail;
 
             let fn_name: Text = "";
+            let generics: List<Text> = Nil;
             let params_rev: List<S1Param> = Nil;
             let empty_args: List<S1Type> = Nil;
             let ret_ty: S1Type = S1Type { name: ""; args: empty_args; };
@@ -387,6 +528,36 @@ evidence {
                     0
                   };
                 }
+              };
+            };
+
+            // optional generics: <T, ...>
+            if ok == true {
+              match cur {
+                Cons(g0) => {
+                  match g0.head.kind {
+                    LAngle => {
+                      let parsed_g: Result<Pair<List<Text>, List<S1Token>>, S1Diagnostic> =
+                        s1_parse_generic_params(cur);
+                      match parsed_g {
+                        Err(e) => {
+                          ok = false;
+                          diag = e;
+                          done = true;
+                          0
+                        };
+                        Ok(pair) => {
+                          generics = pair.a;
+                          cur = pair.b;
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => 0;
+                  }
+                };
+                _ => 0;
               };
             };
 
@@ -734,7 +905,7 @@ evidence {
             if ok == true {
               let params: List<S1Param> = s1_reverse_params(params_rev);
               let item: S1Item = Function(
-                S1Function { name: fn_name; params: params; return_type: ret_ty; body_tokens: body_tokens; }
+                S1Function { name: fn_name; generics: generics; params: params; return_type: ret_ty; body_tokens: body_tokens; }
               );
               items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
               0
@@ -748,6 +919,7 @@ evidence {
             cur = cell0.tail;
 
             let rec_name: Text = "";
+            let rec_generics: List<Text> = Nil;
             let fields_rev: List<S1RecordField> = Nil;
 
             // name
@@ -777,6 +949,36 @@ evidence {
                     0
                   };
                 }
+              };
+            };
+
+            // optional generics: <T, ...>
+            if ok == true {
+              match cur {
+                Cons(g0) => {
+                  match g0.head.kind {
+                    LAngle => {
+                      let parsed_g: Result<Pair<List<Text>, List<S1Token>>, S1Diagnostic> =
+                        s1_parse_generic_params(cur);
+                      match parsed_g {
+                        Err(e) => {
+                          ok = false;
+                          diag = e;
+                          done = true;
+                          0
+                        };
+                        Ok(pair) => {
+                          rec_generics = pair.a;
+                          cur = pair.b;
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => 0;
+                  }
+                };
+                _ => 0;
               };
             };
 
@@ -980,7 +1182,7 @@ evidence {
 
             if ok == true {
               let fields: List<S1RecordField> = s1_reverse_record_fields(fields_rev);
-              let item: S1Item = Record(S1Record { name: rec_name; fields: fields; });
+              let item: S1Item = Record(S1Record { name: rec_name; generics: rec_generics; fields: fields; });
               items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
               0;
             };
@@ -992,6 +1194,7 @@ evidence {
             cur = cell0.tail;
 
             let enum_name: Text = "";
+            let enum_generics: List<Text> = Nil;
             let variants_rev: List<S1EnumVariant> = Nil;
 
             // name
@@ -1021,6 +1224,36 @@ evidence {
                     0
                   };
                 }
+              };
+            };
+
+            // optional generics: <T, ...>
+            if ok == true {
+              match cur {
+                Cons(g0) => {
+                  match g0.head.kind {
+                    LAngle => {
+                      let parsed_g: Result<Pair<List<Text>, List<S1Token>>, S1Diagnostic> =
+                        s1_parse_generic_params(cur);
+                      match parsed_g {
+                        Err(e) => {
+                          ok = false;
+                          diag = e;
+                          done = true;
+                          0
+                        };
+                        Ok(pair) => {
+                          enum_generics = pair.a;
+                          cur = pair.b;
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => 0;
+                  }
+                };
+                _ => 0;
               };
             };
 
@@ -1244,7 +1477,7 @@ evidence {
 
             if ok == true {
               let variants: List<S1EnumVariant> = s1_reverse_enum_variants(variants_rev);
-              let item: S1Item = Enum(S1Enum { name: enum_name; variants: variants; });
+              let item: S1Item = Enum(S1Enum { name: enum_name; generics: enum_generics; variants: variants; });
               items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
               0;
             };
