@@ -1,0 +1,4 @@
+import "import_lib";
+
+fn main() -> Int { helper() + 1 };
+

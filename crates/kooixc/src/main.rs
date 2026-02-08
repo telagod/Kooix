@@ -3,6 +3,7 @@ use std::path::Path;
 use std::{env, fs, process};
 
 use kooixc::error::{Diagnostic, Severity};
+use kooixc::loader::{load_source_map, SourceMap};
 use kooixc::native::NativeError;
 use kooixc::{
     check_source, compile_and_run_native_source_with_args_stdin_and_timeout, compile_native_source,
@@ -19,13 +20,17 @@ fn main() {
     let command = args[1].as_str();
     let file = &args[2];
 
-    let source = match fs::read_to_string(file) {
-        Ok(content) => content,
-        Err(error) => {
-            eprintln!("failed to read {file}: {error}");
+    let entry_path = Path::new(file);
+    let source_map = match load_source_map(entry_path) {
+        Ok(map) => map,
+        Err(errors) => {
+            for error in errors {
+                eprintln!("error: {}", error.message);
+            }
             process::exit(2);
         }
     };
+    let source = source_map.combined.as_str();
 
     match command {
         "check" => {
@@ -33,7 +38,7 @@ fn main() {
             if diagnostics.is_empty() {
                 println!("ok: semantic checks passed");
             } else {
-                print_diagnostics(&diagnostics, &source);
+                print_diagnostics(&diagnostics, &source_map);
                 process::exit(1);
             }
         }
@@ -42,7 +47,7 @@ fn main() {
                 println!("{program:#?}");
             }
             Err(errors) => {
-                print_diagnostics(&errors, &source);
+                print_diagnostics(&errors, &source_map);
                 process::exit(1);
             }
         },
@@ -51,7 +56,7 @@ fn main() {
                 println!("{program:#?}");
             }
             Err(errors) => {
-                print_diagnostics(&errors, &source);
+                print_diagnostics(&errors, &source_map);
                 process::exit(1);
             }
         },
@@ -60,7 +65,7 @@ fn main() {
                 println!("{program:#?}");
             }
             Err(errors) => {
-                print_diagnostics(&errors, &source);
+                print_diagnostics(&errors, &source_map);
                 process::exit(1);
             }
         },
@@ -69,19 +74,19 @@ fn main() {
                 println!("{ir}");
             }
             Err(errors) => {
-                print_diagnostics(&errors, &source);
+                print_diagnostics(&errors, &source_map);
                 process::exit(1);
             }
         },
         "run" => match run_source(&source) {
             Ok(result) => {
                 if !result.diagnostics.is_empty() {
-                    print_diagnostics(&result.diagnostics, &source);
+                    print_diagnostics(&result.diagnostics, &source_map);
                 }
                 println!("ok: run result: {}", result.value);
             }
             Err(errors) => {
-                print_diagnostics(&errors, &source);
+                print_diagnostics(&errors, &source_map);
                 process::exit(1);
             }
         },
@@ -138,7 +143,7 @@ fn main() {
                         }
                     }
                     Err(error) => {
-                        report_native_error(error, &source);
+                        report_native_error(error, &source_map);
                         process::exit(1);
                     }
                 }
@@ -148,7 +153,7 @@ fn main() {
                         println!("ok: native binary generated at {}", options.output);
                     }
                     Err(error) => {
-                        report_native_error(error, &source);
+                        report_native_error(error, &source_map);
                         process::exit(1);
                     }
                 }
@@ -161,14 +166,24 @@ fn main() {
     }
 }
 
-fn print_diagnostics(diagnostics: &[Diagnostic], source: &str) {
+fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {
     for diagnostic in diagnostics {
-        let (line, col) = byte_to_line_col(source, diagnostic.span.start);
         let level = match diagnostic.severity {
             Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        eprintln!("{level}[{line}:{col}]: {}", diagnostic.message);
+        if let Some(file) = source_map.locate(diagnostic.span.start) {
+            let relative = diagnostic.span.start.saturating_sub(file.start);
+            let (line, col) = byte_to_line_col(&file.source, relative);
+            eprintln!(
+                "{level}[{}:{line}:{col}]: {}",
+                file.path.display(),
+                diagnostic.message
+            );
+        } else {
+            let (line, col) = byte_to_line_col(&source_map.combined, diagnostic.span.start);
+            eprintln!("{level}[{line}:{col}]: {}", diagnostic.message);
+        }
     }
 }
 
@@ -195,10 +210,10 @@ fn print_usage() {
     );
 }
 
-fn report_native_error(error: NativeError, source: &str) {
+fn report_native_error(error: NativeError, source_map: &SourceMap) {
     match error {
         NativeError::Diagnostics(diagnostics) => {
-            print_diagnostics(&diagnostics, source);
+            print_diagnostics(&diagnostics, source_map);
         }
         other => {
             eprintln!("native build failed: {other}");

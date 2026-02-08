@@ -149,6 +149,7 @@ impl<'a> Lexer<'a> {
         let value = &self.input[start..self.pos];
         let kind = match value {
             "cap" => TokenKind::KwCap,
+            "import" => TokenKind::KwImport,
             "fn" => TokenKind::KwFn,
             "workflow" => TokenKind::KwWorkflow,
             "agent" => TokenKind::KwAgent,

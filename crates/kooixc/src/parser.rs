@@ -1,10 +1,10 @@
 use crate::ast::{
     AgentDecl, AgentPolicy, AssignStmt, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
     EnumDecl, EnumVariant, EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy,
-    FailureRule, FailureValue, FunctionDecl, Item, LetStmt, LoopSpec, MatchArm, MatchArmBody,
-    MatchPattern, OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl,
-    RecordField, RecordGenericParam, RecordLitField, ReturnStmt, StateRule, Statement, TypeArg,
-    TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
+    FailureRule, FailureValue, FunctionDecl, ImportDecl, Item, LetStmt, LoopSpec, MatchArm,
+    MatchArmBody, MatchPattern, OutputField, Param, PredicateOp, PredicateValue, Program,
+    RecordDecl, RecordField, RecordGenericParam, RecordLitField, ReturnStmt, StateRule, Statement,
+    TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -28,6 +28,8 @@ impl<'a> Parser<'a> {
         while !self.at_eof() {
             let item = if self.at_kw_cap() {
                 Item::Capability(self.parse_capability_decl()?)
+            } else if self.at_kw_import() {
+                Item::Import(self.parse_import_decl()?)
             } else if self.at_kw_fn() {
                 Item::Function(self.parse_function_decl()?)
             } else if self.at_kw_workflow() {
@@ -59,6 +61,24 @@ impl<'a> Parser<'a> {
         let end = self.expect_semicolon()?.end;
         Ok(CapabilityDecl {
             capability,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_import_decl(&mut self) -> Result<ImportDecl, Diagnostic> {
+        let start = self.expect_kw_import()?.start;
+        let Some(path) = self.take_string() else {
+            return Err(Diagnostic::error(
+                format!(
+                    "expected string literal, found {}",
+                    self.current_kind_name()
+                ),
+                self.current().span,
+            ));
+        };
+        let end = self.expect_semicolon()?.end;
+        Ok(ImportDecl {
+            path,
             span: Span::new(start, end),
         })
     }
@@ -1514,6 +1534,10 @@ impl<'a> Parser<'a> {
         self.expect_simple(Self::at_kw_cap, "'cap'")
     }
 
+    fn expect_kw_import(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_import, "'import'")
+    }
+
     fn expect_kw_fn(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_fn, "'fn'")
     }
@@ -1789,6 +1813,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwCap)
     }
 
+    fn at_kw_import(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwImport)
+    }
+
     fn at_kw_fn(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwFn)
     }
@@ -2056,6 +2084,7 @@ impl<'a> Parser<'a> {
     fn current_kind_name(&self) -> &'static str {
         match &self.current().kind {
             TokenKind::KwCap => "'cap'",
+            TokenKind::KwImport => "'import'",
             TokenKind::KwFn => "'fn'",
             TokenKind::KwWorkflow => "'workflow'",
             TokenKind::KwAgent => "'agent'",

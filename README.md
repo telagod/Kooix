@@ -43,13 +43,14 @@ Kooix 已完成一条可运行的最小编译链路：
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
 - CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
+- 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
 
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`134 passed, 0 failed`
+- 结果：`137 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -79,6 +80,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.3: `while` + assignment（类型校验 + interpreter）
 - ✅ Phase 8.4: record literal + member projection（类型校验 + interpreter）
 - ✅ Phase 8.5: enum + match（类型校验 + interpreter）
+- ✅ Phase 8.6: 最小 import 多文件加载（include 风格）
 
 详见：`DESIGN.md`
 
@@ -136,6 +138,8 @@ cargo test -p kooixc
   - `examples/codegen.kooix`
   - `examples/run.kooix`
   - `examples/enum_match.kooix`
+  - `examples/import_main.kooix`
+  - `examples/import_lib.kooix`
 - 语法文档：
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
@@ -154,7 +158,7 @@ cargo test -p kooixc
 - borrow checker
 - 完整表达式系统与类型推导（当前仅实现函数体最小子集）
 - 函数体的 MIR/LLVM lowering 与运行语义
-- 模块系统 / 包管理
+- 完整模块系统 / 包管理（当前 `import` 仅 include 风格，未做 namespace/export）
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
 - 运行时与标准库设计
 
@@ -166,7 +170,7 @@ cargo test -p kooixc
 
 1. Kooix-Core runtime：VM/解释器 + 最小 stdlib（为 self-host 做准备）
 2. 错误处理与集合：`Result/Option` 约定 + 最小 `Vec/Map`（先 runtime/stdlib，后语法糖如 `?`）
-3. 模块系统与 import/linking（多文件编译闭环）
+3. 模块系统演进（namespace/export/依赖图/增量编译）
 4. 约束系统演进（trait-like bounds / where 规范化 / 约束求解）
 5. 诊断分级与 CI 门禁（warning 策略可配置）
 

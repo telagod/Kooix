@@ -4,6 +4,7 @@ pub mod hir;
 pub mod interp;
 pub mod lexer;
 pub mod llvm;
+pub mod loader;
 pub mod mir;
 pub mod native;
 pub mod parser;

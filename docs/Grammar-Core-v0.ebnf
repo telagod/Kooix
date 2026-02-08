@@ -6,6 +6,7 @@
 Program           = { Item } EOF ;
 
 Item              = CapabilityDecl
+                  | ImportDecl
                   | RecordDecl
                   | EnumDecl
                   | FunctionDecl
@@ -14,6 +15,8 @@ Item              = CapabilityDecl
                   ;
 
 CapabilityDecl    = "cap" TypeRef ";" ;
+
+ImportDecl        = "import" StringLiteral ";" ;
 
 (* ---------- Records ---------- *)
 

@@ -3,6 +3,7 @@ use crate::error::Span;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     KwCap,
+    KwImport,
     KwFn,
     KwWorkflow,
     KwAgent,

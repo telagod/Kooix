@@ -18,6 +18,12 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - AST: `Item::Capability(CapabilityDecl)`
   - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
 
+- Grammar: `ImportDecl ::= "import" StringLiteral ";"`
+  - AST: `Item::Import(ImportDecl)`
+  - Loader (include-style multi-file concatenation): `crates/kooixc/src/loader.rs`
+  - CLI entry: `crates/kooixc/src/main.rs` (`load_source_map`)
+  - Note: HIR lowering currently ignores `import` items (they are for loading only).
+
 - Grammar: `EnumDecl ::= "enum" ...`
   - AST: `Item::Enum(EnumDecl)`
   - HIR: `HirEnum`

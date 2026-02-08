@@ -23,6 +23,19 @@ fn add(x: Int, y: Int) -> Int;
 fn add(x: Int, y: Int) -> Int { x + y };
 ```
 
+### Valid: import (multi-file include)
+
+```kooix
+// file: import_lib.kooix
+fn helper() -> Int { 41 };
+```
+
+```kooix
+// file: import_main.kooix
+import "import_lib";
+fn main() -> Int { helper() + 1 };
+```
+
 ### Valid: if/else expression (Kooix-Core subset)
 
 ```kooix

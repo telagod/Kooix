@@ -110,7 +110,7 @@ agent <name>(<params>) -> <TypeRef>
 - `native --run` 通过 `-- <args...>` 透传运行参数。
 - `native --run --stdin <file>` 支持向子进程注入 stdin（`-` 表示读取当前进程 stdin）。
 - `native --run --timeout <ms>` 支持运行超时控制，超时后强制终止子进程。
-- 仅支持单文件分析，无 import/module linking。
+- 支持最小 `import` 多文件加载（CLI loader 拼接源文件）；尚无 module/namespace/export 与包管理。
 
 ## 兼容与迁移
 
@@ -412,3 +412,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：自举编译器需要代数数据类型（AST/Token/Result/Option）与结构化分支控制流（match）。同时保持强类型与可审计：missing variant 直接 error。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与语法文档。
 - **决策依据**：先落地 enum/match 的最小可用子集，为 Stage1 编译器数据结构与错误处理打基础；更复杂的泛型推导与语法糖（如 `?`）留到后续阶段。
+
+### 2026-02-08 - Phase 8.6：最小 import 多文件加载（include 风格）
+
+- **变更内容**：新增顶层 `import "path";` 声明；CLI 引入 `loader`：按 import 递归加载 `.kooix` 文件并拼接为单一 source，诊断输出尽量定位到原始文件路径与行列号。
+- **变更理由**：自举编译器不可避免需要多文件组织（AST/lexer/parser/sema 等模块拆分）；先用 include 风格建立最短闭环，后续再演进为 module/namespace/export。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`lib.rs`、`loader.rs`、`main.rs` 与语法示例。
+- **决策依据**：保持实现可审计（无新依赖），优先提供可用的多文件工作流与更可读的 diagnostics，为后续真正模块系统打底。

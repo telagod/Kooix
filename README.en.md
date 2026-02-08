@@ -45,13 +45,14 @@ Kooix already has a runnable minimal compiler pipeline:
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`.
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
+- Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
 
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `134 passed, 0 failed`
+- Result: `137 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -81,6 +82,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.3: `while` + assignment (type checking + interpreter)
 - ✅ Phase 8.4: record literals + member projection (type checking + interpreter)
 - ✅ Phase 8.5: enum + match (type checking + interpreter)
+- ✅ Phase 8.6: Minimal multi-file import loading (include-style)
 
 See also: `DESIGN.md`
 
@@ -138,6 +140,8 @@ cargo test -p kooixc
   - `examples/codegen.kooix`
   - `examples/run.kooix`
   - `examples/enum_match.kooix`
+  - `examples/import_main.kooix`
+  - `examples/import_lib.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
@@ -153,7 +157,7 @@ cargo test -p kooixc
 
 - borrow checker
 - full expression system and type inference
-- module system / package management
+- full module system / package management (current `import` is include-style; no namespace/export)
 - optimizer and full LLVM codegen (current backend is text-oriented)
 - runtime and standard library design
 
@@ -165,7 +169,7 @@ Recommended order:
 
 1. Kooix-Core runtime: a VM/interpreter + minimal stdlib (unlock self-hosting)
 2. Error handling + collections: `Result/Option` conventions + minimal `Vec/Map` (stdlib first, sugar like `?` later)
-3. Module system + import/linking (multi-file compilation loop)
+3. Module system evolution (namespace/export/dependency graph/incremental compilation)
 4. Constraint system evolution (trait-like bounds / `where` normalization / constraint solving)
 5. Diagnostic levels + CI policy gates (warning → configurable gate)
 

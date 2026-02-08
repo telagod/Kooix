@@ -10,6 +10,7 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
     Capability(CapabilityDecl),
+    Import(ImportDecl),
     Function(FunctionDecl),
     Workflow(WorkflowDecl),
     Agent(AgentDecl),
@@ -20,6 +21,12 @@ pub enum Item {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapabilityDecl {
     pub capability: TypeRef,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDecl {
+    pub path: String,
     pub span: Span,
 }
 

@@ -121,6 +121,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
                     span: capability_decl.span,
                 });
             }
+            Item::Import(_) => {}
             Item::Function(function_decl) => {
                 functions.push(HirFunction {
                     name: function_decl.name.clone(),
