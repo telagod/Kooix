@@ -65,6 +65,7 @@ enum S1Stmt {
   Let(S1Let);
   Assign(S1Assign);
   Return(S1Return);
+  While(S1While);
   ExprStmt(S1Expr);
 };
 
@@ -81,6 +82,11 @@ record S1Assign {
 
 record S1Return {
   value: S1Expr;
+};
+
+record S1While {
+  cond: S1Expr;
+  body: S1Block;
 };
 
 enum S1Expr {

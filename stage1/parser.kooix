@@ -1232,6 +1232,103 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             };
             0
           };
+          KwWhile => {
+            cur = cell0.tail;
+            let cond: S1Expr = S1Expr.Path("");
+            let empty_stmts: List<S1Stmt> = Nil;
+            let empty_result: Option<S1Expr> = None;
+            let body: S1Block = S1Block { stmts: empty_stmts; result: empty_result; };
+
+            // cond expr
+            let parsed_cond: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+              s1_parse_expr(cur);
+            match parsed_cond {
+              Err(e) => {
+                ok = false;
+                diag = e;
+                done = true;
+                0
+              };
+              Ok(pair) => {
+                cond = pair.a;
+                cur = pair.b;
+                0
+              };
+            };
+
+            // {
+            if ok == true {
+              match cur {
+                Cons(w0) => {
+                  match w0.head.kind {
+                    LBrace => {
+                      let parsed_body: Result<Pair<S1Block, List<S1Token>>, S1Diagnostic> =
+                        s1_parse_block(w0.tail);
+                      match parsed_body {
+                        Err(e) => {
+                          ok = false;
+                          diag = e;
+                          done = true;
+                          0
+                        };
+                        Ok(pair) => {
+                          body = pair.a;
+                          cur = pair.b;
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, w0.head.span.start, w0.head.span.end, "parser: expected '{' after while condition");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+                _ => {
+                  ok = false;
+                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected '{' after while condition");
+                  done = true;
+                  0
+                };
+              };
+            };
+
+            // ;
+            if ok == true {
+              match cur {
+                Cons(w1) => {
+                  match w1.head.kind {
+                    Semicolon => {
+                      cur = w1.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, w1.head.span.start, w1.head.span.end, "parser: expected ';' after while block");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+                _ => {
+                  ok = false;
+                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ';' after while block");
+                  done = true;
+                  0
+                };
+              };
+            };
+
+            if ok == true {
+              let st: S1Stmt = While(S1While { cond: cond; body: body; });
+              stmts_rev = Cons(ListCons<S1Stmt> { head: st; tail: stmts_rev; });
+              0;
+            };
+            0
+          };
           KwReturn => {
             cur = cell0.tail;
             let value: S1Expr = S1Expr.Path("");

@@ -1,0 +1,69 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { while cond { tick(); }; 0 };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  match f.body {
+                    Some(b) => {
+                      match b.stmts {
+                        Cons(s0) => {
+                          match s0.head {
+                            While(w) => {
+                              match w.cond {
+                                Path(name) => {
+                                  if name == "cond" {
+                                    match w.body.stmts {
+                                      Cons(ws0) => {
+                                        match ws0.head {
+                                          ExprStmt(e) => {
+                                            match e {
+                                              Call(c) => {
+                                                if c.callee == "tick" { 0 } else { 21 }
+                                              };
+                                              _ => 20;
+                                            }
+                                          };
+                                          _ => 19;
+                                        }
+                                      };
+                                      _ => 18;
+                                    }
+                                  } else { 17 }
+                                };
+                                _ => 16;
+                              }
+                            };
+                            _ => 15;
+                          }
+                        };
+                        _ => 14;
+                      }
+                    };
+                    _ => 13;
+                  }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};
+
