@@ -1151,8 +1151,7 @@ impl<'a> Parser<'a> {
             }
 
             let mut type_args = Vec::new();
-            if self.at_langle() {
-                let saved = self.index;
+            if self.at_langle() && self.looks_like_generic_record_literal() {
                 self.expect_langle()?;
                 if !self.at_rangle() {
                     loop {
@@ -1165,11 +1164,6 @@ impl<'a> Parser<'a> {
                     }
                 }
                 self.expect_rangle()?;
-
-                if !self.at_lbrace() {
-                    self.index = saved;
-                    type_args.clear();
-                }
             }
 
             if self.at_lbrace() {
@@ -1716,6 +1710,39 @@ impl<'a> Parser<'a> {
             self.tokens.get(self.index + 1).map(|token| &token.kind),
             Some(TokenKind::Eq)
         )
+    }
+
+    fn looks_like_generic_record_literal(&self) -> bool {
+        if !self.at_langle() {
+            return false;
+        }
+
+        let mut depth = 0usize;
+        let mut index = self.index;
+        while let Some(token) = self.tokens.get(index) {
+            match &token.kind {
+                TokenKind::LAngle => depth += 1,
+                TokenKind::RAngle => {
+                    if depth == 0 {
+                        return false;
+                    }
+
+                    depth -= 1;
+                    if depth == 0 {
+                        return matches!(
+                            self.tokens.get(index + 1).map(|token| &token.kind),
+                            Some(TokenKind::LBrace)
+                        );
+                    }
+                }
+                TokenKind::Eof => break,
+                _ => {}
+            }
+
+            index += 1;
+        }
+
+        false
     }
 
     fn current_kind_name(&self) -> &'static str {
