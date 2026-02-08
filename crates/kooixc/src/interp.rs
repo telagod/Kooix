@@ -211,7 +211,7 @@ fn eval_function(
 
     let mut env = Env::new();
     for (param, value) in function.params.iter().zip(args.iter()) {
-        if !value_conforms_to_type(value, &param.ty) {
+        if !value_conforms_to_type_in_function(value, &param.ty, function) {
             return Err(Diagnostic::error(
                 format!(
                     "function '{}' parameter '{}' expects type '{}' but got '{}'",
@@ -281,7 +281,7 @@ fn eval_function(
         return Ok(Value::Unit);
     }
 
-    if !value_conforms_to_type(&value, &function.return_type) {
+    if !value_conforms_to_type_in_function(&value, &function.return_type, function) {
         return Err(Diagnostic::error(
             format!(
                 "function '{}' evaluated to '{}' but declared return type is '{}'",
@@ -294,6 +294,14 @@ fn eval_function(
     }
 
     Ok(value)
+}
+
+fn value_conforms_to_type_in_function(value: &Value, ty: &TypeRef, function: &HirFunction) -> bool {
+    if ty.args.is_empty() && function.generics.iter().any(|generic| generic.name == ty.head()) {
+        return true;
+    }
+
+    value_conforms_to_type(value, ty)
 }
 
 fn eval_expr(
@@ -399,7 +407,7 @@ fn eval_expr(
                 )),
             }
         }
-        Expr::Call { target, args } => {
+        Expr::Call { target, args, .. } => {
             let target_display = target.join(".");
 
             if target.len() == 1 {

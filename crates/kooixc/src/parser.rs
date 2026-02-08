@@ -303,6 +303,38 @@ impl<'a> Parser<'a> {
         let start = self.expect_kw_fn()?.start;
         let (name, _) = self.expect_ident()?;
 
+        let mut generics = Vec::new();
+        if self.at_langle() {
+            self.expect_langle()?;
+            if !self.at_rangle() {
+                loop {
+                    let (generic_name, _) = self.expect_ident()?;
+                    let bounds = if self.at_colon() {
+                        self.expect_colon()?;
+                        let mut bounds = Vec::new();
+                        bounds.push(self.parse_type_ref()?);
+                        while self.at_plus() {
+                            self.expect_plus()?;
+                            bounds.push(self.parse_type_ref()?);
+                        }
+                        bounds
+                    } else {
+                        Vec::new()
+                    };
+                    generics.push(RecordGenericParam {
+                        name: generic_name,
+                        bounds,
+                    });
+                    if self.at_comma() {
+                        self.advance();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            self.expect_rangle()?;
+        }
+
         self.expect_lparen()?;
         let mut params = Vec::new();
         if !self.at_rparen() {
@@ -366,6 +398,7 @@ impl<'a> Parser<'a> {
 
         Ok(FunctionDecl {
             name,
+            generics,
             params,
             return_type,
             intent,
@@ -1321,6 +1354,22 @@ impl<'a> Parser<'a> {
                 segments.push(next);
             }
 
+            let mut call_type_args = Vec::new();
+            if self.at_langle() && self.looks_like_generic_call() {
+                self.expect_langle()?;
+                if !self.at_rangle() {
+                    loop {
+                        call_type_args.push(self.parse_type_arg()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect_rangle()?;
+            }
+
             if self.at_lparen() {
                 self.advance();
                 let mut args = Vec::new();
@@ -1337,6 +1386,7 @@ impl<'a> Parser<'a> {
                 self.expect_rparen()?;
                 return Ok(Expr::Call {
                     target: segments,
+                    type_args: call_type_args,
                     args,
                 });
             }
@@ -1442,6 +1492,22 @@ impl<'a> Parser<'a> {
                 segments.push(next);
             }
 
+            let mut call_type_args = Vec::new();
+            if self.at_langle() && self.looks_like_generic_call() {
+                self.expect_langle()?;
+                if !self.at_rangle() {
+                    loop {
+                        call_type_args.push(self.parse_type_arg()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect_rangle()?;
+            }
+
             if self.at_lparen() {
                 self.advance();
                 let mut args = Vec::new();
@@ -1458,6 +1524,7 @@ impl<'a> Parser<'a> {
                 self.expect_rparen()?;
                 return Ok(Expr::Call {
                     target: segments,
+                    type_args: call_type_args,
                     args,
                 });
             }
@@ -2084,6 +2151,39 @@ impl<'a> Parser<'a> {
                         return matches!(
                             self.tokens.get(index + 1).map(|token| &token.kind),
                             Some(TokenKind::LBrace)
+                        );
+                    }
+                }
+                TokenKind::Eof => break,
+                _ => {}
+            }
+
+            index += 1;
+        }
+
+        false
+    }
+
+    fn looks_like_generic_call(&self) -> bool {
+        if !self.at_langle() {
+            return false;
+        }
+
+        let mut depth = 0usize;
+        let mut index = self.index;
+        while let Some(token) = self.tokens.get(index) {
+            match &token.kind {
+                TokenKind::LAngle => depth += 1,
+                TokenKind::RAngle => {
+                    if depth == 0 {
+                        return false;
+                    }
+
+                    depth -= 1;
+                    if depth == 0 {
+                        return matches!(
+                            self.tokens.get(index + 1).map(|token| &token.kind),
+                            Some(TokenKind::LParen)
                         );
                     }
                 }

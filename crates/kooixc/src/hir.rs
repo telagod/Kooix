@@ -23,6 +23,7 @@ pub struct HirCapability {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirFunction {
     pub name: String,
+    pub generics: Vec<RecordGenericParam>,
     pub params: Vec<HirParam>,
     pub return_type: TypeRef,
     pub intent: Option<String>,
@@ -125,6 +126,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
             Item::Function(function_decl) => {
                 functions.push(HirFunction {
                     name: function_decl.name.clone(),
+                    generics: function_decl.generics.clone(),
                     params: function_decl
                         .params
                         .iter()

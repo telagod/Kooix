@@ -67,6 +67,7 @@ pub struct EnumVariant {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDecl {
     pub name: String,
+    pub generics: Vec<RecordGenericParam>,
     pub params: Vec<Param>,
     pub return_type: TypeRef,
     pub intent: Option<String>,
@@ -150,6 +151,7 @@ pub enum Expr {
     },
     Call {
         target: Vec<String>,
+        type_args: Vec<TypeArg>,
         args: Vec<Expr>,
     },
     If {

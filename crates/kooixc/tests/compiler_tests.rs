@@ -166,9 +166,21 @@ fn main() -> Int { 0 };
 #[test]
 fn runs_interpreter_for_simple_main() {
     let source = r#"
-fn add(a: Int, b: Int) -> Int { a + b };
-fn main() -> Int { add(20, 22) };
-"#;
+	fn add(a: Int, b: Int) -> Int { a + b };
+	fn main() -> Int { add(20, 22) };
+	"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(42));
+}
+
+#[test]
+fn runs_interpreter_with_generic_function_call_type_args() {
+    let source = r#"
+	fn id<T>(x: T) -> T { x };
+	fn main() -> Int { id<Int>(42) };
+	"#;
 
     let result = run_source(source).expect("run should succeed");
     assert!(result.diagnostics.is_empty());
@@ -178,8 +190,8 @@ fn main() -> Int { add(20, 22) };
 #[test]
 fn runs_interpreter_with_if_expression() {
     let source = r#"
-fn main() -> Int { if true { 1 } else { 2 } };
-"#;
+	fn main() -> Int { if true { 1 } else { 2 } };
+	"#;
 
     let result = run_source(source).expect("run should succeed");
     assert!(result.diagnostics.is_empty());

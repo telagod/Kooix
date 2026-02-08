@@ -12,6 +12,7 @@ use crate::hir::{
 
 #[derive(Debug, Clone)]
 struct InvocableSignature {
+    generics: Vec<RecordGenericParam>,
     params: Vec<TypeRef>,
     return_type: TypeRef,
 }
@@ -33,6 +34,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         declared_invocable_signatures
             .entry(function.name.clone())
             .or_insert_with(|| InvocableSignature {
+                generics: function.generics.clone(),
                 params: function
                     .params
                     .iter()
@@ -45,6 +47,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         declared_invocable_signatures
             .entry(workflow.name.clone())
             .or_insert_with(|| InvocableSignature {
+                generics: Vec::new(),
                 params: workflow
                     .params
                     .iter()
@@ -57,6 +60,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         declared_invocable_signatures
             .entry(agent.name.clone())
             .or_insert_with(|| InvocableSignature {
+                generics: Vec::new(),
                 params: agent.params.iter().map(|param| param.ty.clone()).collect(),
                 return_type: agent.return_type.clone(),
             });
@@ -2494,20 +2498,139 @@ fn infer_expr_type_with_expected(
             ));
             None
         }
-        Expr::Call { target, args } => {
+        Expr::Call {
+            target,
+            type_args,
+            args,
+        } => {
             let target_display = target.join(".");
 
             if target.len() == 1 {
                 let name = target[0].as_str();
                 if let Some(signature) = signatures.get(name) {
-                    if signature.params.len() != args.len() {
+                    let mut expected_params: Vec<TypeRef> = signature.params.clone();
+                    let mut expected_return: TypeRef = signature.return_type.clone();
+
+                    if signature.generics.is_empty() {
+                        if !type_args.is_empty() {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' is not generic but call provides {} type argument(s)",
+                                    name,
+                                    type_args.len()
+                                ),
+                                function.span,
+                            ));
+                            return None;
+                        }
+                    } else {
+                        if type_args.is_empty() {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' is generic and requires explicit type arguments (use '{}<...>(...)')",
+                                    name, name
+                                ),
+                                function.span,
+                            ));
+                            return None;
+                        }
+
+                        if type_args.len() != signature.generics.len() {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' expects {} type argument(s) but call provides {}",
+                                    name,
+                                    signature.generics.len(),
+                                    type_args.len()
+                                ),
+                                function.span,
+                            ));
+                            return None;
+                        }
+
+                        for arg in type_args {
+                            match arg {
+                                TypeArg::Type(_) => {}
+                                TypeArg::String(_) | TypeArg::Number(_) => {
+                                    diagnostics.push(Diagnostic::error(
+                                        format!(
+                                            "function '{}' call uses non-type generic argument '{}'; only type arguments are supported for functions",
+                                            name,
+                                            arg
+                                        ),
+                                        function.span,
+                                    ));
+                                    return None;
+                                }
+                            }
+                        }
+
+                        for (index, generic) in signature.generics.iter().enumerate() {
+                            let Some(TypeArg::Type(actual_ty)) = type_args.get(index) else {
+                                continue;
+                            };
+
+                            if generic.bounds.is_empty() {
+                                continue;
+                            }
+
+                            let mut failed_bounds = Vec::new();
+                            for bound in &generic.bounds {
+                                if !type_satisfies_bound(actual_ty, bound, declared_record_types) {
+                                    failed_bounds.push(bound.to_string());
+                                }
+                            }
+
+                            if failed_bounds.is_empty() {
+                                continue;
+                            }
+
+                            if failed_bounds.len() == 1 {
+                                diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "function '{}' call provides generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                                        name,
+                                        generic.name,
+                                        actual_ty,
+                                        failed_bounds[0]
+                                    ),
+                                    function.span,
+                                ));
+                            } else {
+                                diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "function '{}' call provides generic argument '{}' as '{}' but it must satisfy bounds '{}'",
+                                        name,
+                                        generic.name,
+                                        actual_ty,
+                                        failed_bounds.join(" + ")
+                                    ),
+                                    function.span,
+                                ));
+                            }
+                        }
+
+                        expected_params = expected_params
+                            .iter()
+                            .map(|param| {
+                                substitute_record_generic_type(param, &signature.generics, type_args)
+                            })
+                            .collect();
+                        expected_return = substitute_record_generic_type(
+                            &expected_return,
+                            &signature.generics,
+                            type_args,
+                        );
+                    }
+
+                    if expected_params.len() != args.len() {
                         diagnostics.push(Diagnostic::error(
                             format!(
                                 "function '{}' calls '{}' with {} args but expected {}",
                                 function.name,
                                 name,
                                 args.len(),
-                                signature.params.len()
+                                expected_params.len()
                             ),
                             function.span,
                         ));
@@ -2515,7 +2638,7 @@ fn infer_expr_type_with_expected(
                     }
 
                     for (index, (arg, expected_ty)) in
-                        args.iter().zip(signature.params.iter()).enumerate()
+                        args.iter().zip(expected_params.iter()).enumerate()
                     {
                         let Some(actual_ty) = infer_expr_type_with_expected(
                             function,
@@ -2544,8 +2667,19 @@ fn infer_expr_type_with_expected(
                         }
                     }
 
-                    return Some(signature.return_type.clone());
+                    return Some(expected_return);
                 }
+            }
+
+            if !type_args.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "call '{}' provides type arguments, but only function calls support '<...>' currently",
+                        target_display
+                    ),
+                    function.span,
+                ));
+                return None;
             }
 
             let (enum_name, enum_schema, payload_template, variant_display) = match target
