@@ -32,29 +32,44 @@ fn main() -> Int {
                                           match f.params {
                                             Cons(p0) => {
                                               if p0.head.name == "xs" {
-                                                if p0.head.ty.name == "List" {
-                                                  match p0.head.ty.args {
-                                                    Cons(t0) => {
-                                                      if t0.head.name == "Int" {
-                                                        match t0.head.args {
-                                                          Nil => {
-                                                            match t0.tail {
-                                                              Nil => {
-                                                                if f.return_type.name == "Int" {
-                                                                  match f.return_type.args {
-                                                                    Nil => 0;
-                                                                    _ => 30;
-                                                                  }
-                                                                } else { 29 }
+                                                if p0.head.ty.path.name == "List" {
+                                                  match p0.head.ty.path.ns {
+                                                    None => {
+                                                      match p0.head.ty.args {
+                                                        Cons(t0) => {
+                                                          if t0.head.path.name == "Int" {
+                                                            match t0.head.path.ns {
+                                                              None => {
+                                                                match t0.head.args {
+                                                                  Nil => {
+                                                                    match t0.tail {
+                                                                      Nil => {
+                                                                        if f.return_type.path.name == "Int" {
+                                                                          match f.return_type.path.ns {
+                                                                            None => {
+                                                                              match f.return_type.args {
+                                                                                Nil => 0;
+                                                                                _ => 30;
+                                                                              }
+                                                                            };
+                                                                            _ => 31;
+                                                                          }
+                                                                        } else { 29 }
+                                                                      };
+                                                                      _ => 28;
+                                                                    }
+                                                                  };
+                                                                  _ => 27;
+                                                                }
                                                               };
-                                                              _ => 28;
+                                                              _ => 32;
                                                             }
-                                                          };
-                                                          _ => 27;
-                                                        }
-                                                      } else { 26 }
+                                                          } else { 26 }
+                                                        };
+                                                        _ => 25;
+                                                      }
                                                     };
-                                                    _ => 25;
+                                                    _ => 33;
                                                   }
                                                 } else { 24 }
                                               } else { 23 }

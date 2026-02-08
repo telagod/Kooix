@@ -30,27 +30,32 @@ fn main() -> Int {
                                       if v1.head.name == "Some" {
                                         match v1.head.payload_ty {
                                           Some(ty) => {
-                                            if ty.name == "Int" {
-                                              match ty.args {
-                                                Nil => {
-                                                  match v1.tail {
+                                            if ty.path.name == "Int" {
+                                              match ty.path.ns {
+                                                None => {
+                                                  match ty.args {
                                                     Nil => {
-                                                      match i0.tail {
-                                                        Cons(i1) => {
-                                                          match i1.head {
-                                                            Function(fun) => {
-                                                              if fun.name == "main" { 0 } else { 30 }
+                                                      match v1.tail {
+                                                        Nil => {
+                                                          match i0.tail {
+                                                            Cons(i1) => {
+                                                              match i1.head {
+                                                                Function(fun) => {
+                                                                  if fun.name == "main" { 0 } else { 30 }
+                                                                };
+                                                                _ => 31;
+                                                              }
                                                             };
-                                                            _ => 31;
+                                                            _ => 32;
                                                           }
                                                         };
-                                                        _ => 32;
+                                                        _ => 29;
                                                       }
                                                     };
-                                                    _ => 29;
+                                                    _ => 128;
                                                   }
                                                 };
-                                                _ => 128;
+                                                _ => 129;
                                               }
                                             } else { 28 }
                                           };

@@ -23,23 +23,32 @@ fn main() -> Int {
                         if g0.head.name == "T" {
                           match g0.head.bounds {
                             Cons(b0) => {
-                              if b0.head.name == "Answer" {
-                                match b0.head.args {
-                                  Nil => {
-                                    match b0.tail {
-                                      Cons(b1) => {
-                                        if b1.head.name == "Summary" {
-                                          match b1.head.args {
+                              if b0.head.path.name == "Answer" {
+                                match b0.head.path.ns {
+                                  None => {
+                                    match b0.head.args {
+                                      Nil => {
+                                        match b0.tail {
+                                          Cons(b1) => {
+                                            if b1.head.path.name == "Summary" {
+                                              match b1.head.path.ns {
+                                                None => {
+                                                  match b1.head.args {
                                             Nil => {
                                               match b1.tail {
                                                 Nil => {
                                                   match r.fields {
                                                     Cons(f0) => {
                                                       if f0.head.name == "value" {
-                                                        if f0.head.ty.name == "T" {
-                                                          match f0.head.ty.args {
-                                                            Nil => 0;
-                                                            _ => 40;
+                                                        if f0.head.ty.path.name == "T" {
+                                                          match f0.head.ty.path.ns {
+                                                            None => {
+                                                              match f0.head.ty.args {
+                                                                Nil => 0;
+                                                                _ => 40;
+                                                              }
+                                                            };
+                                                            _ => 41;
                                                           }
                                                         } else { 39 }
                                                       } else { 38 }
@@ -51,13 +60,19 @@ fn main() -> Int {
                                               }
                                             };
                                             _ => 35;
-                                          }
-                                        } else { 34 }
+                                                  }
+                                                };
+                                                _ => 42;
+                                              }
+                                            } else { 34 }
                                       };
                                       _ => 33;
                                     }
                                   };
                                   _ => 32;
+                                }
+                                  };
+                                  _ => 43;
                                 }
                               } else { 31 }
                             };
@@ -79,4 +94,3 @@ fn main() -> Int {
     };
   }
 };
-

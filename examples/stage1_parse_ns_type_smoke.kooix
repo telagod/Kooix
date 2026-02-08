@@ -1,0 +1,86 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn len(xs: prelude::List<prelude::Int>) -> prelude::Int;";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  if f.name == "len" {
+                    match f.params {
+                      Cons(p0) => {
+                        if p0.head.name == "xs" {
+                          if p0.head.ty.path.name == "List" {
+                            match p0.head.ty.path.ns {
+                              Some(ns0) => {
+                                if ns0 == "prelude" {
+                                  match p0.head.ty.args {
+                                    Cons(t0) => {
+                                      if t0.head.path.name == "Int" {
+                                        match t0.head.path.ns {
+                                          Some(ns1) => {
+                                            if ns1 == "prelude" {
+                                              match t0.head.args {
+                                                Nil => {
+                                                  match t0.tail {
+                                                    Nil => {
+                                                      if f.return_type.path.name == "Int" {
+                                                        match f.return_type.path.ns {
+                                                          Some(ns2) => {
+                                                            if ns2 == "prelude" {
+                                                              match f.return_type.args {
+                                                                Nil => 0;
+                                                                _ => 30;
+                                                              }
+                                                            } else { 29 }
+                                                          };
+                                                          _ => 28;
+                                                        }
+                                                      } else { 27 }
+                                                    };
+                                                    _ => 26;
+                                                  }
+                                                };
+                                                _ => 25;
+                                              }
+                                            } else { 24 }
+                                          };
+                                          _ => 23;
+                                        }
+                                      } else { 22 }
+                                    };
+                                    _ => 21;
+                                  }
+                                } else { 20 }
+                              };
+                              _ => 19;
+                            }
+                          } else { 18 }
+                        } else { 17 }
+                      };
+                      _ => 16;
+                    }
+                  } else { 15 }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};
+

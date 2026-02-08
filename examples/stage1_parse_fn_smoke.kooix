@@ -24,10 +24,15 @@ fn main() -> Int {
                           Nil => {
                             match f.body {
                               None => {
-                                if f.return_type.name == "Int" {
-                                  match f.return_type.args {
-                                    Nil => 0;
-                                    _ => 9;
+                                if f.return_type.path.name == "Int" {
+                                  match f.return_type.path.ns {
+                                    None => {
+                                      match f.return_type.args {
+                                        Nil => 0;
+                                        _ => 9;
+                                      }
+                                    };
+                                    _ => 10;
                                   }
                                 } else { 5 }
                               };

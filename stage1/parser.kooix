@@ -454,7 +454,7 @@ fn s1_parse_type(tokens: List<S1Token>) -> Result<Pair<S1Type, List<S1Token>>, S
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected type");
 
   let empty_args: List<S1Type> = Nil;
-  let ty: S1Type = S1Type { name: ""; args: empty_args; };
+  let ty: S1Type = S1Type { path: s1_empty_path(); args: empty_args; };
   let rest: List<S1Token> = tokens;
 
   match tokens {
@@ -465,8 +465,9 @@ fn s1_parse_type(tokens: List<S1Token>) -> Result<Pair<S1Type, List<S1Token>>, S
     Cons(cell0) => {
       match cell0.head.kind {
         Ident(name) => {
-          ty = S1Type { name: name; args: empty_args; };
-          rest = cell0.tail;
+          let parsed: Pair<S1Path, List<S1Token>> = s1_parse_path_tail(name, cell0.tail);
+          ty = S1Type { path: parsed.a; args: empty_args; };
+          rest = parsed.b;
           0
         };
         _ => {
@@ -555,7 +556,7 @@ fn s1_parse_type(tokens: List<S1Token>) -> Result<Pair<S1Type, List<S1Token>>, S
 
             if ok == true {
               let args: List<S1Type> = s1_reverse_types(args_rev);
-              ty = S1Type { name: ty.name; args: args; };
+              ty = S1Type { path: ty.path; args: args; };
               0
             } else {
               0
@@ -1406,7 +1407,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             cur = cell0.tail;
             let name: Text = "";
             let empty_args: List<S1Type> = Nil;
-            let ty: S1Type = S1Type { name: ""; args: empty_args; };
+            let ty: S1Type = S1Type { path: s1_empty_path(); args: empty_args; };
             let value: S1Expr = S1Expr.Path(s1_empty_path());
 
             // name
@@ -2070,7 +2071,7 @@ evidence {
             let generics: List<S1GenericParam> = Nil;
             let params_rev: List<S1Param> = Nil;
             let empty_args: List<S1Type> = Nil;
-            let ret_ty: S1Type = S1Type { name: ""; args: empty_args; };
+            let ret_ty: S1Type = S1Type { path: s1_empty_path(); args: empty_args; };
             let body: Option<S1Block> = None;
 
             // name
@@ -2173,7 +2174,7 @@ evidence {
                       let params_done: Bool = false;
                       while params_done == false {
                         let p_name: Text = "";
-                        let p_ty: S1Type = S1Type { name: ""; args: empty_args; };
+                        let p_ty: S1Type = S1Type { path: s1_empty_path(); args: empty_args; };
 
                         // param name
                         match cur {
@@ -2581,7 +2582,7 @@ evidence {
 
                         // type
                         let empty_args: List<S1Type> = Nil;
-                        let field_ty: S1Type = S1Type { name: ""; args: empty_args; };
+                        let field_ty: S1Type = S1Type { path: s1_empty_path(); args: empty_args; };
                         if ok == true {
                           let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
                             s1_parse_type(cur);
