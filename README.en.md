@@ -47,13 +47,14 @@ Kooix already has a runnable minimal compiler pipeline:
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers).
+- Enum variant namespacing: `Enum.Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
 
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `138 passed, 0 failed`
+- Result: `141 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -85,6 +86,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.5: enum + match (type checking + interpreter)
 - ✅ Phase 8.6: Minimal multi-file import loading (include-style)
 - ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
+- ✅ Phase 8.8: Enum variant namespacing (`Enum.Variant`) + allow cross-enum duplicates
 
 See also: `DESIGN.md`
 
@@ -145,6 +147,7 @@ cargo test -p kooixc
   - `examples/import_main.kooix`
   - `examples/import_lib.kooix`
   - `examples/stdlib_smoke.kooix`
+  - `examples/namespaced_variants.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`

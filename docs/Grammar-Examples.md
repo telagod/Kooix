@@ -81,6 +81,21 @@ fn main() -> Int {
 };
 ```
 
+### Valid: namespaced enum variants (avoid cross-enum conflicts)
+
+```kooix
+enum Option<T> { Some(T); None; };
+enum Maybe<T> { Some(T); None; };
+
+fn main() -> Int {
+  let x: Option<Int> = Option.Some(42);
+  match x {
+    Some(v) => v;
+    None => 0;
+  }
+};
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix

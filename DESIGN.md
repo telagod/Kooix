@@ -419,3 +419,17 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：自举编译器不可避免需要多文件组织（AST/lexer/parser/sema 等模块拆分）；先用 include 风格建立最短闭环，后续再演进为 module/namespace/export。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`lib.rs`、`loader.rs`、`main.rs` 与语法示例。
 - **决策依据**：保持实现可审计（无新依赖），优先提供可用的多文件工作流与更可读的 diagnostics，为后续真正模块系统打底。
+
+### 2026-02-08 - Phase 8.7：stdlib prelude 起步 + call arg expected-type 推导
+
+- **变更内容**：调用表达式（call）在参数逐个校验时，将参数类型作为 expected type 传入表达式类型推导（使 `Some(7)` 之类的泛型 enum variant 在函数参数位置可推导）；新增 `stdlib/prelude.kooix`（`Option/Result/List/Pair`）与 `examples/stdlib_smoke.kooix` 作为可运行 smoke。
+- **变更理由**：降低泛型 enum 的使用门槛，为写 Stage1 编译器所需的数据结构（Option/Result/List）铺路。
+- **影响范围**：`sema.rs`、`compiler_tests.rs`、`stdlib/`、`examples/` 与 README。
+- **决策依据**：保持推导规则最小化（expected-type 驱动），不引入全量 unification/trait 求解器。
+
+### 2026-02-08 - Phase 8.8：enum variant namespacing + 跨 enum 重名放开
+
+- **变更内容**：扩展 enum variant 的构造与 pattern 语法，支持 `Enum.Variant` / `Enum.Variant(payload)` 与 `Enum.Variant(bind?)`；允许跨 enum 同名 variant；当 unqualified variant 出现歧义时给出 error 并要求使用 namespaced 形式；interpreter 引入 qualified/unqualified variant registry 保证运行期可解析。
+- **变更理由**：移除“全局 variant 名唯一”限制，避免 stdlib/编译器 AST 被迫使用难读前缀命名；同时让代码语义更显式，AI 读取更像文档。
+- **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与语法文档。
+- **决策依据**：先以语法级 namespacing 提供可用的冲突消解手段，后续再演进为 module/namespace/export 体系。

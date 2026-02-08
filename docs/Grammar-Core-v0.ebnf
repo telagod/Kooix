@@ -241,10 +241,10 @@ MatchExpr          = "match" Expr "{"
 MatchArm           = MatchPattern "=>" ( Block | Expr ) ";" ;
 
 MatchPattern       = "_"
-                  |  Identifier [ "(" Identifier ")" ]
+                  |  Identifier [ "." Identifier ] [ "(" Identifier ")" ]
                   ;
 
-CallExpr           = Identifier "(" [ Expr { "," Expr } ] ")" ;
+CallExpr           = SymbolPath "(" [ Expr { "," Expr } ] ")" ;
 
 TypeRef           = Identifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
 

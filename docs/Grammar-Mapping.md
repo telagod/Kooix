@@ -42,6 +42,7 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - Parser: `crates/kooixc/src/parser.rs` (`parse_block` + `parse_expr`, includes assignment + `if/else` + `while` + record literal)
   - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference, includes member projection + record literal + `if/else` + `while` + `match` + enum constructors)
   - Runtime: `crates/kooixc/src/interp.rs` (minimal interpreter; effectful functions are rejected)
+  - Note: enum variant construction/patterns support both unqualified (`Some(1)`) and namespaced (`Option.Some(1)`) forms; cross-enum duplicate variant names are allowed, but ambiguous unqualified constructors are rejected.
 
 ### Type system nodes
 

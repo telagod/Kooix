@@ -45,13 +45,14 @@ Kooix 已完成一条可运行的最小编译链路：
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper）。
+- enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
 
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`138 passed, 0 failed`
+- 结果：`141 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -83,6 +84,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.5: enum + match（类型校验 + interpreter）
 - ✅ Phase 8.6: 最小 import 多文件加载（include 风格）
 - ✅ Phase 8.7: 预置 stdlib（prelude）+ call arg expected-type 推导
+- ✅ Phase 8.8: enum variant namespacing（`Enum.Variant`）+ 跨 enum 重名放开
 
 详见：`DESIGN.md`
 
@@ -143,6 +145,7 @@ cargo test -p kooixc
   - `examples/import_main.kooix`
   - `examples/import_lib.kooix`
   - `examples/stdlib_smoke.kooix`
+  - `examples/namespaced_variants.kooix`
 - 语法文档：
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`

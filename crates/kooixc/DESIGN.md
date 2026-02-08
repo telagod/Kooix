@@ -59,3 +59,6 @@
 - 增加 Kooix-Core 函数体最小子集（`let`/assignment/`return`/基础表达式/`if`/`while`）。
 - 增加 interpreter `run` 闭环（纯函数体子集，禁止 effects）。
 - 增加 include 风格 `import` 多文件加载（loader + CLI 诊断定位）。
+- 调用表达式参数引入 expected-type 推导，提升泛型 enum variant 在 call arg 位置的可用性。
+- enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)` 与 pattern namespacing；放开跨 enum 重名（歧义时报错并要求 namespaced）。
+- 新增 `stdlib/prelude.kooix` 与 `examples/stdlib_smoke.kooix`（为 self-host 的 runtime/stdlib 演进打底）。
