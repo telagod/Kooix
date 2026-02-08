@@ -1,9 +1,10 @@
 use crate::ast::{
     AgentDecl, AgentPolicy, AssignStmt, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
-    EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy, FailureRule, FailureValue,
-    FunctionDecl, Item, LetStmt, LoopSpec, OutputField, Param, PredicateOp, PredicateValue,
-    Program, RecordDecl, RecordField, RecordGenericParam, RecordLitField, ReturnStmt, StateRule,
-    Statement, TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
+    EnumDecl, EnumVariant, EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy,
+    FailureRule, FailureValue, FunctionDecl, Item, LetStmt, LoopSpec, MatchArm, MatchArmBody,
+    MatchPattern, OutputField, Param, PredicateOp, PredicateValue, Program, RecordDecl,
+    RecordField, RecordGenericParam, RecordLitField, ReturnStmt, StateRule, Statement, TypeArg,
+    TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -35,6 +36,8 @@ impl<'a> Parser<'a> {
                 Item::Agent(self.parse_agent_decl()?)
             } else if self.at_kw_record() {
                 Item::Record(self.parse_record_decl()?)
+            } else if self.at_kw_enum() {
+                Item::Enum(self.parse_enum_decl()?)
             } else {
                 return Err(Diagnostic::error(
                     format!(
@@ -161,6 +164,117 @@ impl<'a> Parser<'a> {
             name,
             generics,
             fields,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_enum_decl(&mut self) -> Result<EnumDecl, Diagnostic> {
+        let start = self.expect_kw_enum()?.start;
+        let (name, _) = self.expect_ident()?;
+
+        let mut generics = Vec::new();
+        if self.at_langle() {
+            self.expect_langle()?;
+            if !self.at_rangle() {
+                loop {
+                    let (generic_name, _) = self.expect_ident()?;
+                    let bounds = if self.at_colon() {
+                        self.expect_colon()?;
+                        let mut bounds = Vec::new();
+                        bounds.push(self.parse_type_ref()?);
+                        while self.at_plus() {
+                            self.expect_plus()?;
+                            bounds.push(self.parse_type_ref()?);
+                        }
+                        bounds
+                    } else {
+                        Vec::new()
+                    };
+                    generics.push(RecordGenericParam {
+                        name: generic_name,
+                        bounds,
+                    });
+                    if self.at_comma() {
+                        self.advance();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            self.expect_rangle()?;
+        }
+
+        if self.at_kw_where() {
+            if generics.is_empty() {
+                return Err(Diagnostic::error(
+                    format!(
+                        "enum '{}' uses where clause without generic parameters",
+                        name
+                    ),
+                    self.current().span,
+                ));
+            }
+
+            self.expect_kw_where()?;
+            loop {
+                let (param_name, param_span) = self.expect_ident()?;
+                self.expect_colon()?;
+                let mut bounds = Vec::new();
+                bounds.push(self.parse_type_ref()?);
+                while self.at_plus() {
+                    self.expect_plus()?;
+                    bounds.push(self.parse_type_ref()?);
+                }
+
+                let Some(param) = generics.iter_mut().find(|param| param.name == param_name) else {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "enum '{}' where clause references unknown generic parameter '{}'",
+                            name, param_name
+                        ),
+                        param_span,
+                    ));
+                };
+                param.bounds.extend(bounds);
+
+                if self.at_comma() {
+                    self.advance();
+                    if self.at_lbrace() {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+
+        self.expect_lbrace()?;
+
+        let mut variants = Vec::new();
+        while !self.at_rbrace() {
+            let (variant_name, _) = self.expect_ident()?;
+            let payload = if self.at_lparen() {
+                self.expect_lparen()?;
+                let ty = self.parse_type_ref()?;
+                self.expect_rparen()?;
+                Some(ty)
+            } else {
+                None
+            };
+            self.expect_semicolon()?;
+            variants.push(EnumVariant {
+                name: variant_name,
+                payload,
+            });
+        }
+
+        self.expect_rbrace()?;
+        let end = self.expect_semicolon()?.end;
+
+        Ok(EnumDecl {
+            name,
+            generics,
+            variants,
             span: Span::new(start, end),
         })
     }
@@ -1058,6 +1172,15 @@ impl<'a> Parser<'a> {
         self.parse_equality_expr()
     }
 
+    // In Rust-like syntax, `{ ... }` can either start a block expression or a record literal.
+    // In contexts like `if <cond> { ... }` / `while <cond> { ... }` / `match <value> { ... }`,
+    // we must prevent the condition/scrutinee parser from greedily consuming the following `{`
+    // as a record literal. Users can still write record literals by wrapping them in parentheses:
+    // `if (Pair { a: 1; b: 2; }).a == 1 { ... }`.
+    fn parse_expr_without_record_literal(&mut self) -> Result<Expr, Diagnostic> {
+        self.parse_equality_expr_without_record_literal()
+    }
+
     fn parse_equality_expr(&mut self) -> Result<Expr, Diagnostic> {
         let mut expr = self.parse_add_expr()?;
         loop {
@@ -1081,11 +1204,48 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    fn parse_equality_expr_without_record_literal(&mut self) -> Result<Expr, Diagnostic> {
+        let mut expr = self.parse_add_expr_without_record_literal()?;
+        loop {
+            let op = if self.at_eqeq() {
+                self.advance();
+                BinaryOp::Eq
+            } else if self.at_noteq() {
+                self.advance();
+                BinaryOp::NotEq
+            } else {
+                break;
+            };
+
+            let right = self.parse_add_expr_without_record_literal()?;
+            expr = Expr::Binary {
+                op,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
     fn parse_add_expr(&mut self) -> Result<Expr, Diagnostic> {
         let mut expr = self.parse_primary_expr()?;
         while self.at_plus() {
             self.advance();
             let right = self.parse_primary_expr()?;
+            expr = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_add_expr_without_record_literal(&mut self) -> Result<Expr, Diagnostic> {
+        let mut expr = self.parse_primary_expr_without_record_literal()?;
+        while self.at_plus() {
+            self.advance();
+            let right = self.parse_primary_expr_without_record_literal()?;
             expr = Expr::Binary {
                 op: BinaryOp::Add,
                 left: Box::new(expr),
@@ -1109,6 +1269,10 @@ impl<'a> Parser<'a> {
 
         if self.at_kw_while() {
             return self.parse_while_expr();
+        }
+
+        if self.at_kw_match() {
+            return self.parse_match_expr();
         }
 
         if let Some(value) = self.take_number() {
@@ -1203,9 +1367,83 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_primary_expr_without_record_literal(&mut self) -> Result<Expr, Diagnostic> {
+        if self.at_lparen() {
+            self.advance();
+            let expr = self.parse_expr()?;
+            self.expect_rparen()?;
+            return Ok(expr);
+        }
+
+        if self.at_kw_if() {
+            return self.parse_if_expr();
+        }
+
+        if self.at_kw_while() {
+            return self.parse_while_expr();
+        }
+
+        if self.at_kw_match() {
+            return self.parse_match_expr();
+        }
+
+        if let Some(value) = self.take_number() {
+            return Ok(Expr::Number(value));
+        }
+
+        if let Some(value) = self.take_string() {
+            return Ok(Expr::String(value));
+        }
+
+        if self.at_kw_true() {
+            self.advance();
+            return Ok(Expr::Bool(true));
+        }
+
+        if self.at_kw_false() {
+            self.advance();
+            return Ok(Expr::Bool(false));
+        }
+
+        if let Some(ident) = self.take_ident() {
+            if self.at_lparen() {
+                self.advance();
+                let mut args = Vec::new();
+                if !self.at_rparen() {
+                    loop {
+                        args.push(self.parse_expr()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect_rparen()?;
+                return Ok(Expr::Call {
+                    target: ident,
+                    args,
+                });
+            }
+
+            let mut segments = vec![ident];
+            while self.at_dot() {
+                self.advance();
+                let (next, _) = self.expect_ident()?;
+                segments.push(next);
+            }
+            return Ok(Expr::Path(segments));
+        }
+
+        Err(Diagnostic::error(
+            format!("expected expression, found {}", self.current_kind_name()),
+            self.current().span,
+        ))
+    }
+
     fn parse_if_expr(&mut self) -> Result<Expr, Diagnostic> {
         self.expect_kw_if()?;
-        let cond = self.parse_expr()?;
+        let cond = self.parse_expr_without_record_literal()?;
         let then_block = self.parse_block()?;
         let else_block = if self.at_kw_else() {
             self.expect_kw_else()?;
@@ -1222,11 +1460,53 @@ impl<'a> Parser<'a> {
 
     fn parse_while_expr(&mut self) -> Result<Expr, Diagnostic> {
         self.expect_kw_while()?;
-        let cond = self.parse_expr()?;
+        let cond = self.parse_expr_without_record_literal()?;
         let body = self.parse_block()?;
         Ok(Expr::While {
             cond: Box::new(cond),
             body: Box::new(body),
+        })
+    }
+
+    fn parse_match_expr(&mut self) -> Result<Expr, Diagnostic> {
+        self.expect_kw_match()?;
+        let value = self.parse_expr_without_record_literal()?;
+        self.expect_lbrace()?;
+
+        let mut arms = Vec::new();
+        while !self.at_rbrace() {
+            let pattern = if self.at_ident_named("_") {
+                self.advance();
+                MatchPattern::Wildcard
+            } else {
+                let (name, _) = self.expect_ident()?;
+                let bind = if self.at_lparen() {
+                    self.expect_lparen()?;
+                    let (bind, _) = self.expect_ident()?;
+                    self.expect_rparen()?;
+                    Some(bind)
+                } else {
+                    None
+                };
+                MatchPattern::Variant { name, bind }
+            };
+
+            self.expect_fat_arrow()?;
+
+            let body = if self.at_lbrace() {
+                MatchArmBody::Block(self.parse_block()?)
+            } else {
+                MatchArmBody::Expr(self.parse_expr()?)
+            };
+
+            self.expect_semicolon()?;
+            arms.push(MatchArm { pattern, body });
+        }
+
+        self.expect_rbrace()?;
+        Ok(Expr::Match {
+            value: Box::new(value),
+            arms,
         })
     }
 
@@ -1244,6 +1524,10 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_record(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_record, "'record'")
+    }
+
+    fn expect_kw_enum(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_enum, "'enum'")
     }
 
     fn expect_kw_workflow(&mut self) -> Result<Span, Diagnostic> {
@@ -1276,6 +1560,10 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_while(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_while, "'while'")
+    }
+
+    fn expect_kw_match(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_match, "'match'")
     }
 
     fn expect_kw_intent(&mut self) -> Result<Span, Diagnostic> {
@@ -1410,6 +1698,10 @@ impl<'a> Parser<'a> {
         self.expect_simple(Self::at_arrow, "'->'")
     }
 
+    fn expect_fat_arrow(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_fat_arrow, "'=>'")
+    }
+
     fn expect_ident(&mut self) -> Result<(String, Span), Diagnostic> {
         let token = self.current();
         if let TokenKind::Ident(value) = &token.kind {
@@ -1489,6 +1781,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::Ident(_))
     }
 
+    fn at_ident_named(&self, name: &str) -> bool {
+        matches!(&self.current().kind, TokenKind::Ident(value) if value == name)
+    }
+
     fn at_kw_cap(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwCap)
     }
@@ -1503,6 +1799,10 @@ impl<'a> Parser<'a> {
 
     fn at_kw_record(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwRecord)
+    }
+
+    fn at_kw_enum(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwEnum)
     }
 
     fn at_kw_workflow(&self) -> bool {
@@ -1543,6 +1843,10 @@ impl<'a> Parser<'a> {
 
     fn at_kw_while(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwWhile)
+    }
+
+    fn at_kw_match(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwMatch)
     }
 
     fn at_kw_intent(&self) -> bool {
@@ -1685,6 +1989,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::Arrow)
     }
 
+    fn at_fat_arrow(&self) -> bool {
+        matches!(self.current().kind, TokenKind::FatArrow)
+    }
+
     fn at_eq(&self) -> bool {
         matches!(self.current().kind, TokenKind::Eq)
     }
@@ -1752,6 +2060,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwWorkflow => "'workflow'",
             TokenKind::KwAgent => "'agent'",
             TokenKind::KwRecord => "'record'",
+            TokenKind::KwEnum => "'enum'",
             TokenKind::KwSteps => "'steps'",
             TokenKind::KwOnFail => "'on_fail'",
             TokenKind::KwOutput => "'output'",
@@ -1781,6 +2090,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwIf => "'if'",
             TokenKind::KwElse => "'else'",
             TokenKind::KwWhile => "'while'",
+            TokenKind::KwMatch => "'match'",
             TokenKind::Ident(_) => "identifier",
             TokenKind::StringLiteral(_) => "string literal",
             TokenKind::Number(_) => "number",
@@ -1804,6 +2114,7 @@ impl<'a> Parser<'a> {
             TokenKind::Lte => "'<='",
             TokenKind::Gte => "'>='",
             TokenKind::Arrow => "'->'",
+            TokenKind::FatArrow => "'=>'",
             TokenKind::Eof => "end of file",
         }
     }

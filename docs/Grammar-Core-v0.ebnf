@@ -7,6 +7,7 @@ Program           = { Item } EOF ;
 
 Item              = CapabilityDecl
                   | RecordDecl
+                  | EnumDecl
                   | FunctionDecl
                   | WorkflowDecl
                   | AgentDecl
@@ -32,6 +33,15 @@ WhereClause        = "where" WhereConstraint { "," WhereConstraint } ;
 WhereConstraint    = Identifier ":" TypeBoundList ;
 
 RecordField        = Identifier ":" TypeRef ";" ;
+
+(* ---------- Enums ---------- *)
+
+EnumDecl           = "enum" Identifier [ GenericParams ] [ WhereClause ] "{"
+                     { EnumVariant }
+                     "}" ";"
+                   ;
+
+EnumVariant        = Identifier [ "(" TypeRef ")" ] ";" ;
 
 (* ---------- Functions ---------- *)
 
@@ -200,6 +210,7 @@ PrimaryExpr        = SymbolPath
                   |  RecordLiteral
                   |  IfExpr
                   |  WhileExpr
+                  |  MatchExpr
                   |  CallExpr
                   |  NumberLiteral
                   |  StringLiteral
@@ -218,6 +229,17 @@ RecordLiteralField = Identifier ":" Expr ";" ;
 IfExpr             = "if" Expr Block [ "else" Block ] ;
 
 WhileExpr          = "while" Expr Block ;
+
+MatchExpr          = "match" Expr "{"
+                     { MatchArm }
+                     "}"
+                   ;
+
+MatchArm           = MatchPattern "=>" ( Block | Expr ) ";" ;
+
+MatchPattern       = "_"
+                  |  Identifier [ "(" Identifier ")" ]
+                  ;
 
 CallExpr           = Identifier "(" [ Expr { "," Expr } ] ")" ;
 

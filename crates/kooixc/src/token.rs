@@ -7,6 +7,7 @@ pub enum TokenKind {
     KwWorkflow,
     KwAgent,
     KwRecord,
+    KwEnum,
     KwSteps,
     KwOnFail,
     KwOutput,
@@ -36,6 +37,7 @@ pub enum TokenKind {
     KwIf,
     KwElse,
     KwWhile,
+    KwMatch,
     Ident(String),
     StringLiteral(String),
     Number(String),
@@ -59,6 +61,7 @@ pub enum TokenKind {
     Lte,
     Gte,
     Arrow,
+    FatArrow,
     Eof,
 }
 

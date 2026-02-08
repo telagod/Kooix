@@ -52,6 +52,22 @@ fn main() -> Int {
 };
 ```
 
+### Valid: enum + match expression (Kooix-Core subset)
+
+> Note: for generic enums, variant construction relies on an expected type (via type annotations).
+
+```kooix
+enum Option<T> { Some(T); None; };
+
+fn main() -> Int {
+  let x: Option<Int> = Some(42);
+  match x {
+    Some(v) => v;
+    None => 0;
+  }
+};
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix

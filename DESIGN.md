@@ -210,6 +210,13 @@ agent <name>(<params>) -> <TypeRef>
 - **影响范围**：`compiler_tests.rs` 与设计文档。
 - **决策依据**：在不引入新依赖前提下，使用系统 shell 保持测试可执行与可维护。
 
+### 2026-02-08 - Phase 4.9：Timeout 进程树终止加固
+
+- **变更内容**：Unix 下运行进程独立 process group，timeout 时优先 kill 进程组以避免孙进程泄漏；Windows 下 best-effort 调用 `taskkill /T /F` 清理进程树，并保留 `child.kill()` 兜底。
+- **变更理由**：提升超时语义的可靠性，避免 shell/launcher 场景下只杀父进程导致残留子进程拖慢 CI 或污染系统。
+- **影响范围**：`native.rs` 与 timeout 测试用例。
+- **决策依据**：不引入新依赖，采用标准库 + 平台原生能力实现可审计的进程树终止。
+
 ### 2026-02-07 - Phase 5：AI v1 函数契约子集（intent + ensures）
 
 - **变更内容**：为 `fn` 增加 `intent` 与 `ensures` 语法；补齐 lexer/parser/AST/HIR/Sema 与测试覆盖。
@@ -398,3 +405,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：写编译器必须能“构造结构化数据 + 读取字段”。没有 record value 与字段访问，Stage1 编译器本体几乎无法落地（AST/TypeRef/Token 等都需要结构化表示）。
 - **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与文档。
 - **决策依据**：先落地最小 record value（仅字段存取，不引入方法/trait/生命周期）；用既有 record schema 与投影推导能力复用实现，避免引入新一套类型规则。
+
+### 2026-02-08 - Phase 8.5：enum + match（类型校验 + interpreter）
+
+- **变更内容**：新增 `enum` 声明与 `match` 表达式（pattern: `_`/`Variant(bind?)`，arm body 支持 expr 或 block，arm 分隔符 `=>`）；sema 增加 enum variant 构造类型推导、match arms 类型收敛与穷尽性校验；interpreter 增加 enum value 运行时表示、variant 构造与 match 执行；修复 `if/while/match` 条件/判别式与 record literal 的语法歧义（record literal 需括号包裹）。
+- **变更理由**：自举编译器需要代数数据类型（AST/Token/Result/Option）与结构化分支控制流（match）。同时保持强类型与可审计：missing variant 直接 error。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与语法文档。
+- **决策依据**：先落地 enum/match 的最小可用子集，为 Stage1 编译器数据结构与错误处理打基础；更复杂的泛型推导与语法糖（如 `?`）留到后续阶段。

@@ -14,6 +14,7 @@ pub enum Item {
     Workflow(WorkflowDecl),
     Agent(AgentDecl),
     Record(RecordDecl),
+    Enum(EnumDecl),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +41,20 @@ pub struct RecordGenericParam {
 pub struct RecordField {
     pub name: String,
     pub ty: TypeRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDecl {
+    pub name: String,
+    pub generics: Vec<RecordGenericParam>,
+    pub variants: Vec<EnumVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub payload: Option<TypeRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +111,24 @@ pub struct RecordLitField {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchArm {
+    pub pattern: MatchPattern,
+    pub body: MatchArmBody,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MatchPattern {
+    Wildcard,
+    Variant { name: String, bind: Option<String> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MatchArmBody {
+    Expr(Expr),
+    Block(Block),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Path(Vec<String>),
     String(String),
@@ -117,6 +150,10 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Box<Block>,
+    },
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchArm>,
     },
     Binary {
         op: BinaryOp,

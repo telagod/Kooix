@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{BinaryOp, Block, Expr, Program, Statement, TypeRef};
+use crate::ast::{BinaryOp, Block, Expr, MatchArmBody, MatchPattern, Program, Statement, TypeRef};
 use crate::error::{Diagnostic, Span};
 use crate::hir::{lower_program, HirFunction};
 
@@ -14,6 +14,11 @@ pub enum Value {
         name: String,
         fields: HashMap<String, Value>,
     },
+    Enum {
+        name: String,
+        variant: String,
+        payload: Option<Box<Value>>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -24,8 +29,15 @@ impl std::fmt::Display for Value {
             Value::Bool(value) => write!(f, "{value}"),
             Value::Text(value) => f.write_str(value),
             Value::Record { name, .. } => write!(f, "<{name}>"),
+            Value::Enum { name, variant, .. } => write!(f, "<{name}::{variant}>"),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct EnumVariantInfo {
+    enum_name: String,
+    has_payload: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +96,19 @@ pub fn run_program(program: &Program) -> Result<Value, Diagnostic> {
         functions.insert(function.name.clone(), function.clone());
     }
 
+    let mut variants: HashMap<String, EnumVariantInfo> = HashMap::new();
+    for enum_decl in &hir.enums {
+        for variant in &enum_decl.variants {
+            variants.insert(
+                variant.name.clone(),
+                EnumVariantInfo {
+                    enum_name: enum_decl.name.clone(),
+                    has_payload: variant.payload.is_some(),
+                },
+            );
+        }
+    }
+
     let Some(main) = functions.get("main") else {
         return Err(Diagnostic::error(
             "missing function 'main'",
@@ -101,12 +126,13 @@ pub fn run_program(program: &Program) -> Result<Value, Diagnostic> {
         ));
     }
 
-    eval_function(main, &functions, &[], 0)
+    eval_function(main, &functions, &variants, &[], 0)
 }
 
 fn eval_function(
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
+    variants: &HashMap<String, EnumVariantInfo>,
     args: &[Value],
     depth: usize,
 ) -> Result<Value, Diagnostic> {
@@ -182,11 +208,11 @@ fn eval_function(
                     ));
                 }
 
-                let value = eval_expr(&stmt.value, function, functions, &mut env, depth)?;
+                let value = eval_expr(&stmt.value, function, functions, variants, &mut env, depth)?;
                 env.insert(stmt.name.clone(), value);
             }
             Statement::Assign(stmt) => {
-                let value = eval_expr(&stmt.value, function, functions, &mut env, depth)?;
+                let value = eval_expr(&stmt.value, function, functions, variants, &mut env, depth)?;
                 if !env.assign(&stmt.name, value) {
                     return Err(Diagnostic::error(
                         format!(
@@ -199,13 +225,13 @@ fn eval_function(
             }
             Statement::Return(stmt) => {
                 returned = Some(match &stmt.value {
-                    Some(expr) => eval_expr(expr, function, functions, &mut env, depth)?,
+                    Some(expr) => eval_expr(expr, function, functions, variants, &mut env, depth)?,
                     None => Value::Unit,
                 });
                 break;
             }
             Statement::Expr(expr) => {
-                let _ = eval_expr(expr, function, functions, &mut env, depth)?;
+                let _ = eval_expr(expr, function, functions, variants, &mut env, depth)?;
             }
         }
     }
@@ -213,7 +239,7 @@ fn eval_function(
     let value = if let Some(value) = returned {
         value
     } else if let Some(expr) = &body.tail {
-        eval_expr(expr, function, functions, &mut env, depth)?
+        eval_expr(expr, function, functions, variants, &mut env, depth)?
     } else {
         Value::Unit
     };
@@ -241,6 +267,7 @@ fn eval_expr(
     expr: &Expr,
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
+    variants: &HashMap<String, EnumVariantInfo>,
     env: &mut Env,
     depth: usize,
 ) -> Result<Value, Diagnostic> {
@@ -256,7 +283,7 @@ fn eval_expr(
         Expr::RecordLit { ty, fields } => {
             let mut values: HashMap<String, Value> = HashMap::new();
             for field in fields {
-                let value = eval_expr(&field.value, function, functions, env, depth)?;
+                let value = eval_expr(&field.value, function, functions, variants, env, depth)?;
                 values.insert(field.name.clone(), value);
             }
             Ok(Value::Record {
@@ -269,9 +296,34 @@ fn eval_expr(
                 return Err(Diagnostic::error("expected identifier path", function.span));
             };
 
-            let mut value = env
-                .get(name)
-                .ok_or_else(|| Diagnostic::error(format!("unknown variable '{name}'"), function.span))?;
+            let mut value = match env.get(name) {
+                Some(value) => value,
+                None if segments.len() == 1 => match variants.get(name.as_str()) {
+                    Some(info) if !info.has_payload => Value::Enum {
+                        name: info.enum_name.clone(),
+                        variant: name.clone(),
+                        payload: None,
+                    },
+                    Some(_) => {
+                        return Err(Diagnostic::error(
+                            format!("enum variant '{name}' requires a payload (use '{name}(...)')"),
+                            function.span,
+                        ));
+                    }
+                    None => {
+                        return Err(Diagnostic::error(
+                            format!("unknown variable '{name}'"),
+                            function.span,
+                        ));
+                    }
+                },
+                None => {
+                    return Err(Diagnostic::error(
+                        format!("unknown variable '{name}'"),
+                        function.span,
+                    ));
+                }
+            };
 
             for member in segments.iter().skip(1) {
                 match value {
@@ -299,7 +351,16 @@ fn eval_expr(
             Ok(value)
         }
         Expr::Call { target, args } => {
-            let Some(callee) = functions.get(target) else {
+            if let Some(callee) = functions.get(target) {
+                let mut values = Vec::new();
+                for arg in args {
+                    values.push(eval_expr(arg, function, functions, variants, env, depth)?);
+                }
+
+                return eval_function(callee, functions, variants, &values, depth + 1);
+            }
+
+            let Some(info) = variants.get(target.as_str()) else {
                 return Err(Diagnostic::error(
                     format!(
                         "function '{}' calls unknown target '{}'",
@@ -309,19 +370,47 @@ fn eval_expr(
                 ));
             };
 
-            let mut values = Vec::new();
-            for arg in args {
-                values.push(eval_expr(arg, function, functions, env, depth)?);
-            }
+            let payload = if info.has_payload {
+                if args.len() != 1 {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "enum variant '{}' expects 1 payload argument but got {}",
+                            target,
+                            args.len()
+                        ),
+                        function.span,
+                    ));
+                }
 
-            eval_function(callee, functions, &values, depth + 1)
+                Some(Box::new(eval_expr(
+                    &args[0], function, functions, variants, env, depth,
+                )?))
+            } else {
+                if !args.is_empty() {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "enum variant '{}' expects 0 arguments but got {}",
+                            target,
+                            args.len()
+                        ),
+                        function.span,
+                    ));
+                }
+                None
+            };
+
+            Ok(Value::Enum {
+                name: info.enum_name.clone(),
+                variant: target.clone(),
+                payload,
+            })
         }
         Expr::If {
             cond,
             then_block,
             else_block,
         } => {
-            let cond_value = eval_expr(cond, function, functions, env, depth)?;
+            let cond_value = eval_expr(cond, function, functions, variants, env, depth)?;
             let Value::Bool(flag) = cond_value else {
                 return Err(Diagnostic::error(
                     format!(
@@ -333,9 +422,16 @@ fn eval_expr(
             };
 
             if flag {
-                eval_block_expr(then_block.as_ref(), function, functions, env, depth)
+                eval_block_expr(
+                    then_block.as_ref(),
+                    function,
+                    functions,
+                    variants,
+                    env,
+                    depth,
+                )
             } else if let Some(block) = else_block {
-                eval_block_expr(block.as_ref(), function, functions, env, depth)
+                eval_block_expr(block.as_ref(), function, functions, variants, env, depth)
             } else {
                 Ok(Value::Unit)
             }
@@ -345,7 +441,8 @@ fn eval_expr(
             let mut iterations = 0usize;
 
             loop {
-                let cond_value = eval_expr(cond.as_ref(), function, functions, env, depth)?;
+                let cond_value =
+                    eval_expr(cond.as_ref(), function, functions, variants, env, depth)?;
                 let Value::Bool(flag) = cond_value else {
                     return Err(Diagnostic::error(
                         format!(
@@ -371,14 +468,96 @@ fn eval_expr(
                     ));
                 }
 
-                let _ = eval_block_expr(body.as_ref(), function, functions, env, depth)?;
+                let _ = eval_block_expr(body.as_ref(), function, functions, variants, env, depth)?;
             }
 
             Ok(Value::Unit)
         }
+        Expr::Match { value, arms } => {
+            let scrutinee = eval_expr(value.as_ref(), function, functions, variants, env, depth)?;
+
+            for arm in arms {
+                let is_match = match &arm.pattern {
+                    MatchPattern::Wildcard => true,
+                    MatchPattern::Variant { name, .. } => match &scrutinee {
+                        Value::Enum { variant, .. } => variant == name,
+                        other => {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "match scrutinee evaluated to '{}' but expected an enum value",
+                                    value_type_name(other)
+                                ),
+                                function.span,
+                            ));
+                        }
+                    },
+                };
+
+                if !is_match {
+                    continue;
+                }
+
+                env.push_scope();
+                if let MatchPattern::Variant { name, bind } = &arm.pattern {
+                    if let Some(bind_name) = bind {
+                        match &scrutinee {
+                            Value::Enum {
+                                variant,
+                                payload: Some(payload),
+                                ..
+                            } if variant == name => {
+                                env.insert(bind_name.clone(), (**payload).clone());
+                            }
+                            Value::Enum {
+                                variant,
+                                payload: None,
+                                ..
+                            } if variant == name => {
+                                env.pop_scope();
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "match arm '{}' binds '{}' but variant has no payload",
+                                        name, bind_name
+                                    ),
+                                    function.span,
+                                ));
+                            }
+                            other => {
+                                env.pop_scope();
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "match scrutinee evaluated to '{}' but expected enum variant '{}'",
+                                        value_type_name(other),
+                                        name
+                                    ),
+                                    function.span,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                let result = match &arm.body {
+                    MatchArmBody::Expr(expr) => {
+                        eval_expr(expr, function, functions, variants, env, depth)
+                    }
+                    MatchArmBody::Block(block) => {
+                        eval_block_expr(block, function, functions, variants, env, depth)
+                    }
+                };
+
+                env.pop_scope();
+                return result;
+            }
+
+            Err(Diagnostic::error(
+                "non-exhaustive match expression",
+                function.span,
+            ))
+        }
         Expr::Binary { op, left, right } => {
-            let left_value = eval_expr(left, function, functions, env, depth)?;
-            let right_value = eval_expr(right, function, functions, env, depth)?;
+            let left_value = eval_expr(left, function, functions, variants, env, depth)?;
+            let right_value = eval_expr(right, function, functions, variants, env, depth)?;
 
             match op {
                 BinaryOp::Add => match (left_value, right_value) {
@@ -413,6 +592,7 @@ fn eval_block_expr(
     block: &Block,
     function: &HirFunction,
     functions: &HashMap<String, HirFunction>,
+    variants: &HashMap<String, EnumVariantInfo>,
     env: &mut Env,
     depth: usize,
 ) -> Result<Value, Diagnostic> {
@@ -432,11 +612,11 @@ fn eval_block_expr(
                         ));
                     }
 
-                    let value = eval_expr(&stmt.value, function, functions, env, depth)?;
+                    let value = eval_expr(&stmt.value, function, functions, variants, env, depth)?;
                     env.insert(stmt.name.clone(), value);
                 }
                 Statement::Assign(stmt) => {
-                    let value = eval_expr(&stmt.value, function, functions, env, depth)?;
+                    let value = eval_expr(&stmt.value, function, functions, variants, env, depth)?;
                     if !env.assign(&stmt.name, value) {
                         return Err(Diagnostic::error(
                             format!(
@@ -454,13 +634,13 @@ fn eval_block_expr(
                     ));
                 }
                 Statement::Expr(expr) => {
-                    let _ = eval_expr(expr, function, functions, env, depth)?;
+                    let _ = eval_expr(expr, function, functions, variants, env, depth)?;
                 }
             }
         }
 
         if let Some(expr) = &block.tail {
-            eval_expr(expr, function, functions, env, depth)
+            eval_expr(expr, function, functions, variants, env, depth)
         } else {
             Ok(Value::Unit)
         }
@@ -477,6 +657,7 @@ fn value_type_name(value: &Value) -> String {
         Value::Bool(_) => "Bool".to_string(),
         Value::Text(_) => "Text".to_string(),
         Value::Record { name, .. } => name.clone(),
+        Value::Enum { name, .. } => name.clone(),
     }
 }
 
@@ -486,6 +667,9 @@ fn value_conforms_to_type(value: &Value, ty: &TypeRef) -> bool {
         "Int" => matches!(value, Value::Int(_)),
         "Bool" => matches!(value, Value::Bool(_)),
         "Text" | "String" => matches!(value, Value::Text(_)),
-        record_name => matches!(value, Value::Record { name, .. } if name == record_name),
+        named => {
+            matches!(value, Value::Record { name, .. } if name == named)
+                || matches!(value, Value::Enum { name, .. } if name == named)
+        }
     }
 }

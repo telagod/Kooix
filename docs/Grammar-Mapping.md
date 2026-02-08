@@ -18,6 +18,12 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - AST: `Item::Capability(CapabilityDecl)`
   - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
 
+- Grammar: `EnumDecl ::= "enum" ...`
+  - AST: `Item::Enum(EnumDecl)`
+  - HIR: `HirEnum`
+  - Parser: `crates/kooixc/src/parser.rs` (`parse_enum_decl`)
+  - Sema: `crates/kooixc/src/sema.rs` (`validate_enum_declarations`, plus match/constructor typing)
+
 - Grammar: `FunctionDecl ::= "fn" ... [Effects] [Requires] ";"`
   - AST: `Item::Function(FunctionDecl)`
   - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
@@ -28,7 +34,7 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - AST field: `FunctionDecl.body: Option<Block>`
   - AST nodes: `Block`, `Statement`, `Expr`
   - Parser: `crates/kooixc/src/parser.rs` (`parse_block` + `parse_expr`, includes assignment + `if/else` + `while` + record literal)
-  - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference, includes member projection + record literal + `if/else` + `while`)
+  - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference, includes member projection + record literal + `if/else` + `while` + `match` + enum constructors)
   - Runtime: `crates/kooixc/src/interp.rs` (minimal interpreter; effectful functions are rejected)
 
 ### Type system nodes

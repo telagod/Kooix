@@ -1,6 +1,10 @@
 use std::fmt;
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::raw::c_int;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{self, Command, Stdio};
 use std::thread;
@@ -8,6 +12,33 @@ use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::Diagnostic;
+
+#[cfg(unix)]
+extern "C" {
+    fn kill(pid: c_int, sig: c_int) -> c_int;
+}
+
+#[cfg(unix)]
+const SIGKILL: c_int = 9;
+
+#[cfg(unix)]
+fn kill_process_group(pid: u32) -> std::io::Result<()> {
+    let pid = pid as c_int;
+    let result = unsafe { kill(-pid, SIGKILL) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(windows)]
+fn taskkill_process_tree(pid: u32) {
+    let pid_string = pid.to_string();
+    let _ = Command::new("taskkill")
+        .args(["/T", "/F", "/PID", pid_string.as_str()])
+        .output();
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunOutput {
@@ -86,6 +117,12 @@ pub fn run_executable_with_args_and_stdin_and_timeout(
     let mut command = Command::new(path);
     command.args(args);
 
+    #[cfg(unix)]
+    {
+        // Ensure we can terminate the entire process tree on timeout.
+        command.process_group(0);
+    }
+
     if stdin_data.is_some() {
         command.stdin(Stdio::piped());
     }
@@ -93,6 +130,7 @@ pub fn run_executable_with_args_and_stdin_and_timeout(
     command.stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(NativeError::Io)?;
+    let child_pid = child.id();
     if let Some(data) = stdin_data {
         let Some(mut stdin) = child.stdin.take() else {
             return Err(NativeError::Io(std::io::Error::new(
@@ -119,9 +157,21 @@ pub fn run_executable_with_args_and_stdin_and_timeout(
                     break;
                 }
 
-                if let Err(kill_err) = child.kill() {
-                    if child.try_wait().map_err(NativeError::Io)?.is_none() {
-                        return Err(NativeError::Io(kill_err));
+                #[cfg(unix)]
+                {
+                    let _ = kill_process_group(child_pid);
+                }
+
+                #[cfg(windows)]
+                {
+                    taskkill_process_tree(child_pid);
+                }
+
+                if child.try_wait().map_err(NativeError::Io)?.is_none() {
+                    if let Err(kill_err) = child.kill() {
+                        if child.try_wait().map_err(NativeError::Io)?.is_none() {
+                            return Err(NativeError::Io(kill_err));
+                        }
                     }
                 }
 

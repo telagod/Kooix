@@ -9,6 +9,13 @@ Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标�
 
 ---
 
+## AI-native 是什么（本项目的定义）
+
+- Code as Spec：代码不只是“能跑”，还要能表达 intent/contract/policy，使 AI 读代码就像读文档一样。
+- Capability-first：I/O 与外部能力通过 `cap`/`requires`/`effects` 显式建模，避免“隐式越权”。
+- Evidence-first：对关键链路提供 `evidence` 声明，便于 trace/metrics 与审计闭环。
+- Workflow/Agent 一等公民：把编排（`workflow`）与 agent loop（`agent`）做成可类型检查的结构，而不是散落在脚本里。
+
 ## 当前状态（截至 2026-02-08）
 
 Kooix 已完成一条可运行的最小编译链路：
@@ -17,8 +24,10 @@ Kooix 已完成一条可运行的最小编译链路：
 
 ### 已可用能力
 
-- Core 语言骨架：`cap`、`fn` 顶层声明。
+- Core 语言骨架：`cap`、`record`、`enum`、`fn`、`workflow`、`agent` 顶层声明。
 - Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`x = ...`/`return`、基础表达式（literal/path/call/record literal/成员投影 `x.y`/`if/else`/`while`/`+`/`==`/`!=`）与返回类型静态校验。
+- Kooix-Core 分支控制：`match`（`_`/`Variant(bind?)` pattern、arm type 收敛、穷尽性校验）。
+- 代数数据类型：`enum` 声明 + variant 构造（unit + payload；泛型 enum 依赖上下文 expected type 做最小推导）。
 - 限制：含函数体的程序暂不支持 `mir/llvm/native`（MIR/LLVM lowering 尚未实现）。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
@@ -35,10 +44,12 @@ Kooix 已完成一条可运行的最小编译链路：
 - CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 
+> 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
+
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`132 passed, 0 failed`
+- 结果：`134 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -67,6 +78,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.2: `if/else` 表达式（类型收敛 + interpreter）
 - ✅ Phase 8.3: `while` + assignment（类型校验 + interpreter）
 - ✅ Phase 8.4: record literal + member projection（类型校验 + interpreter）
+- ✅ Phase 8.5: enum + match（类型校验 + interpreter）
 
 详见：`DESIGN.md`
 
@@ -123,6 +135,7 @@ cargo test -p kooixc
   - `examples/invalid_model_shape.kooix`
   - `examples/codegen.kooix`
   - `examples/run.kooix`
+  - `examples/enum_match.kooix`
 - 语法文档：
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
@@ -152,7 +165,7 @@ cargo test -p kooixc
 建议优先级：
 
 1. Kooix-Core runtime：VM/解释器 + 最小 stdlib（为 self-host 做准备）
-2. Core 表达式/控制流扩展（`if/while/match`）+ 类型推导增强
+2. 错误处理与集合：`Result/Option` 约定 + 最小 `Vec/Map`（先 runtime/stdlib，后语法糖如 `?`）
 3. 模块系统与 import/linking（多文件编译闭环）
 4. 约束系统演进（trait-like bounds / where 规范化 / 约束求解）
 5. 诊断分级与 CI 门禁（warning 策略可配置）

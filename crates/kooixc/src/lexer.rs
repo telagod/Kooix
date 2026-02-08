@@ -76,7 +76,10 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     b'=' => {
-                        if self.peek_n(1) == Some(b'=') {
+                        if self.peek_n(1) == Some(b'>') {
+                            self.pos += 2;
+                            Token::new(TokenKind::FatArrow, Span::new(start, self.pos))
+                        } else if self.peek_n(1) == Some(b'=') {
                             self.pos += 2;
                             Token::new(TokenKind::EqEq, Span::new(start, self.pos))
                         } else {
@@ -150,6 +153,7 @@ impl<'a> Lexer<'a> {
             "workflow" => TokenKind::KwWorkflow,
             "agent" => TokenKind::KwAgent,
             "record" => TokenKind::KwRecord,
+            "enum" => TokenKind::KwEnum,
             "steps" => TokenKind::KwSteps,
             "on_fail" => TokenKind::KwOnFail,
             "output" => TokenKind::KwOutput,
@@ -179,6 +183,7 @@ impl<'a> Lexer<'a> {
             "if" => TokenKind::KwIf,
             "else" => TokenKind::KwElse,
             "while" => TokenKind::KwWhile,
+            "match" => TokenKind::KwMatch,
             _ => TokenKind::Ident(value.to_string()),
         };
         Token::new(kind, Span::new(start, self.pos))

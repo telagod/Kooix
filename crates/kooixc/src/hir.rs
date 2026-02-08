@@ -11,6 +11,7 @@ pub struct HirProgram {
     pub workflows: Vec<HirWorkflow>,
     pub agents: Vec<HirAgent>,
     pub records: Vec<HirRecord>,
+    pub enums: Vec<HirEnum>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +77,20 @@ pub struct HirRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirEnum {
+    pub name: String,
+    pub generics: Vec<RecordGenericParam>,
+    pub variants: Vec<HirEnumVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HirEnumVariant {
+    pub name: String,
+    pub payload: Option<TypeRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HirAgent {
     pub name: String,
     pub params: Vec<HirParam>,
@@ -96,6 +111,7 @@ pub fn lower_program(program: &Program) -> HirProgram {
     let mut workflows = Vec::new();
     let mut agents = Vec::new();
     let mut records = Vec::new();
+    let mut enums = Vec::new();
 
     for item in &program.items {
         match item {
@@ -193,6 +209,21 @@ pub fn lower_program(program: &Program) -> HirProgram {
                     span: record_decl.span,
                 });
             }
+            Item::Enum(enum_decl) => {
+                enums.push(HirEnum {
+                    name: enum_decl.name.clone(),
+                    generics: enum_decl.generics.clone(),
+                    variants: enum_decl
+                        .variants
+                        .iter()
+                        .map(|variant| HirEnumVariant {
+                            name: variant.name.clone(),
+                            payload: variant.payload.clone(),
+                        })
+                        .collect(),
+                    span: enum_decl.span,
+                });
+            }
         }
     }
 
@@ -202,5 +233,6 @@ pub fn lower_program(program: &Program) -> HirProgram {
         workflows,
         agents,
         records,
+        enums,
     }
 }

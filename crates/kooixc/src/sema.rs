@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
     AssignStmt, BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, LetStmt,
-    PredicateValue, Program, RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef,
-    WorkflowCallArg,
+    MatchArmBody, MatchPattern, PredicateValue, Program, RecordGenericParam, ReturnStmt, Statement,
+    TypeArg, TypeRef, WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{
-    lower_program, HirAgent, HirEffect, HirFunction, HirProgram, HirRecord, HirWorkflow,
+    lower_program, HirAgent, HirEffect, HirEnum, HirFunction, HirProgram, HirRecord, HirWorkflow,
 };
 
 #[derive(Debug, Clone)]
@@ -63,7 +63,14 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
     }
 
     let declared_record_types = validate_record_declarations(&hir.records, &mut diagnostics);
-    validate_record_type_arity_usage(&hir, &declared_record_types, &mut diagnostics);
+    let declared_enum_types =
+        validate_enum_declarations(&hir.enums, &declared_invocable_targets, &mut diagnostics);
+    validate_type_ref_arity_usage(
+        &hir,
+        &declared_record_types,
+        &declared_enum_types,
+        &mut diagnostics,
+    );
 
     let mut declared_capability_instances = HashSet::new();
     let mut declared_capability_heads = HashSet::new();
@@ -166,6 +173,7 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
             function,
             &declared_invocable_signatures,
             &declared_record_types,
+            &declared_enum_types,
             &mut diagnostics,
         );
     }
@@ -214,6 +222,12 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
 struct RecordSchema {
     generics: Vec<RecordGenericParam>,
     fields: HashMap<String, TypeRef>,
+}
+
+#[derive(Debug, Clone)]
+struct EnumSchema {
+    generics: Vec<RecordGenericParam>,
+    variants: HashMap<String, Option<TypeRef>>,
 }
 
 fn validate_record_declarations(
@@ -330,16 +344,177 @@ fn validate_record_field_type_ref(
     }
 }
 
-fn validate_record_type_arity_usage(
+fn validate_enum_declarations(
+    enums: &[HirEnum],
+    declared_invocable_targets: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> HashMap<String, EnumSchema> {
+    let mut declared_enum_types: HashMap<String, EnumSchema> = HashMap::new();
+    let mut declared_variant_names: HashMap<String, String> = HashMap::new();
+
+    for enum_decl in enums {
+        if declared_enum_types.contains_key(&enum_decl.name) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate enum declaration '{}'", enum_decl.name),
+                enum_decl.span,
+            ));
+            continue;
+        }
+
+        if enum_decl.variants.is_empty() {
+            diagnostics.push(Diagnostic::warning(
+                format!("enum '{}' declares no variants", enum_decl.name),
+                enum_decl.span,
+            ));
+        }
+
+        let mut seen_generics = HashSet::new();
+        for generic in &enum_decl.generics {
+            if !seen_generics.insert(generic.name.clone()) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "enum '{}' repeats generic parameter '{}'",
+                        enum_decl.name, generic.name
+                    ),
+                    enum_decl.span,
+                ));
+            }
+        }
+
+        let mut normalized_generics = enum_decl.generics.clone();
+        for generic in &mut normalized_generics {
+            let mut seen_bounds = HashSet::new();
+            generic.bounds.retain(|bound| {
+                let key = bound.to_string();
+                if seen_bounds.insert(key.clone()) {
+                    true
+                } else {
+                    diagnostics.push(Diagnostic::warning(
+                        format!(
+                            "enum '{}' repeats bound '{}' for generic parameter '{}'",
+                            enum_decl.name, key, generic.name
+                        ),
+                        enum_decl.span,
+                    ));
+                    false
+                }
+            });
+        }
+
+        let generic_set: HashSet<&str> = normalized_generics
+            .iter()
+            .map(|param| param.name.as_str())
+            .collect();
+
+        let mut variants: HashMap<String, Option<TypeRef>> = HashMap::new();
+        for variant in &enum_decl.variants {
+            if variant.name == "_" {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "enum '{}' declares variant '_' (reserved for match wildcard)",
+                        enum_decl.name
+                    ),
+                    enum_decl.span,
+                ));
+                continue;
+            }
+
+            if declared_invocable_targets.contains(&variant.name) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "enum '{}' variant '{}' conflicts with invocable target name",
+                        enum_decl.name, variant.name
+                    ),
+                    enum_decl.span,
+                ));
+            }
+
+            if let Some(existing_enum) = declared_variant_names.get(&variant.name) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "enum '{}' variant '{}' conflicts with variant declared in enum '{}'",
+                        enum_decl.name, variant.name, existing_enum
+                    ),
+                    enum_decl.span,
+                ));
+            } else {
+                declared_variant_names.insert(variant.name.clone(), enum_decl.name.clone());
+            }
+
+            if variants
+                .insert(variant.name.clone(), variant.payload.clone())
+                .is_some()
+            {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "enum '{}' repeats variant '{}'",
+                        enum_decl.name, variant.name
+                    ),
+                    enum_decl.span,
+                ));
+            }
+
+            if let Some(payload) = &variant.payload {
+                validate_enum_variant_payload_type_ref(
+                    payload,
+                    &generic_set,
+                    enum_decl,
+                    diagnostics,
+                );
+            }
+        }
+
+        declared_enum_types.insert(
+            enum_decl.name.clone(),
+            EnumSchema {
+                generics: normalized_generics,
+                variants,
+            },
+        );
+    }
+
+    declared_enum_types
+}
+
+fn validate_enum_variant_payload_type_ref(
+    ty: &TypeRef,
+    generic_set: &HashSet<&str>,
+    enum_decl: &HirEnum,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if generic_set.contains(ty.head()) {
+        if !ty.args.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "enum '{}' uses generic parameter '{}' with type arguments",
+                    enum_decl.name,
+                    ty.head(),
+                ),
+                enum_decl.span,
+            ));
+        }
+        return;
+    }
+
+    for arg in &ty.args {
+        if let TypeArg::Type(inner) = arg {
+            validate_enum_variant_payload_type_ref(inner, generic_set, enum_decl, diagnostics);
+        }
+    }
+}
+
+fn validate_type_ref_arity_usage(
     program: &HirProgram,
     declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for record in &program.records {
         for field in &record.fields {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 &field.ty,
                 declared_record_types,
+                declared_enum_types,
                 &format!("record '{}' field '{}'", record.name, field.name),
                 record.span,
                 diagnostics,
@@ -347,20 +522,37 @@ fn validate_record_type_arity_usage(
         }
     }
 
+    for enum_decl in &program.enums {
+        for variant in &enum_decl.variants {
+            if let Some(payload) = &variant.payload {
+                validate_declared_type_ref_arity(
+                    payload,
+                    declared_record_types,
+                    declared_enum_types,
+                    &format!("enum '{}' variant '{}'", enum_decl.name, variant.name),
+                    enum_decl.span,
+                    diagnostics,
+                );
+            }
+        }
+    }
+
     for function in &program.functions {
         for param in &function.params {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 &param.ty,
                 declared_record_types,
+                declared_enum_types,
                 &format!("function '{}' parameter '{}'", function.name, param.name),
                 function.span,
                 diagnostics,
             );
         }
 
-        validate_record_type_ref_arity(
+        validate_declared_type_ref_arity(
             &function.return_type,
             declared_record_types,
+            declared_enum_types,
             &format!("function '{}' return type", function.name),
             function.span,
             diagnostics,
@@ -369,27 +561,30 @@ fn validate_record_type_arity_usage(
 
     for workflow in &program.workflows {
         for param in &workflow.params {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 &param.ty,
                 declared_record_types,
+                declared_enum_types,
                 &format!("workflow '{}' parameter '{}'", workflow.name, param.name),
                 workflow.span,
                 diagnostics,
             );
         }
 
-        validate_record_type_ref_arity(
+        validate_declared_type_ref_arity(
             &workflow.return_type,
             declared_record_types,
+            declared_enum_types,
             &format!("workflow '{}' return type", workflow.name),
             workflow.span,
             diagnostics,
         );
 
         for output in &workflow.output {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 &output.ty,
                 declared_record_types,
+                declared_enum_types,
                 &format!(
                     "workflow '{}' output field '{}'",
                     workflow.name, output.name
@@ -402,18 +597,20 @@ fn validate_record_type_arity_usage(
 
     for agent in &program.agents {
         for param in &agent.params {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 &param.ty,
                 declared_record_types,
+                declared_enum_types,
                 &format!("agent '{}' parameter '{}'", agent.name, param.name),
                 agent.span,
                 diagnostics,
             );
         }
 
-        validate_record_type_ref_arity(
+        validate_declared_type_ref_arity(
             &agent.return_type,
             declared_record_types,
+            declared_enum_types,
             &format!("agent '{}' return type", agent.name),
             agent.span,
             diagnostics,
@@ -421,9 +618,10 @@ fn validate_record_type_arity_usage(
     }
 }
 
-fn validate_record_type_ref_arity(
+fn validate_declared_type_ref_arity(
     ty: &TypeRef,
     declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
     context: &str,
     span: Span,
     diagnostics: &mut Vec<Diagnostic>,
@@ -521,11 +719,105 @@ fn validate_record_type_ref_arity(
         }
     }
 
+    if let Some(enum_schema) = declared_enum_types.get(ty.head()) {
+        let expected_arity = enum_schema.generics.len();
+        let actual_arity = ty.args.len();
+        if expected_arity != actual_arity {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "{} uses enum type '{}' with {} generic argument(s), expected {}",
+                    context,
+                    ty.head(),
+                    actual_arity,
+                    expected_arity,
+                ),
+                span,
+            ));
+        } else {
+            for (index, generic) in enum_schema.generics.iter().enumerate() {
+                let Some(actual_arg) = ty.args.get(index) else {
+                    continue;
+                };
+
+                match actual_arg {
+                    TypeArg::Type(actual_ty) => {
+                        if generic.bounds.is_empty() {
+                            continue;
+                        }
+
+                        let mut failed_bounds = Vec::new();
+                        for bound in &generic.bounds {
+                            if !type_satisfies_bound(actual_ty, bound, declared_record_types) {
+                                failed_bounds.push(bound.to_string());
+                            }
+                        }
+
+                        if failed_bounds.is_empty() {
+                            continue;
+                        }
+
+                        if failed_bounds.len() == 1 {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "{} uses enum type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                                    context,
+                                    ty.head(),
+                                    generic.name,
+                                    actual_ty,
+                                    failed_bounds[0],
+                                ),
+                                span,
+                            ));
+                            continue;
+                        }
+
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses enum type '{}' with generic argument '{}' as '{}' but it must satisfy bounds '{}'",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual_ty,
+                                failed_bounds.join(" + "),
+                            ),
+                            span,
+                        ));
+                    }
+                    TypeArg::String(actual) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses enum type '{}' with generic argument '{}' as string '{}' but expected a type",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            span,
+                        ));
+                    }
+                    TypeArg::Number(actual) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "{} uses enum type '{}' with generic argument '{}' as number '{}' but expected a type",
+                                context,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            span,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     for arg in &ty.args {
         if let TypeArg::Type(inner) = arg {
-            validate_record_type_ref_arity(
+            validate_declared_type_ref_arity(
                 inner,
                 declared_record_types,
+                declared_enum_types,
                 context,
                 span,
                 diagnostics,
@@ -1596,6 +1888,7 @@ fn validate_function_body(
     function: &HirFunction,
     signatures: &HashMap<String, InvocableSignature>,
     declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let Some(body) = &function.body else {
@@ -1624,20 +1917,20 @@ fn validate_function_body(
                     continue;
                 }
 
-                let Some(value_type) =
-                    infer_expr_type(
+                if let Some(explicit) = ty {
+                    let Some(value_type) = infer_expr_type_with_expected(
                         function,
                         value,
                         &env,
                         signatures,
                         declared_record_types,
+                        declared_enum_types,
+                        Some(explicit),
                         diagnostics,
-                    )
-                else {
-                    continue;
-                };
+                    ) else {
+                        continue;
+                    };
 
-                if let Some(explicit) = ty {
                     if *explicit != value_type {
                         diagnostics.push(Diagnostic::error(
                             format!(
@@ -1650,6 +1943,17 @@ fn validate_function_body(
                     }
                     env.insert(name.clone(), explicit.clone());
                 } else {
+                    let Some(value_type) = infer_expr_type(
+                        function,
+                        value,
+                        &env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        diagnostics,
+                    ) else {
+                        continue;
+                    };
                     env.insert(name.clone(), value_type);
                 }
             }
@@ -1665,16 +1969,16 @@ fn validate_function_body(
                     continue;
                 };
 
-                let Some(actual_ty) =
-                    infer_expr_type(
-                        function,
-                        value,
-                        &env,
-                        signatures,
-                        declared_record_types,
-                        diagnostics,
-                    )
-                else {
+                let Some(actual_ty) = infer_expr_type_with_expected(
+                    function,
+                    value,
+                    &env,
+                    signatures,
+                    declared_record_types,
+                    declared_enum_types,
+                    Some(&existing_ty),
+                    diagnostics,
+                ) else {
                     continue;
                 };
 
@@ -1705,16 +2009,16 @@ fn validate_function_body(
                         }
                     }
                     Some(expr) => {
-                        let Some(actual) =
-                            infer_expr_type(
-                                function,
-                                expr,
-                                &env,
-                                signatures,
-                                declared_record_types,
-                                diagnostics,
-                            )
-                        else {
+                        let Some(actual) = infer_expr_type_with_expected(
+                            function,
+                            expr,
+                            &env,
+                            signatures,
+                            declared_record_types,
+                            declared_enum_types,
+                            Some(expected),
+                            diagnostics,
+                        ) else {
                             continue;
                         };
                         if actual != *expected {
@@ -1736,6 +2040,7 @@ fn validate_function_body(
                     &env,
                     signatures,
                     declared_record_types,
+                    declared_enum_types,
                     diagnostics,
                 );
             }
@@ -1752,12 +2057,14 @@ fn validate_function_body(
     }
 
     let tail_type = match &body.tail {
-        Some(expr) => infer_expr_type(
+        Some(expr) => infer_expr_type_with_expected(
             function,
             expr,
             &env,
             signatures,
             declared_record_types,
+            declared_enum_types,
+            Some(expected),
             diagnostics,
         ),
         None => None,
@@ -1791,6 +2098,41 @@ fn infer_expr_type(
     env: &HashMap<String, TypeRef>,
     signatures: &HashMap<String, InvocableSignature>,
     declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<TypeRef> {
+    infer_expr_type_with_expected(
+        function,
+        expr,
+        env,
+        signatures,
+        declared_record_types,
+        declared_enum_types,
+        None,
+        diagnostics,
+    )
+}
+
+fn resolve_enum_variant<'a>(
+    variant: &str,
+    declared_enum_types: &'a HashMap<String, EnumSchema>,
+) -> Option<(&'a str, &'a EnumSchema, Option<&'a TypeRef>)> {
+    for (enum_name, schema) in declared_enum_types {
+        if let Some(payload) = schema.variants.get(variant) {
+            return Some((enum_name.as_str(), schema, payload.as_ref()));
+        }
+    }
+    None
+}
+
+fn infer_expr_type_with_expected(
+    function: &HirFunction,
+    expr: &Expr,
+    env: &HashMap<String, TypeRef>,
+    signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
+    expected: Option<&TypeRef>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     match expr {
@@ -1947,6 +2289,7 @@ fn infer_expr_type(
                     env,
                     signatures,
                     declared_record_types,
+                    declared_enum_types,
                     diagnostics,
                 ) else {
                     continue;
@@ -1956,10 +2299,7 @@ fn infer_expr_type(
                     diagnostics.push(Diagnostic::error(
                         format!(
                             "function '{}' record literal field '{}' is '{}' but expected '{}'",
-                            function.name,
-                            field.name,
-                            actual_type,
-                            expected_type
+                            function.name, field.name, actual_type, expected_type
                         ),
                         function.span,
                     ));
@@ -1987,40 +2327,132 @@ fn infer_expr_type(
                 return None;
             };
 
-            let Some(root_ty) = env.get(name) else {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "function '{}' uses unknown variable '{}' in body",
-                        function.name, name
-                    ),
-                    function.span,
-                ));
-                return None;
-            };
+            if let Some(root_ty) = env.get(name) {
+                if segments.len() == 1 {
+                    return Some(root_ty.clone());
+                }
 
-            if segments.len() == 1 {
-                return Some(root_ty.clone());
+                return match infer_member_projection_type(
+                    root_ty,
+                    &segments[1..],
+                    declared_record_types,
+                ) {
+                    Ok(ty) => Some(ty),
+                    Err(projection) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' uses member path '{}' but cannot infer member '{}' on type '{}'",
+                                function.name,
+                                segments.join("."),
+                                projection.member,
+                                projection.base_type,
+                            ),
+                            function.span,
+                        ));
+                        None
+                    }
+                };
             }
 
-            match infer_member_projection_type(root_ty, &segments[1..], declared_record_types) {
-                Ok(ty) => Some(ty),
-                Err(projection) => {
+            if segments.len() == 1 {
+                if let Some((enum_name, enum_schema, payload)) =
+                    resolve_enum_variant(name, declared_enum_types)
+                {
+                    if payload.is_some() {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' uses enum variant '{}' without a payload (expected '{}(<expr>)')",
+                                function.name, name, name
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+
+                    if enum_schema.generics.is_empty() {
+                        return Some(TypeRef {
+                            name: enum_name.to_string(),
+                            args: Vec::new(),
+                        });
+                    }
+
+                    if let Some(expected) = expected {
+                        if expected.head() == enum_name {
+                            return Some(expected.clone());
+                        }
+                    }
+
                     diagnostics.push(Diagnostic::error(
                         format!(
-                            "function '{}' uses member path '{}' but cannot infer member '{}' on type '{}'",
-                            function.name,
-                            segments.join("."),
-                            projection.member,
-                            projection.base_type,
+                            "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
+                            function.name, enum_name, name
                         ),
                         function.span,
                     ));
-                    None
+                    return None;
                 }
             }
+
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "function '{}' uses unknown variable '{}' in body",
+                    function.name, name
+                ),
+                function.span,
+            ));
+            None
         }
         Expr::Call { target, args } => {
-            let Some(signature) = signatures.get(target) else {
+            if let Some(signature) = signatures.get(target) {
+                if signature.params.len() != args.len() {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' calls '{}' with {} args but expected {}",
+                            function.name,
+                            target,
+                            args.len(),
+                            signature.params.len()
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                }
+
+                for (index, (arg, expected_ty)) in
+                    args.iter().zip(signature.params.iter()).enumerate()
+                {
+                    let Some(actual_ty) = infer_expr_type(
+                        function,
+                        arg,
+                        env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        diagnostics,
+                    ) else {
+                        continue;
+                    };
+                    if actual_ty != *expected_ty {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls '{}' arg {} as '{}' but expected '{}'",
+                                function.name,
+                                target,
+                                index + 1,
+                                actual_ty,
+                                expected_ty
+                            ),
+                            function.span,
+                        ));
+                    }
+                }
+
+                return Some(signature.return_type.clone());
+            }
+
+            let Some((enum_name, enum_schema, payload_template)) =
+                resolve_enum_variant(target, declared_enum_types)
+            else {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "function '{}' calls unknown target '{}' in body",
@@ -2031,57 +2463,111 @@ fn infer_expr_type(
                 return None;
             };
 
-            if signature.params.len() != args.len() {
+            let return_type = if enum_schema.generics.is_empty() {
+                TypeRef {
+                    name: enum_name.to_string(),
+                    args: Vec::new(),
+                }
+            } else if let Some(expected) = expected {
+                if expected.head() != enum_name {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses enum variant '{}' but expected type '{}' does not match enum '{}'",
+                            function.name, target, expected, enum_name
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                }
+                expected.clone()
+            } else {
                 diagnostics.push(Diagnostic::error(
                     format!(
-                        "function '{}' calls '{}' with {} args but expected {}",
-                        function.name,
-                        target,
-                        args.len(),
-                        signature.params.len()
+                        "function '{}' cannot infer generic arguments for enum '{}' variant '{}' (add a type annotation)",
+                        function.name, enum_name, target
                     ),
                     function.span,
                 ));
                 return None;
-            }
+            };
 
-            for (index, (arg, expected_ty)) in args.iter().zip(signature.params.iter()).enumerate()
-            {
-                let Some(actual_ty) = infer_expr_type(
-                    function,
-                    arg,
-                    env,
-                    signatures,
-                    declared_record_types,
-                    diagnostics,
-                ) else {
-                    continue;
-                };
-                if actual_ty != *expected_ty {
-                    diagnostics.push(Diagnostic::error(
-                        format!(
-                            "function '{}' calls '{}' arg {} as '{}' but expected '{}'",
-                            function.name,
-                            target,
-                            index + 1,
-                            actual_ty,
-                            expected_ty
-                        ),
-                        function.span,
-                    ));
+            match payload_template {
+                Some(payload_template) => {
+                    if args.len() != 1 {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls enum variant '{}' with {} args but expected 1",
+                                function.name,
+                                target,
+                                args.len()
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+
+                    let payload_ty = substitute_record_generic_type(
+                        payload_template,
+                        &enum_schema.generics,
+                        &return_type.args,
+                    );
+
+                    let Some(actual_payload_ty) = infer_expr_type_with_expected(
+                        function,
+                        &args[0],
+                        env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        Some(&payload_ty),
+                        diagnostics,
+                    ) else {
+                        return None;
+                    };
+
+                    if actual_payload_ty != payload_ty {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls enum variant '{}' with payload '{}' but expected '{}'",
+                                function.name, target, actual_payload_ty, payload_ty
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                }
+                None => {
+                    if !args.is_empty() {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls enum variant '{}' with {} args but expected 0",
+                                function.name,
+                                target,
+                                args.len()
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
                 }
             }
 
-            Some(signature.return_type.clone())
+            Some(return_type)
         }
         Expr::If {
             cond,
             then_block,
             else_block,
         } => {
-            let Some(cond_ty) =
-                infer_expr_type(function, cond, env, signatures, declared_record_types, diagnostics)
-            else {
+            let Some(cond_ty) = infer_expr_type(
+                function,
+                cond,
+                env,
+                signatures,
+                declared_record_types,
+                declared_enum_types,
+                diagnostics,
+            ) else {
                 return None;
             };
             if cond_ty.head() != "Bool" {
@@ -2095,26 +2581,25 @@ fn infer_expr_type(
                 return None;
             }
 
-            let then_ty =
-                infer_block_expr_type(
+            let then_ty = infer_block_expr_type(
+                function,
+                then_block.as_ref(),
+                env,
+                signatures,
+                declared_record_types,
+                declared_enum_types,
+                diagnostics,
+            )?;
+            let else_ty = match else_block {
+                Some(block) => infer_block_expr_type(
                     function,
-                    then_block.as_ref(),
+                    block.as_ref(),
                     env,
                     signatures,
                     declared_record_types,
+                    declared_enum_types,
                     diagnostics,
-                )?;
-            let else_ty = match else_block {
-                Some(block) => {
-                    infer_block_expr_type(
-                        function,
-                        block.as_ref(),
-                        env,
-                        signatures,
-                        declared_record_types,
-                        diagnostics,
-                    )?
-                }
+                )?,
                 None => unit_type(),
             };
 
@@ -2152,6 +2637,7 @@ fn infer_expr_type(
                 env,
                 signatures,
                 declared_record_types,
+                declared_enum_types,
                 diagnostics,
             ) else {
                 return None;
@@ -2173,9 +2659,182 @@ fn infer_expr_type(
                 env,
                 signatures,
                 declared_record_types,
+                declared_enum_types,
                 diagnostics,
             )?;
             Some(unit_type())
+        }
+        Expr::Match { value, arms } => {
+            if arms.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses match expression with no arms",
+                        function.name
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            let Some(value_ty) = infer_expr_type(
+                function,
+                value.as_ref(),
+                env,
+                signatures,
+                declared_record_types,
+                declared_enum_types,
+                diagnostics,
+            ) else {
+                return None;
+            };
+
+            let Some(enum_schema) = declared_enum_types.get(value_ty.head()) else {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' matches on value of type '{}' but expected an enum type",
+                        function.name, value_ty
+                    ),
+                    function.span,
+                ));
+                return None;
+            };
+
+            let mut saw_wildcard = false;
+            let mut seen_variants: HashSet<String> = HashSet::new();
+
+            let mut result_ty: Option<TypeRef> = None;
+            let mut type_mismatch = false;
+
+            for arm in arms {
+                let mut arm_env = env.clone();
+                match &arm.pattern {
+                    MatchPattern::Wildcard => {
+                        if saw_wildcard {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' match expression repeats wildcard arm '_'",
+                                    function.name
+                                ),
+                                function.span,
+                            ));
+                        }
+                        saw_wildcard = true;
+                    }
+                    MatchPattern::Variant { name, bind } => {
+                        if !seen_variants.insert(name.clone()) {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' match expression repeats variant arm '{}'",
+                                    function.name, name
+                                ),
+                                function.span,
+                            ));
+                        }
+
+                        let Some(payload_template) = enum_schema.variants.get(name) else {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' match expression uses unknown variant '{}' for enum '{}'",
+                                    function.name,
+                                    name,
+                                    value_ty.head()
+                                ),
+                                function.span,
+                            ));
+                            continue;
+                        };
+
+                        if let Some(bind_name) = bind {
+                            match payload_template {
+                                Some(payload_template) => {
+                                    let payload_ty = substitute_record_generic_type(
+                                        payload_template,
+                                        &enum_schema.generics,
+                                        &value_ty.args,
+                                    );
+                                    arm_env.insert(bind_name.clone(), payload_ty);
+                                }
+                                None => {
+                                    diagnostics.push(Diagnostic::error(
+                                        format!(
+                                            "function '{}' match arm '{}' binds '{}' but variant has no payload",
+                                            function.name, name, bind_name
+                                        ),
+                                        function.span,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let Some(arm_ty) = (match &arm.body {
+                    MatchArmBody::Expr(expr) => infer_expr_type_with_expected(
+                        function,
+                        expr,
+                        &arm_env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        expected,
+                        diagnostics,
+                    ),
+                    MatchArmBody::Block(block) => infer_block_expr_type_with_expected(
+                        function,
+                        block,
+                        &arm_env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        expected,
+                        diagnostics,
+                    ),
+                }) else {
+                    continue;
+                };
+
+                if let Some(existing) = &result_ty {
+                    if *existing != arm_ty {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' match expression arms return '{}' and '{}' (types differ)",
+                                function.name, existing, arm_ty
+                            ),
+                            function.span,
+                        ));
+                        type_mismatch = true;
+                    }
+                } else {
+                    result_ty = Some(arm_ty);
+                }
+            }
+
+            if !saw_wildcard {
+                let mut missing: Vec<String> = enum_schema
+                    .variants
+                    .keys()
+                    .filter(|variant| !seen_variants.contains(*variant))
+                    .cloned()
+                    .collect();
+                missing.sort();
+                if !missing.is_empty() {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' match expression on '{}' is non-exhaustive; missing variants: {}",
+                            function.name,
+                            value_ty.head(),
+                            missing.join(", ")
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+
+            if type_mismatch {
+                None
+            } else {
+                result_ty
+            }
         }
         Expr::Binary { op, left, right } => {
             let left_ty = infer_expr_type(
@@ -2184,6 +2843,7 @@ fn infer_expr_type(
                 env,
                 signatures,
                 declared_record_types,
+                declared_enum_types,
                 diagnostics,
             )?;
             let right_ty = infer_expr_type(
@@ -2192,6 +2852,7 @@ fn infer_expr_type(
                 env,
                 signatures,
                 declared_record_types,
+                declared_enum_types,
                 diagnostics,
             )?;
             match op {
@@ -2238,6 +2899,29 @@ fn infer_block_expr_type(
     env: &HashMap<String, TypeRef>,
     signatures: &HashMap<String, InvocableSignature>,
     declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<TypeRef> {
+    infer_block_expr_type_with_expected(
+        function,
+        block,
+        env,
+        signatures,
+        declared_record_types,
+        declared_enum_types,
+        None,
+        diagnostics,
+    )
+}
+
+fn infer_block_expr_type_with_expected(
+    function: &HirFunction,
+    block: &Block,
+    env: &HashMap<String, TypeRef>,
+    signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, RecordSchema>,
+    declared_enum_types: &HashMap<String, EnumSchema>,
+    expected: Option<&TypeRef>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     let mut local_env = env.clone();
@@ -2256,16 +2940,17 @@ fn infer_block_expr_type(
                     return None;
                 }
 
-                let value_ty = infer_expr_type(
-                    function,
-                    value,
-                    &local_env,
-                    signatures,
-                    declared_record_types,
-                    diagnostics,
-                )?;
-
                 if let Some(explicit) = ty {
+                    let value_ty = infer_expr_type_with_expected(
+                        function,
+                        value,
+                        &local_env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        Some(explicit),
+                        diagnostics,
+                    )?;
                     if *explicit != value_ty {
                         diagnostics.push(Diagnostic::error(
                             format!(
@@ -2278,6 +2963,15 @@ fn infer_block_expr_type(
                     }
                     local_env.insert(name.clone(), explicit.clone());
                 } else {
+                    let value_ty = infer_expr_type(
+                        function,
+                        value,
+                        &local_env,
+                        signatures,
+                        declared_record_types,
+                        declared_enum_types,
+                        diagnostics,
+                    )?;
                     local_env.insert(name.clone(), value_ty);
                 }
             }
@@ -2293,12 +2987,14 @@ fn infer_block_expr_type(
                     return None;
                 };
 
-                let actual_ty = infer_expr_type(
+                let actual_ty = infer_expr_type_with_expected(
                     function,
                     value,
                     &local_env,
                     signatures,
                     declared_record_types,
+                    declared_enum_types,
+                    Some(&existing_ty),
                     diagnostics,
                 )?;
                 if actual_ty != existing_ty {
@@ -2329,6 +3025,7 @@ fn infer_block_expr_type(
                     &local_env,
                     signatures,
                     declared_record_types,
+                    declared_enum_types,
                     diagnostics,
                 );
             }
@@ -2336,12 +3033,14 @@ fn infer_block_expr_type(
     }
 
     match &block.tail {
-        Some(expr) => infer_expr_type(
+        Some(expr) => infer_expr_type_with_expected(
             function,
             expr,
             &local_env,
             signatures,
             declared_record_types,
+            declared_enum_types,
+            expected,
             diagnostics,
         ),
         None => Some(unit_type()),

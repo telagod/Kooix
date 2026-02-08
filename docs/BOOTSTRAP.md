@@ -17,8 +17,8 @@
 
 ## 当前状态（截至 2026-02-08）
 
-- 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导；已支持函数体/基础表达式的解析与类型检查（Frontend），并提供最小 interpreter（仅纯函数体子集、禁用 effects）。
-- 结论：距离 **L2** 仍差一个可运行的 runtime/stdlib，以及更完整的 `Kooix-Core`（控制流/enum/match/module 等，能写编译器本体）。
+- 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导；已支持函数体/基础表达式的解析与类型检查（Frontend），并提供最小 interpreter（纯函数体子集、禁用 effects，支持 enum/match）。
+- 结论：距离 **L2** 仍差一个可运行的 runtime/stdlib，以及更完整的 `Kooix-Core`（模块系统/多文件编译/集合与错误处理等，能写编译器本体）。
 
 ## 产物与目录约定（建议）
 

@@ -10,6 +10,13 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 
 ---
 
+## What “AI-native” Means Here
+
+- Code as Spec: code should express intent/contracts/policy so an AI can read code like documentation.
+- Capability-first: external powers are modeled explicitly via `cap` / `requires` / `effects`.
+- Evidence-first: critical flows declare `evidence` (trace/metrics) to support auditability.
+- Workflow/Agent as first-class: orchestration (`workflow`) and agent loops (`agent`) are type-checkable structures, not ad-hoc scripts.
+
 ## Current Status (as of 2026-02-08)
 
 Kooix already has a runnable minimal compiler pipeline:
@@ -18,8 +25,10 @@ Kooix already has a runnable minimal compiler pipeline:
 
 ### Implemented Features
 
-- Core language skeleton: top-level `cap`, `fn`.
-- Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`x = ...`/`return`, basic expressions (literal/path/call/record literal/member projection `x.y`/`if/else`/`while`/`+`/`==`/`!=`), and return-type checking.
+- Core language skeleton: top-level `cap`, `record`, `enum`, `fn`, `workflow`, `agent`.
+- Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`x = ...`/`return`, basic expressions (literal/path/call/record literal/member projection `x.y`/`if/else`/`while`/`match`/`+`/`==`/`!=`), and return-type checking.
+- Branching: `match` (patterns `_` / `Variant(bind?)`, arm type convergence, exhaustiveness checking).
+- Algebraic data types: `enum` declarations + variant construction (unit + payload; generic enums rely on expected type context for minimal inference).
 - Limitation: programs with function bodies are currently rejected by `mir/llvm/native` (MIR/LLVM lowering is not implemented yet).
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
@@ -37,10 +46,12 @@ Kooix already has a runnable minimal compiler pipeline:
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`.
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 
+> Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
+
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `132 passed, 0 failed`
+- Result: `134 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -69,6 +80,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.2: `if/else` expressions (type convergence + interpreter)
 - ✅ Phase 8.3: `while` + assignment (type checking + interpreter)
 - ✅ Phase 8.4: record literals + member projection (type checking + interpreter)
+- ✅ Phase 8.5: enum + match (type checking + interpreter)
 
 See also: `DESIGN.md`
 
@@ -125,6 +137,7 @@ cargo test -p kooixc
   - `examples/invalid_model_shape.kooix`
   - `examples/codegen.kooix`
   - `examples/run.kooix`
+  - `examples/enum_match.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
@@ -151,7 +164,7 @@ cargo test -p kooixc
 Recommended order:
 
 1. Kooix-Core runtime: a VM/interpreter + minimal stdlib (unlock self-hosting)
-2. Core expression/control-flow expansion (`if/while/match`) + stronger type inference
+2. Error handling + collections: `Result/Option` conventions + minimal `Vec/Map` (stdlib first, sugar like `?` later)
 3. Module system + import/linking (multi-file compilation loop)
 4. Constraint system evolution (trait-like bounds / `where` normalization / constraint solving)
 5. Diagnostic levels + CI policy gates (warning → configurable gate)

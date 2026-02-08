@@ -220,6 +220,25 @@ fn main() -> Int {
 }
 
 #[test]
+fn runs_interpreter_with_enum_and_match_expression() {
+    let source = r#"
+enum Option<T> { Some(T); None; };
+
+fn main() -> Int {
+  let x: Option<Int> = Some(42);
+  match x {
+    Some(v) => v;
+    None => 0;
+  }
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(42));
+}
+
+#[test]
 fn fails_when_if_expression_branch_types_differ() {
     let source = r#"
 fn main() -> Int { if true { 1 } else { false } };
@@ -231,6 +250,26 @@ fn main() -> Int { if true { 1 } else { false } };
             && diagnostic
                 .message
                 .contains("if expression branches return 'Int' and 'Bool'")
+    }));
+}
+
+#[test]
+fn fails_when_match_expression_is_non_exhaustive() {
+    let source = r#"
+enum Flag { On; Off; };
+
+fn main() -> Int {
+  let f: Flag = On;
+  match f { On => 1; }
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("match expression on 'Flag' is non-exhaustive")
     }));
 }
 
