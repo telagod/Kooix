@@ -8,6 +8,7 @@
 ## 组件
 
 - `ast.rs`：AST 数据结构。
+- `loader.rs`：源码加载（include 风格 `import` 多文件拼接）。
 - `lexer.rs`：tokenizer。
 - `parser.rs`：递归下降 parser。
 - `hir.rs`：AST->HIR 降层。
@@ -30,7 +31,7 @@
 
 ## 已知限制
 
-- 仅支持单文件输入。
+- 支持 include 风格 `import` 多文件拼接；尚无 module/namespace/export 与包管理。
 - 函数体仅支持 interpreter；未接入 MIR/LLVM lowering 与真实 codegen。
 - capability 匹配为类型名级别（非实例级）。
 - LLVM 输出尚未接入优化与真实函数体语义。
@@ -57,3 +58,4 @@
 
 - 增加 Kooix-Core 函数体最小子集（`let`/assignment/`return`/基础表达式/`if`/`while`）。
 - 增加 interpreter `run` 闭环（纯函数体子集，禁止 effects）。
+- 增加 include 风格 `import` 多文件加载（loader + CLI 诊断定位）。

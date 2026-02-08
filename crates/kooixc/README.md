@@ -4,11 +4,13 @@
 
 ## 模块职责
 
+- 源码加载（`loader`：`import` 多文件拼接）
 - 词法分析（`lexer`）
 - 语法分析（`parser`）
 - HIR 降层（`hir`）
 - MIR 降层（`mir`）
 - effect/capability 语义校验（`sema`）
+- 解释执行（`interp`：Kooix-Core 函数体子集，`run` 命令）
 - LLVM IR 文本后端（`llvm`）
 - Native 编译链路（`native`，调用 `llc` + `clang`）
 - CLI 输出与诊断
@@ -22,6 +24,7 @@ cargo run -p kooixc -- hir ../../examples/valid.kooix
 cargo run -p kooixc -- mir ../../examples/valid.kooix
 cargo run -p kooixc -- llvm ../../examples/codegen.kooix
 cargo run -p kooixc -- run ../../examples/run.kooix
+cargo run -p kooixc -- run ../../examples/import_main.kooix
 cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo
 cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run
 cargo run -p kooixc -- native ../../examples/codegen.kooix /tmp/kooixc-demo --run -- arg1 arg2
