@@ -135,6 +135,28 @@ fn s1_reverse_exprs(xs: List<S1Expr>) -> List<S1Expr> {
   acc
 };
 
+fn s1_reverse_match_arms(xs: List<S1MatchArm>) -> List<S1MatchArm> {
+  let acc: List<S1MatchArm> = Nil;
+  let cur: List<S1MatchArm> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1MatchArm> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_reverse_types(xs: List<S1Type>) -> List<S1Type> {
   let acc: List<S1Type> = Nil;
   let cur: List<S1Type> = xs;
@@ -582,7 +604,7 @@ fn s1_parse_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
 
-  let expr: S1Expr = Path("");
+  let expr: S1Expr = S1Expr.Path("");
   let rest: List<S1Token> = tokens;
 
   match tokens {
@@ -592,6 +614,298 @@ fn s1_parse_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S
     };
     Cons(cell0) => {
       match cell0.head.kind {
+        KwIf => {
+          rest = cell0.tail;
+          let cond: S1Expr = S1Expr.Path("");
+          let empty_stmts: List<S1Stmt> = Nil;
+          let empty_result: Option<S1Expr> = None;
+          let then_block: S1Block = S1Block { stmts: empty_stmts; result: empty_result; };
+          let else_block: Option<S1Block> = None;
+
+          // condition expr
+          let parsed_cond: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+            s1_parse_expr(rest);
+          match parsed_cond {
+            Err(e) => {
+              ok = false;
+              diag = e;
+              0
+            };
+            Ok(pair) => {
+              cond = pair.a;
+              rest = pair.b;
+              0
+            };
+          };
+
+          // then block
+          if ok == true {
+            match rest {
+              Cons(t0) => {
+                match t0.head.kind {
+                  LBrace => {
+                    let parsed_b: Result<Pair<S1Block, List<S1Token>>, S1Diagnostic> =
+                      s1_parse_block(t0.tail);
+                    match parsed_b {
+                      Err(e) => {
+                        ok = false;
+                        diag = e;
+                        0
+                      };
+                      Ok(pair) => {
+                        then_block = pair.a;
+                        rest = pair.b;
+                        0
+                      };
+                    };
+                    0
+                  };
+                  _ => {
+                    ok = false;
+                    diag = s1_diag(Error, t0.head.span.start, t0.head.span.end, "parser: expected '{' after if condition");
+                    0
+                  };
+                }
+              };
+              _ => {
+                ok = false;
+                diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected '{' after if condition");
+                0
+              };
+            };
+            0
+          } else { 0 };
+
+          // optional else
+          if ok == true {
+            match rest {
+              Cons(e0) => {
+                match e0.head.kind {
+                  KwElse => {
+                    rest = e0.tail;
+                    match rest {
+                      Cons(e1) => {
+                        match e1.head.kind {
+                          LBrace => {
+                            let parsed_eb: Result<Pair<S1Block, List<S1Token>>, S1Diagnostic> =
+                              s1_parse_block(e1.tail);
+                            match parsed_eb {
+                              Err(e) => {
+                                ok = false;
+                                diag = e;
+                                0
+                              };
+                              Ok(pair) => {
+                                else_block = Some(pair.a);
+                                rest = pair.b;
+                                0
+                              };
+                            };
+                            0
+                          };
+                          _ => {
+                            ok = false;
+                            diag = s1_diag(Error, e1.head.span.start, e1.head.span.end, "parser: expected '{' after else");
+                            0
+                          };
+                        }
+                      };
+                      _ => {
+                        ok = false;
+                        diag = s1_diag(Error, e0.head.span.start, e0.head.span.end, "parser: expected '{' after else");
+                        0
+                      };
+                    }
+                  };
+                  _ => 0;
+                }
+              };
+              _ => 0;
+            };
+            0
+          } else { 0 };
+
+          if ok == true {
+            expr = If(S1If { cond: cond; then_block: then_block; else_block: else_block; });
+            0
+          } else {
+            0
+          }
+        };
+        KwMatch => {
+          rest = cell0.tail;
+          let scrutinee: S1Expr = S1Expr.Path("");
+          let arms_rev: List<S1MatchArm> = Nil;
+
+          // scrutinee expr
+          let parsed_scr: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+            s1_parse_expr(rest);
+          match parsed_scr {
+            Err(e) => {
+              ok = false;
+              diag = e;
+              0
+            };
+            Ok(pair) => {
+              scrutinee = pair.a;
+              rest = pair.b;
+              0
+            };
+          };
+
+          // {
+          if ok == true {
+            match rest {
+              Cons(m0) => {
+                match m0.head.kind {
+                  LBrace => {
+                    rest = m0.tail;
+                    0
+                  };
+                  _ => {
+                    ok = false;
+                    diag = s1_diag(Error, m0.head.span.start, m0.head.span.end, "parser: expected '{' after match scrutinee");
+                    0
+                  };
+                }
+              };
+              _ => {
+                ok = false;
+                diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected '{' after match scrutinee");
+                0
+              };
+            };
+            0
+          } else { 0 };
+
+          // arms until }
+          if ok == true {
+            let done: Bool = false;
+            while done == false {
+              match rest {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected '}' to close match");
+                  done = true;
+                  0
+                };
+                Cons(a0) => {
+                  match a0.head.kind {
+                    RBrace => {
+                      rest = a0.tail;
+                      done = true;
+                      0
+                    };
+                    Ident(pname) => {
+                      let pat: S1Pattern = S1Pattern.Path(pname);
+                      if pname == "_" {
+                        pat = Wildcard;
+                        0
+                      } else {
+                        pat = S1Pattern.Path(pname);
+                        0
+                      };
+                      rest = a0.tail;
+
+                      // =>
+                      if ok == true {
+                        match rest {
+                          Cons(a1) => {
+                            match a1.head.kind {
+                              FatArrow => {
+                                rest = a1.tail;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, a1.head.span.start, a1.head.span.end, "parser: expected '=>' in match arm");
+                                done = true;
+                                0
+                              };
+                            }
+                          };
+                          _ => {
+                            ok = false;
+                            diag = s1_diag(Error, a0.head.span.start, a0.head.span.end, "parser: expected '=>' in match arm");
+                            done = true;
+                            0
+                          };
+                        }
+                      } else { 0 };
+
+                      // expr
+                      let value: S1Expr = S1Expr.Path("");
+                      if ok == true {
+                        let parsed_v: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                          s1_parse_expr(rest);
+                        match parsed_v {
+                          Err(e) => {
+                            ok = false;
+                            diag = e;
+                            done = true;
+                            0
+                          };
+                          Ok(pair) => {
+                            value = pair.a;
+                            rest = pair.b;
+                            0
+                          };
+                        };
+                        0
+                      } else { 0 };
+
+                      // ;
+                      if ok == true {
+                        match rest {
+                          Cons(a2) => {
+                            match a2.head.kind {
+                              Semicolon => {
+                                let arm: S1MatchArm = S1MatchArm { pat: pat; value: value; };
+                                arms_rev =
+                                  Cons(ListCons<S1MatchArm> { head: arm; tail: arms_rev; });
+                                rest = a2.tail;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, a2.head.span.start, a2.head.span.end, "parser: expected ';' after match arm");
+                                done = true;
+                                0
+                              };
+                            }
+                          };
+                          _ => {
+                            ok = false;
+                            diag = s1_diag(Error, a0.head.span.start, a0.head.span.end, "parser: expected ';' after match arm");
+                            done = true;
+                            0
+                          };
+                        }
+                      } else { 0 };
+
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, a0.head.span.start, a0.head.span.end, "parser: expected pattern or '}' in match");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            };
+            0
+          } else { 0 };
+
+          if ok == true {
+            let arms: List<S1MatchArm> = s1_reverse_match_arms(arms_rev);
+            expr = Match(S1Match { scrutinee: scrutinee; arms: arms; });
+            0
+          } else {
+            0
+          }
+        };
         Number(n) => {
           expr = IntLit(n);
           rest = cell0.tail;
@@ -605,7 +919,7 @@ fn s1_parse_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S
         Ident(name) => {
           // Path or Call
           rest = cell0.tail;
-          expr = Path(name);
+          expr = S1Expr.Path(name);
 
           match rest {
             Cons(cell1) => {
@@ -701,6 +1015,23 @@ fn s1_parse_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S
           };
           0
         };
+        LBrace => {
+          let parsed_b: Result<Pair<S1Block, List<S1Token>>, S1Diagnostic> =
+            s1_parse_block(cell0.tail);
+          match parsed_b {
+            Err(e) => {
+              ok = false;
+              diag = e;
+              0
+            };
+            Ok(pair) => {
+              expr = Block(pair.a);
+              rest = pair.b;
+              0
+            };
+          };
+          0
+        };
         _ => {
           ok = false;
           diag = s1_diag(
@@ -751,7 +1082,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             let name: Text = "";
             let empty_args: List<S1Type> = Nil;
             let ty: S1Type = S1Type { name: ""; args: empty_args; };
-            let value: S1Expr = Path("");
+            let value: S1Expr = S1Expr.Path("");
 
             // name
             match cur {
@@ -903,7 +1234,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
           };
           KwReturn => {
             cur = cell0.tail;
-            let value: S1Expr = Path("");
+            let value: S1Expr = S1Expr.Path("");
 
             let parsed: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
               s1_parse_expr(cur);
@@ -957,7 +1288,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             // expr, assignment, expr stmt, or block result
             let parsed: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
               s1_parse_expr(cur);
-            let expr: S1Expr = Path("");
+            let expr: S1Expr = S1Expr.Path("");
             let rest: List<S1Token> = cur;
 
             match parsed {
@@ -983,7 +1314,7 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
                         Eq => {
                           // assignment
                           rest = cell1.tail;
-                          let rhs: S1Expr = Path("");
+                          let rhs: S1Expr = S1Expr.Path("");
                           let parsed_rhs: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
                             s1_parse_expr(rest);
                           match parsed_rhs {

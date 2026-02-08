@@ -1,0 +1,93 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { match x { _ => 1; Foo => 2; } };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  match f.body {
+                    None => 10;
+                    Some(b) => {
+                      match b.result {
+                        None => 11;
+                        Some(e) => {
+                          match e {
+                            Match(m) => {
+                              match m.scrutinee {
+                                Path(name) => {
+                                  if name == "x" {
+                                    match m.arms {
+                                      Cons(a0) => {
+                                        match a0.head.pat {
+                                          Wildcard => {
+                                            match a0.head.value {
+                                              IntLit(n1) => {
+                                                if n1 == "1" {
+                                                  match a0.tail {
+                                                    Cons(a1) => {
+                                                      match a1.head.pat {
+                                                        Path(p2) => {
+                                                          if p2 == "Foo" {
+                                                            match a1.head.value {
+                                                              IntLit(n2) => {
+                                                                if n2 == "2" {
+                                                                  match a1.tail {
+                                                                    Nil => 0;
+                                                                    _ => 24;
+                                                                  }
+                                                                } else { 23 }
+                                                              };
+                                                              _ => 22;
+                                                            }
+                                                          } else { 21 }
+                                                        };
+                                                        _ => 20;
+                                                      }
+                                                    };
+                                                    _ => 19;
+                                                  }
+                                                } else { 18 }
+                                              };
+                                              _ => 17;
+                                            }
+                                          };
+                                          _ => 16;
+                                        }
+                                      };
+                                      _ => 15;
+                                    }
+                                  } else { 14 }
+                                };
+                                _ => 13;
+                              }
+                            };
+                            _ => 12;
+                          }
+                        };
+                      }
+                    };
+                  }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};
+

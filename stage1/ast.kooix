@@ -88,9 +88,33 @@ enum S1Expr {
   IntLit(Text);
   StringLit(Text);
   Call(S1Call);
+  Block(S1Block);
+  If(S1If);
+  Match(S1Match);
 };
 
 record S1Call {
   callee: Text;
   args: List<S1Expr>;
+};
+
+record S1If {
+  cond: S1Expr;
+  then_block: S1Block;
+  else_block: Option<S1Block>;
+};
+
+enum S1Pattern {
+  Wildcard;
+  Path(Text);
+};
+
+record S1MatchArm {
+  pat: S1Pattern;
+  value: S1Expr;
+};
+
+record S1Match {
+  scrutinee: S1Expr;
+  arms: List<S1MatchArm>;
 };
