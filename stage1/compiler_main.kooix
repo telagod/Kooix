@@ -10,7 +10,9 @@ evidence {
 }
 {
   // No CLI args yet for `run`; keep this deterministic and pure.
-  let result: Result<Int, S1Diagnostic> = s1_compile("stage1_boot");
+  let boot_src: Text =
+    "enum Option { None; Some(Int); }; record Pair { a: Int; b: Int; }; fn main() -> Int;";
+  let result: Result<Int, S1Diagnostic> = s1_compile(boot_src);
   match result {
     Ok(code) => code;
     Err(_e) => 2;

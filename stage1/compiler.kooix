@@ -11,12 +11,14 @@ evidence {
   metrics [stage1_compile_calls];
 }
 {
-  // Skeleton only: for now we prove the Stage1 module graph typechecks and runs.
   let tokens: Result<List<S1Token>, S1Diagnostic> = s1_lex(source);
   match tokens {
     Ok(ts) => {
-      let _ast: Result<S1Program, S1Diagnostic> = s1_parse(ts);
-      Ok(0)
+      let ast: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match ast {
+        Ok(_p) => Ok(0);
+        Err(e2) => Err(e2);
+      }
     };
     Err(e) => Err(e);
   }

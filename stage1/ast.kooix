@@ -30,4 +30,10 @@ record S1RecordField {
 
 record S1Enum {
   name: Text;
+  variants: List<S1EnumVariant>;
+};
+
+record S1EnumVariant {
+  name: Text;
+  payload_ty: Option<Text>;
 };

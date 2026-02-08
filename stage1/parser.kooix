@@ -47,6 +47,28 @@ fn s1_reverse_record_fields(xs: List<S1RecordField>) -> List<S1RecordField> {
   acc
 };
 
+fn s1_reverse_enum_variants(xs: List<S1EnumVariant>) -> List<S1EnumVariant> {
+  let acc: List<S1EnumVariant> = Nil;
+  let cur: List<S1EnumVariant> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1EnumVariant> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_parse(tokens: List<S1Token>) -> Result<S1Program, S1Diagnostic>
 intent "Stage1 parser (pure): tokens -> AST"
 evidence {
@@ -567,13 +589,297 @@ evidence {
             };
             0
           };
+          KwEnum => {
+            // Parse: enum <Ident> { <Variant> ; <Variant>(<type_ident>) ; ... } ;
+            let enum_start: Int = cell0.head.span.start;
+            cur = cell0.tail;
+
+            let enum_name: Text = "";
+            let variants_rev: List<S1EnumVariant> = Nil;
+
+            // name
+            match cur {
+              Nil => {
+                ok = false;
+                diag = s1_diag(Error, enum_start, enum_start, "parser: expected enum name");
+                done = true;
+                0
+              };
+              Cons(cell1) => {
+                match cell1.head.kind {
+                  Ident(name) => {
+                    enum_name = name;
+                    cur = cell1.tail;
+                    0
+                  };
+                  _ => {
+                    ok = false;
+                    diag = s1_diag(
+                      Error,
+                      cell1.head.span.start,
+                      cell1.head.span.end,
+                      "parser: expected enum name"
+                    );
+                    done = true;
+                    0
+                  };
+                }
+              };
+            };
+
+            // {
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, enum_start, enum_start, "parser: expected '{' after enum name");
+                  done = true;
+                  0
+                };
+                Cons(cell2) => {
+                  match cell2.head.kind {
+                    LBrace => {
+                      cur = cell2.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(
+                        Error,
+                        cell2.head.span.start,
+                        cell2.head.span.end,
+                        "parser: expected '{' after enum name"
+                      );
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              };
+            };
+
+            // variants until }
+            let variant_done: Bool = false;
+            while variant_done == false {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(
+                    Error,
+                    enum_start,
+                    enum_start,
+                    "parser: expected enum variant or '}'"
+                  );
+                  done = true;
+                  variant_done = true;
+                  0
+                };
+                Cons(v0) => {
+                  match v0.head.kind {
+                    RBrace => {
+                      cur = v0.tail;
+                      variant_done = true;
+                      0
+                    };
+                    Ident(vname) => {
+                      cur = v0.tail;
+                      let payload_ty: Option<Text> = None;
+
+                      // optional payload: (Ty)
+                      match cur {
+                        Nil => 0;
+                        Cons(v1) => {
+                          match v1.head.kind {
+                            LParen => {
+                              cur = v1.tail;
+
+                              match cur {
+                                Nil => {
+                                  ok = false;
+                                  diag = s1_diag(
+                                    Error,
+                                    enum_start,
+                                    enum_start,
+                                    "parser: expected payload type inside '(...)'"
+                                  );
+                                  done = true;
+                                  variant_done = true;
+                                  0
+                                };
+                                Cons(v2) => {
+                                  match v2.head.kind {
+                                    Ident(ty) => {
+                                      payload_ty = Some(ty);
+                                      cur = v2.tail;
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(
+                                        Error,
+                                        v2.head.span.start,
+                                        v2.head.span.end,
+                                        "parser: expected payload type inside '(...)'"
+                                      );
+                                      done = true;
+                                      variant_done = true;
+                                      0
+                                    };
+                                  }
+                                };
+                              };
+
+                              if ok == true {
+                                match cur {
+                                  Nil => {
+                                    ok = false;
+                                    diag = s1_diag(
+                                      Error,
+                                      enum_start,
+                                      enum_start,
+                                      "parser: expected ')' after payload type"
+                                    );
+                                    done = true;
+                                    variant_done = true;
+                                    0
+                                  };
+                                  Cons(v3) => {
+                                    match v3.head.kind {
+                                      RParen => {
+                                        cur = v3.tail;
+                                        0
+                                      };
+                                      _ => {
+                                        ok = false;
+                                        diag = s1_diag(
+                                          Error,
+                                          v3.head.span.start,
+                                          v3.head.span.end,
+                                          "parser: expected ')' after payload type"
+                                        );
+                                        done = true;
+                                        variant_done = true;
+                                        0
+                                      };
+                                    }
+                                  };
+                                };
+                              };
+                              0
+                            };
+                            _ => 0;
+                          }
+                        };
+                      };
+
+                      if ok == true {
+                        match cur {
+                          Nil => {
+                            ok = false;
+                            diag = s1_diag(
+                              Error,
+                              enum_start,
+                              enum_start,
+                              "parser: expected ';' after enum variant"
+                            );
+                            done = true;
+                            variant_done = true;
+                            0
+                          };
+                          Cons(v4) => {
+                            match v4.head.kind {
+                              Semicolon => {
+                                let variant: S1EnumVariant = S1EnumVariant {
+                                  name: vname;
+                                  payload_ty: payload_ty;
+                                };
+                                variants_rev = Cons(ListCons<S1EnumVariant> { head: variant; tail: variants_rev; });
+                                cur = v4.tail;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(
+                                  Error,
+                                  v4.head.span.start,
+                                  v4.head.span.end,
+                                  "parser: expected ';' after enum variant"
+                                );
+                                done = true;
+                                variant_done = true;
+                                0
+                              };
+                            }
+                          };
+                        };
+                      };
+
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(
+                        Error,
+                        v0.head.span.start,
+                        v0.head.span.end,
+                        "parser: expected enum variant or '}'"
+                      );
+                      done = true;
+                      variant_done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            };
+
+            // ;
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, enum_start, enum_start, "parser: expected ';' after enum");
+                  done = true;
+                  0
+                };
+                Cons(cell_end) => {
+                  match cell_end.head.kind {
+                    Semicolon => {
+                      cur = cell_end.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(
+                        Error,
+                        cell_end.head.span.start,
+                        cell_end.head.span.end,
+                        "parser: expected ';' after enum"
+                      );
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              };
+            };
+
+            if ok == true {
+              let variants: List<S1EnumVariant> = s1_reverse_enum_variants(variants_rev);
+              let item: S1Item = Enum(S1Enum { name: enum_name; variants: variants; });
+              items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
+              0;
+            };
+
+            0
+          };
           _ => {
             ok = false;
             diag = s1_diag(
               Error,
               cell0.head.span.start,
               cell0.head.span.end,
-              "parser: unexpected token (expected 'import', 'record', 'fn', or EOF)"
+              "parser: unexpected token (expected 'import', 'record', 'enum', 'fn', or EOF)"
             );
             done = true;
             0

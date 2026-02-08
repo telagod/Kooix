@@ -1,0 +1,75 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "enum Option { None; Some(Int); }; fn main() -> Int;";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Enum(e) => {
+                  if e.name == "Option" {
+                    match e.variants {
+                      Cons(v0) => {
+                        if v0.head.name == "None" {
+                          match v0.head.payload_ty {
+                            None => {
+                              match v0.tail {
+                                Cons(v1) => {
+                                  if v1.head.name == "Some" {
+                                    match v1.head.payload_ty {
+                                      Some(ty) => {
+                                        if ty == "Int" {
+                                          match v1.tail {
+                                            Nil => {
+                                              match i0.tail {
+                                                Cons(i1) => {
+                                                  match i1.head {
+                                                    Function(fun) => {
+                                                      if fun.name == "main" { 0 } else { 30 }
+                                                    };
+                                                    _ => 31;
+                                                  }
+                                                };
+                                                _ => 32;
+                                              }
+                                            };
+                                            _ => 29;
+                                          }
+                                        } else { 28 }
+                                      };
+                                      _ => 27;
+                                    }
+                                  } else { 26 }
+                                };
+                                _ => 25;
+                              }
+                            };
+                            _ => 24;
+                          }
+                        } else { 23 }
+                      };
+                      _ => 22;
+                    }
+                  } else { 21 }
+                };
+                _ => 20;
+              }
+            };
+            _ => 10;
+          }
+        };
+      }
+    };
+  }
+};
+
