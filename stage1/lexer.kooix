@@ -82,8 +82,54 @@ evidence {
                 i = i + 1;
                 0
               } else {
-                skipping = false;
-                0
+                if b == 47 {
+                  // Line comment: //
+                  let next: Option<Int> = text_byte_at(source, i + 1);
+                  match next {
+                    Some(b2) => {
+                      if b2 == 47 {
+                        i = i + 2;
+                        let scan: Bool = true;
+                        while scan == true {
+                          if i == n {
+                            scan = false;
+                            0
+                          } else {
+                            let b3_opt: Option<Int> = text_byte_at(source, i);
+                            match b3_opt {
+                              None => {
+                                i = n;
+                                scan = false;
+                                0
+                              };
+                              Some(b3) => {
+                                if b3 == 10 {
+                                  i = i + 1;
+                                  scan = false;
+                                  0
+                                } else {
+                                  i = i + 1;
+                                  0
+                                }
+                              };
+                            }
+                          }
+                        };
+                        0
+                      } else {
+                        skipping = false;
+                        0
+                      }
+                    };
+                    None => {
+                      skipping = false;
+                      0
+                    };
+                  }
+                } else {
+                  skipping = false;
+                  0
+                }
               }
             };
             None => {
@@ -277,10 +323,244 @@ evidence {
                     };
                   }
                 } else {
-                  ok = false;
-                  diag = s1_diag(Error, i, i + 1, "lexer: unexpected character");
-                  running = false;
-                  0
+                  let start: Int = i;
+                  let end1: Int = i + 1;
+
+                  if b0 == 40 {
+                    // (
+                    let tok: S1Token = S1Token { kind: LParen; span: S1Span { start: start; end: end1; }; };
+                    tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                    i = end1;
+                    0
+                  } else {
+                    if b0 == 41 {
+                      // )
+                      let tok: S1Token = S1Token { kind: RParen; span: S1Span { start: start; end: end1; }; };
+                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                      i = end1;
+                      0
+                    } else {
+                      if b0 == 123 {
+                        // {
+                        let tok: S1Token = S1Token { kind: LBrace; span: S1Span { start: start; end: end1; }; };
+                        tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                        i = end1;
+                        0
+                      } else {
+                        if b0 == 125 {
+                          // }
+                          let tok: S1Token = S1Token { kind: RBrace; span: S1Span { start: start; end: end1; }; };
+                          tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                          i = end1;
+                          0
+                        } else {
+                          if b0 == 91 {
+                            // [
+                            let tok: S1Token = S1Token { kind: LBracket; span: S1Span { start: start; end: end1; }; };
+                            tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                            i = end1;
+                            0
+                          } else {
+                            if b0 == 93 {
+                              // ]
+                              let tok: S1Token = S1Token { kind: RBracket; span: S1Span { start: start; end: end1; }; };
+                              tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                              i = end1;
+                              0
+                            } else {
+                              if b0 == 44 {
+                                // ,
+                                let tok: S1Token = S1Token { kind: Comma; span: S1Span { start: start; end: end1; }; };
+                                tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                i = end1;
+                                0
+                              } else {
+                                if b0 == 46 {
+                                  // .
+                                  let tok: S1Token = S1Token { kind: Dot; span: S1Span { start: start; end: end1; }; };
+                                  tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                  i = end1;
+                                  0
+                                } else {
+                                  if b0 == 58 {
+                                    // :
+                                    let tok: S1Token = S1Token { kind: Colon; span: S1Span { start: start; end: end1; }; };
+                                    tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                    i = end1;
+                                    0
+                                  } else {
+                                    if b0 == 59 {
+                                      // ;
+                                      let tok: S1Token = S1Token { kind: Semicolon; span: S1Span { start: start; end: end1; }; };
+                                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                      i = end1;
+                                      0
+                                    } else {
+                                      if b0 == 43 {
+                                        // +
+                                        let tok: S1Token = S1Token { kind: Plus; span: S1Span { start: start; end: end1; }; };
+                                        tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                        i = end1;
+                                        0
+                                      } else {
+                                        if b0 == 60 {
+                                          // < or <=
+                                          let next: Option<Int> = text_byte_at(source, i + 1);
+                                          match next {
+                                            Some(b1) => {
+                                              if b1 == 61 {
+                                                let end2: Int = i + 2;
+                                                let tok: S1Token = S1Token { kind: Lte; span: S1Span { start: start; end: end2; }; };
+                                                tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                i = end2;
+                                                0
+                                              } else {
+                                                let tok: S1Token = S1Token { kind: LAngle; span: S1Span { start: start; end: end1; }; };
+                                                tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                i = end1;
+                                                0
+                                              }
+                                            };
+                                            None => {
+                                              let tok: S1Token = S1Token { kind: LAngle; span: S1Span { start: start; end: end1; }; };
+                                              tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                              i = end1;
+                                              0
+                                            };
+                                          }
+                                        } else {
+                                          if b0 == 62 {
+                                            // > or >=
+                                            let next: Option<Int> = text_byte_at(source, i + 1);
+                                            match next {
+                                              Some(b1) => {
+                                                if b1 == 61 {
+                                                  let end2: Int = i + 2;
+                                                  let tok: S1Token = S1Token { kind: Gte; span: S1Span { start: start; end: end2; }; };
+                                                  tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                  i = end2;
+                                                  0
+                                                } else {
+                                                  let tok: S1Token = S1Token { kind: RAngle; span: S1Span { start: start; end: end1; }; };
+                                                  tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                  i = end1;
+                                                  0
+                                                }
+                                              };
+                                              None => {
+                                                let tok: S1Token = S1Token { kind: RAngle; span: S1Span { start: start; end: end1; }; };
+                                                tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                i = end1;
+                                                0
+                                              };
+                                            }
+                                          } else {
+                                            if b0 == 61 {
+                                              // =, ==, =>
+                                              let next: Option<Int> = text_byte_at(source, i + 1);
+                                              match next {
+                                                Some(b1) => {
+                                                  if b1 == 61 {
+                                                    let end2: Int = i + 2;
+                                                    let tok: S1Token = S1Token { kind: EqEq; span: S1Span { start: start; end: end2; }; };
+                                                    tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                    i = end2;
+                                                    0
+                                                  } else {
+                                                    if b1 == 62 {
+                                                      let end2: Int = i + 2;
+                                                      let tok: S1Token = S1Token { kind: FatArrow; span: S1Span { start: start; end: end2; }; };
+                                                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                      i = end2;
+                                                      0
+                                                    } else {
+                                                      let tok: S1Token = S1Token { kind: Eq; span: S1Span { start: start; end: end1; }; };
+                                                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                      i = end1;
+                                                      0
+                                                    }
+                                                  }
+                                                };
+                                                None => {
+                                                  let tok: S1Token = S1Token { kind: Eq; span: S1Span { start: start; end: end1; }; };
+                                                  tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                  i = end1;
+                                                  0
+                                                };
+                                              }
+                                            } else {
+                                              if b0 == 33 {
+                                                // ! or !=
+                                                let next: Option<Int> = text_byte_at(source, i + 1);
+                                                match next {
+                                                  Some(b1) => {
+                                                    if b1 == 61 {
+                                                      let end2: Int = i + 2;
+                                                      let tok: S1Token = S1Token { kind: NotEq; span: S1Span { start: start; end: end2; }; };
+                                                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                      i = end2;
+                                                      0
+                                                    } else {
+                                                      let tok: S1Token = S1Token { kind: Bang; span: S1Span { start: start; end: end1; }; };
+                                                      tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                      i = end1;
+                                                      0
+                                                    }
+                                                  };
+                                                  None => {
+                                                    let tok: S1Token = S1Token { kind: Bang; span: S1Span { start: start; end: end1; }; };
+                                                    tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                    i = end1;
+                                                    0
+                                                  };
+                                                }
+                                              } else {
+                                                if b0 == 45 {
+                                                  // - or ->
+                                                  let next: Option<Int> = text_byte_at(source, i + 1);
+                                                  match next {
+                                                    Some(b1) => {
+                                                      if b1 == 62 {
+                                                        let end2: Int = i + 2;
+                                                        let tok: S1Token = S1Token { kind: Arrow; span: S1Span { start: start; end: end2; }; };
+                                                        tokens_rev = Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                                                        i = end2;
+                                                        0
+                                                      } else {
+                                                        ok = false;
+                                                        diag = s1_diag(Error, i, i + 1, "lexer: unexpected '-' (expected '->')");
+                                                        running = false;
+                                                        0
+                                                      }
+                                                    };
+                                                    None => {
+                                                      ok = false;
+                                                      diag = s1_diag(Error, i, i + 1, "lexer: unexpected '-' (expected '->')");
+                                                      running = false;
+                                                      0
+                                                    };
+                                                  }
+                                                } else {
+                                                  ok = false;
+                                                  diag = s1_diag(Error, i, i + 1, "lexer: unexpected character");
+                                                  running = false;
+                                                  0
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

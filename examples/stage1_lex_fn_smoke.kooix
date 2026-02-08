@@ -1,0 +1,95 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/token";
+
+fn main() -> Int {
+  let r: Result<List<S1Token>, S1Diagnostic> = s1_lex("fn main() -> Int; // comment");
+  match r {
+    Err(_e) => 1;
+    Ok(ts) => {
+      match ts {
+        Cons(t0) => {
+          match t0.head.kind {
+            KwFn => {
+              match t0.tail {
+                Cons(t1) => {
+                  match t1.head.kind {
+                    Ident(name) => {
+                      if name == "main" {
+                        match t1.tail {
+                          Cons(t2) => {
+                            match t2.head.kind {
+                              LParen => {
+                                match t2.tail {
+                                  Cons(t3) => {
+                                    match t3.head.kind {
+                                      RParen => {
+                                        match t3.tail {
+                                          Cons(t4) => {
+                                            match t4.head.kind {
+                                              Arrow => {
+                                                match t4.tail {
+                                                  Cons(t5) => {
+                                                    match t5.head.kind {
+                                                      Ident(ty) => {
+                                                        if ty == "Int" {
+                                                          match t5.tail {
+                                                            Cons(t6) => {
+                                                              match t6.head.kind {
+                                                                Semicolon => {
+                                                                  match t6.tail {
+                                                                    Cons(t7) => {
+                                                                      match t7.head.kind {
+                                                                        Eof => 0;
+                                                                        _ => 20;
+                                                                      }
+                                                                    };
+                                                                    Nil => 21;
+                                                                  }
+                                                                };
+                                                                _ => 19;
+                                                              }
+                                                            };
+                                                            Nil => 18;
+                                                          }
+                                                        } else { 17 }
+                                                      };
+                                                      _ => 16;
+                                                    }
+                                                  };
+                                                  Nil => 15;
+                                                }
+                                              };
+                                              _ => 14;
+                                            }
+                                          };
+                                          Nil => 13;
+                                        }
+                                      };
+                                      _ => 12;
+                                    }
+                                  };
+                                  Nil => 11;
+                                }
+                              };
+                              _ => 10;
+                            }
+                          };
+                          Nil => 9;
+                        }
+                      } else { 8 }
+                    };
+                    _ => 7;
+                  }
+                };
+                Nil => 6;
+              }
+            };
+            _ => 5;
+          }
+        };
+        Nil => 4;
+      }
+    };
+  }
+};
