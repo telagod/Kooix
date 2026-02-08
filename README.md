@@ -28,7 +28,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`x = ...`/`return`、基础表达式（literal/path/call/record literal/成员投影 `x.y`/`if/else`/`while`/`+`/`==`/`!=`）与返回类型静态校验。
 - Kooix-Core 分支控制：`match`（`_`/`Variant(bind?)` pattern、arm type 收敛、穷尽性校验）。
 - 代数数据类型：`enum` 声明 + variant 构造（unit + payload；泛型 enum 依赖上下文 expected type 做最小推导）。
-- Native lowering v1：支持 `Int/Bool/Unit` 的函数体子集进入 `mir/llvm/native`（`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=`）；`Text`/`record`/`enum`/`match` 等仍未进入 native lowering。
+- Native lowering v1：支持 `Int/Bool/Unit` 的函数体子集进入 `mir/llvm/native`（`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=`）；支持非泛型 `record`（仅 `Int/Bool` 字段）的 `record literal` + member projection；`Text`/`enum`/`match` 等仍未进入 native lowering。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
 - 记录类型：`record` 声明、字段投影与最小泛型替换（如 `Box<Answer>.value`）。
@@ -53,7 +53,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`145 passed, 0 failed`
+- 结果：`146 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -88,6 +88,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.8: enum variant namespacing（`Enum.Variant`）+ 跨 enum 重名放开
 - ✅ Phase 8.9: 函数泛型语法 + 显式 call type args（最小子集）
 - ✅ Phase 9.0: 函数体 MIR/LLVM lowering（Int/Bool/Unit 子集）+ native 可执行闭环
+- ✅ Phase 9.1: `record` native lowering（非泛型 + Int/Bool 字段子集）
 
 详见：`DESIGN.md` / `BOOTSTRAP.md`
 

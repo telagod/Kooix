@@ -447,3 +447,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：自举链路的第一道硬门槛是“编译器本体能被 native 编译并运行”，必须先打通函数体进入后端的可执行闭环。
 - **影响范围**：`crates/kooixc/src/lib.rs`、`crates/kooixc/src/mir.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/tests/compiler_tests.rs` 与 README。
 - **决策依据**：优先选择 alloca-based 方案降低实现复杂度与调试成本，先保证语义正确与可审计，再逐步优化为 SSA/更丰富类型运行时。
+
+### 2026-02-08 - Phase 9.1：`record` native lowering（非泛型 + Int/Bool 字段子集）
+
+- **变更内容**：MIR 增加 `MirProgram.records` 与 `RecordLit/ProjectField` rvalue；native lowering 放开 `record` 值进入 MIR/LLVM（仅支持非泛型 record，字段类型限制为 `Int/Bool`，并支持 record literal 与 member projection `p.a`）；LLVM emitter 增加 record type decl（`%Pair = type { i64, i64 }`）、`insertvalue/extractvalue`；新增 native compile+run 测试覆盖 record literal + projection。
+- **变更理由**：Stage1 编译器需要结构化数据（AST/Token/Span/Diagnostic 的 record 表示）与字段访问；native 后端必须能承载最小 record 才能继续推进 runtime/stdlib。
+- **影响范围**：`crates/kooixc/src/mir.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/tests/compiler_tests.rs` 与 README。
+- **决策依据**：先选“record by-value + insert/extract”的最小可审计实现，避免过早引入 heap/runtime；泛型 record、嵌套 record、Text/enum/match 留到后续阶段。

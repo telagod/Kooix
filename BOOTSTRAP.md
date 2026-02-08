@@ -20,7 +20,7 @@ Kooix 的自举不是“能写 hello world”，而是**编译器可以用自己
 
 ### 硬门槛（没有就无法自举）
 
-1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（已支持 `Int/Bool/Unit` 的最小子集；`record/enum/Text/match` 仍未进入 native lowering）。
+1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（已支持 `Int/Bool/Unit`，并支持非泛型 `record`（`Int/Bool` 字段子集）的 record literal + member projection；`enum/Text/match` 仍未进入 native lowering）。
 2. **Runtime（关键）**：可支撑编译器数据结构的最小内存模型（至少 `Text` / `List<T>` / `Record` / `Enum`）。
 3. **Module/System**：从 include 风格 `import "path"` 演进到最小 module/namespace/export（编译器本身无法长期容忍全局命名空间）。
 4. **Generics**：generic fn + generic record/enum（编译器会大量复用 AST/Token/Result/Option 等泛型结构）。
@@ -57,7 +57,7 @@ cargo test -p kooixc
 3. ✅ `if/else` 表达式（alloca 汇合）
 4. ✅ `while`（基础块 + branch）
 5. ✅ `call`（函数调用约定）
-6. `record`/member（聚合类型）
+6. ✅ `record`/member（非泛型 + `Int/Bool` 字段子集）
 7. `enum`/`match`（tag + payload + switch）
 8. `Text`（最小 runtime 支持）
 
