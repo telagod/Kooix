@@ -6,6 +6,7 @@ This document maps syntax to implementation layers:
 
 - **Core v0** → implemented in current `lexer/parser/ast/sema`.
 - **AI v1** → partial implementation landed (`intent` + `ensures` + `failure` + `evidence` and minimal `workflow` + minimal `agent`).
+- **Kooix-Core (M1/M2)** → function bodies (AST + typecheck) + minimal interpreter runtime (`run` command).
 
 The goal is backward-compatible evolution: all Core v0 programs remain valid.
 
@@ -20,6 +21,15 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
 - Grammar: `FunctionDecl ::= "fn" ... [Effects] [Requires] ";"`
   - AST: `Item::Function(FunctionDecl)`
   - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
+
+### Kooix-Core: function bodies (Implemented)
+
+- Grammar: `FunctionDecl ::= "fn" ... [Block] ";"`
+  - AST field: `FunctionDecl.body: Option<Block>`
+  - AST nodes: `Block`, `Statement`, `Expr`
+  - Parser: `crates/kooixc/src/parser.rs` (`parse_block` + `parse_expr`)
+  - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference)
+  - Runtime: `crates/kooixc/src/interp.rs` (minimal interpreter; effectful functions are rejected)
 
 ### Type system nodes
 
@@ -57,6 +67,11 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
 
 - LLVM IR text → native binary (`llc` + `clang`)
   - Code: `crates/kooixc/src/native.rs`
+
+- `AST Program` → interpreter runtime (Kooix-Core subset)
+  - Code: `crates/kooixc/src/interp.rs`
+  - Public API: `crates/kooixc/src/lib.rs` (`run_source`)
+  - CLI: `crates/kooixc/src/main.rs` (`run` command)
 
 ## AI v1 Mapping (Partial Implementation)
 

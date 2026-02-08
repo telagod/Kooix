@@ -17,6 +17,12 @@ fn summarize(doc: Text) -> Summary !{model(openai), net} requires [Model<"openai
 fn add(x: Int, y: Int) -> Int;
 ```
 
+### Valid: function with body (Kooix-Core subset)
+
+```kooix
+fn add(x: Int, y: Int) -> Int { x + y };
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix

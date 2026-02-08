@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod error;
 pub mod hir;
+pub mod interp;
 pub mod lexer;
 pub mod llvm;
 pub mod mir;
@@ -69,6 +70,26 @@ pub fn lower_to_mir_source(source: &str) -> Result<MirProgram, Vec<Diagnostic>> 
 pub fn emit_llvm_ir_source(source: &str) -> Result<String, Vec<Diagnostic>> {
     let mir_program = lower_to_mir_source(source)?;
     Ok(llvm::emit_program(&mir_program))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunResult {
+    pub value: interp::Value,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+pub fn run_source(source: &str) -> Result<RunResult, Vec<Diagnostic>> {
+    let program = parse_source(source)?;
+    let diagnostics = sema::check_program(&program);
+    if diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        return Err(diagnostics);
+    }
+
+    let value = interp::run_program(&program).map_err(|error| vec![error])?;
+    Ok(RunResult { value, diagnostics })
 }
 
 pub fn compile_native_source(source: &str, output_path: &Path) -> Result<(), native::NativeError> {

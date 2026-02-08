@@ -32,13 +32,13 @@ Kooix 已完成一条可运行的最小编译链路：
   - state reachability（不可达状态 warning）。
   - stop condition 目标状态校验（unknown/unreachable warning）。
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
-- CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`native`。
+- CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`120 passed, 0 failed`
+- 结果：`122 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -63,6 +63,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 7.2: Agent 活性/终止性提示
 - ✅ Phase 7.3: Agent SCC 循环活性校验
 - ✅ Phase 8.0: Kooix-Core 函数体 Frontend（block/let/return/expr）
+- ✅ Phase 8.1: Interpreter `run` 最小闭环（纯函数体子集）
 
 详见：`DESIGN.md`
 
@@ -83,6 +84,9 @@ cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
 cargo run -p kooixc -- llvm examples/codegen.kooix
+
+# 解释执行（函数体子集）
+cargo run -p kooixc -- run examples/run.kooix
 
 # 生成本地可执行文件
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo
@@ -115,6 +119,7 @@ cargo test -p kooixc
   - `examples/invalid_missing_model_cap.kooix`
   - `examples/invalid_model_shape.kooix`
   - `examples/codegen.kooix`
+  - `examples/run.kooix`
 - 语法文档：
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`

@@ -6,7 +6,7 @@ use kooixc::error::{Diagnostic, Severity};
 use kooixc::native::NativeError;
 use kooixc::{
     check_source, compile_and_run_native_source_with_args_stdin_and_timeout, compile_native_source,
-    emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source,
+    emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source, run_source,
 };
 
 fn main() {
@@ -67,6 +67,18 @@ fn main() {
         "llvm" => match emit_llvm_ir_source(&source) {
             Ok(ir) => {
                 println!("{ir}");
+            }
+            Err(errors) => {
+                print_diagnostics(&errors, &source);
+                process::exit(1);
+            }
+        },
+        "run" => match run_source(&source) {
+            Ok(result) => {
+                if !result.diagnostics.is_empty() {
+                    print_diagnostics(&result.diagnostics, &source);
+                }
+                println!("ok: run result: {}", result.value);
             }
             Err(errors) => {
                 print_diagnostics(&errors, &source);
@@ -179,7 +191,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 

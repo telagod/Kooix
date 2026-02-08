@@ -1,26 +1,57 @@
 (*
-  Kooix Grammar Core v0
-  Scope: exactly matches the currently implemented parser subset.
+  Kooix Grammar (Implemented MVP)
+  Scope: matches the current parser implementation in crates/kooixc.
 *)
 
 Program           = { Item } EOF ;
 
 Item              = CapabilityDecl
+                  | RecordDecl
                   | FunctionDecl
+                  | WorkflowDecl
+                  | AgentDecl
                   ;
 
 CapabilityDecl    = "cap" TypeRef ";" ;
 
-FunctionDecl      = "fn" Identifier "(" [ ParamList ] ")"
-                    "->" TypeRef
-                    [ Effects ]
-                    [ Requires ]
-                    ";"
-                  ;
+(* ---------- Records ---------- *)
+
+RecordDecl         = "record" Identifier [ GenericParams ] [ WhereClause ] "{"
+                     { RecordField }
+                     "}" ";"
+                   ;
+
+GenericParams      = "<" GenericParam { "," GenericParam } ">" ;
+
+GenericParam       = Identifier [ ":" TypeBoundList ] ;
+
+TypeBoundList      = TypeRef { "+" TypeRef } ;
+
+WhereClause        = "where" WhereConstraint { "," WhereConstraint } ;
+
+WhereConstraint    = Identifier ":" TypeBoundList ;
+
+RecordField        = Identifier ":" TypeRef ";" ;
+
+(* ---------- Functions ---------- *)
+
+FunctionDecl       = "fn" Identifier "(" [ ParamList ] ")"
+                     "->" TypeRef
+                     [ Intent ]
+                     [ Effects ]
+                     [ Requires ]
+                     [ Ensures ]
+                     [ Failure ]
+                     [ Evidence ]
+                     [ Block ]
+                     ";"
+                   ;
 
 ParamList         = Param { "," Param } ;
 
 Param             = Identifier ":" TypeRef ;
+
+Intent            = "intent" StringLiteral ;
 
 Effects           = "!" "{" [ EffectSpec { "," EffectSpec } ] "}" ;
 
@@ -33,6 +64,146 @@ EffectArg         = Identifier
 
 Requires          = "requires" "[" [ TypeRef { "," TypeRef } ] "]" ;
 
+Ensures           = "ensures" "[" [ EnsureClause { "," EnsureClause } ] "]" ;
+
+EnsureClause      = PredicateValue CompareOp PredicateValue ;
+
+PredicateValue    = SymbolPath
+                  | StringLiteral
+                  | NumberLiteral
+                  ;
+
+CompareOp         = "==" | "!=" | "<" | "<=" | ">" | ">=" | "in" ;
+
+Failure           = "failure" "{" { FailureRule } "}" ;
+
+FailureRule       = Identifier "->" FailureAction ";" ;
+
+FailureAction     = Identifier "(" [ FailureActionArg { "," FailureActionArg } ] ")" ;
+
+FailureActionArg  = [ Identifier "=" ] FailureValue ;
+
+FailureValue      = Identifier | StringLiteral | NumberLiteral ;
+
+Evidence          = "evidence" "{"
+                   { EvidenceClause }
+                   "}"
+                  ;
+
+EvidenceClause    = TraceClause | MetricsClause ;
+
+TraceClause       = "trace" StringLiteral ";" ;
+
+MetricsClause     = "metrics" "[" [ Identifier { "," Identifier } ] "]" ";" ;
+
+(* ---------- Workflows ---------- *)
+
+WorkflowDecl       = "workflow" Identifier "(" [ ParamList ] ")"
+                     "->" TypeRef
+                     [ Intent ]
+                     [ Requires ]
+                     Steps
+                     [ OutputSpec ]
+                     [ Evidence ]
+                     ";"
+                   ;
+
+Steps              = "steps" "{"
+                     { StepDecl }
+                     "}"
+                   ;
+
+StepDecl           = Identifier ":" WorkflowCall
+                     [ Ensures ]
+                     [ OnFail ]
+                     ";"
+                   ;
+
+OnFail             = "on_fail" "->" FailureAction ;
+
+WorkflowCall       = Identifier "(" [ WorkflowCallArg { "," WorkflowCallArg } ] ")" ;
+
+WorkflowCallArg    = SymbolPath | StringLiteral | NumberLiteral ;
+
+OutputSpec         = "output" "{"
+                     { OutputField }
+                     "}"
+                   ;
+
+OutputField        = Identifier ":" TypeRef [ "=" SymbolPath ] ";" ;
+
+(* ---------- Agents ---------- *)
+
+AgentDecl          = "agent" Identifier "(" [ ParamList ] ")"
+                     "->" TypeRef
+                     [ Intent ]
+                     StateSpec
+                     PolicySpec
+                     [ Requires ]
+                     LoopSpec
+                     [ Ensures ]
+                     [ Evidence ]
+                     ";"
+                   ;
+
+StateSpec          = "state" "{"
+                     { StateRule }
+                     "}"
+                   ;
+
+StateRule          = (Identifier | "any") "->" Identifier { "," Identifier } ";" ;
+
+PolicySpec         = "policy" "{"
+                     { PolicyRule }
+                     "}"
+                   ;
+
+PolicyRule         = "allow_tools" "[" StringLiteral { "," StringLiteral } "]" ";"
+                  |  "deny_tools" "[" StringLiteral { "," StringLiteral } "]" ";"
+                  |  "max_iterations" "=" NumberLiteral ";"
+                  |  "human_in_loop" "when" EnsureClause ";"
+                  ;
+
+LoopSpec           = "loop" "{"
+                     Identifier { "->" Identifier } ";"
+                     "stop" "when" EnsureClause ";"
+                     "}"
+                   ;
+
+(* ---------- Function Body (Kooix-Core subset) ---------- *)
+
+Block              = "{"
+                     { Statement ";" }
+                     [ Expr ]
+                     "}"
+                   ;
+
+Statement          = LetStmt
+                  |  ReturnStmt
+                  |  Expr
+                  ;
+
+LetStmt            = "let" Identifier [ ":" TypeRef ] "=" Expr ;
+
+ReturnStmt         = "return" [ Expr ] ;
+
+Expr               = EqualityExpr ;
+
+EqualityExpr       = AddExpr { ("==" | "!=") AddExpr } ;
+
+AddExpr            = PrimaryExpr { "+" PrimaryExpr } ;
+
+PrimaryExpr        = SymbolPath
+                  |  CallExpr
+                  |  NumberLiteral
+                  |  StringLiteral
+                  |  "true"
+                  |  "false"
+                  |  "(" Expr ")"
+                  ;
+
+CallExpr           = Identifier "(" [ Expr { "," Expr } ] ")" ;
+
 TypeRef           = Identifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
 
 TypeArg           = TypeRef
@@ -41,6 +212,8 @@ TypeArg           = TypeRef
                   ;
 
 Identifier        = Letter { Letter | Digit | "_" } ;
+
+SymbolPath        = Identifier { "." Identifier } ;
 
 StringLiteral     = '"' { Character - '"' | EscapedChar } '"' ;
 
@@ -53,4 +226,3 @@ Letter            = "A".."Z" | "a".."z" ;
 Digit             = "0".."9" ;
 
 EOF               = ? end of input ? ;
-

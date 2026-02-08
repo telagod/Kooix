@@ -20,6 +20,7 @@ Source (.kooix)
   -> HIR Lowering
   -> MIR Lowering
   -> Semantic Checker (effect/capability rules)
+  -> Interpreter (Kooix-Core subset, optional)
   -> LLVM IR Text Backend
   -> llc (obj) + clang (native bin)
   -> Diagnostics / IR / Native Output
@@ -32,6 +33,7 @@ Source (.kooix)
 - `hir.rs`：AST 到 HIR 的 lowering 层。
 - `mir.rs`：HIR 到 MIR 的 lowering 层。
 - `sema.rs`：语义规则引擎，执行 capability 约束检查。
+- `interp.rs`：Kooix-Core 函数体子集的最小 interpreter（用于 bootstrap/runtime 早期闭环）。
 - `llvm.rs`：MIR 到 LLVM IR 文本输出。
 - `native.rs`：调用 `llc`/`clang` 将 LLVM IR 编译为本地可执行文件。
 - `main.rs`：CLI 封装与诊断输出。
@@ -96,7 +98,7 @@ agent <name>(<params>) -> <TypeRef>
 
 ## 已知限制
 
-- 支持函数体与基础表达式 AST 的解析与类型检查（Frontend），但暂不支持 MIR/LLVM lowering 与运行语义。
+- 支持函数体与基础表达式 AST 的解析与类型检查（Frontend）；提供最小 interpreter `run`（仅纯函数体子集、禁用 effects），但暂不支持 MIR/LLVM lowering 与完整 runtime/stdlib。
 - 仅支持有限的 capability schema（Model/Net/Tool/Io）。
 - `ensures` 当前仅支持简单谓词：`Path|String|Number` 两侧比较（`== != < <= > >= in`）。
 - `failure` 当前仅支持规则子集：`condition -> action(args);`，action 支持 `retry/fallback/abort/compensate`。
@@ -368,3 +370,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：把 Kooix 从“声明级 DSL”推进到“可写编译器的 Kooix-Core”起点，为后续 VM/解释器路线与自举（self-hosting）铺路。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`hir.rs`、`sema.rs`、`lib.rs` 与 tests。
 - **决策依据**：先落地可解析+可类型检查的最小函数体子集（M1），并用明确门禁阻断后端误用；后续在 M2 引入 VM/解释器或真正 MIR lowering。
+
+### 2026-02-08 - Phase 8.1：Interpreter `run` 最小闭环（M2 起步）
+
+- **变更内容**：新增 `interp.rs` 最小 interpreter（支持 `let`/`return`/基础表达式/函数调用）；新增 CLI 命令 `run`；新增 `run_source` API；新增 `examples/run.kooix` 与解释器测试用例；解释器明确禁止 effects，避免误触发真实 I/O。
+- **变更理由**：提供不依赖 LLVM 工具链的可运行闭环，为 bootstrap 的 runtime/stdlib 演进打底，并让语义扩展可以通过运行测试快速验证。
+- **影响范围**：`interp.rs`、`lib.rs`、`main.rs`、`compiler_tests.rs`、README 与 grammar/mapping 文档。
+- **决策依据**：先解释执行，后字节码/LLVM；优先保证确定性与可审计性，不支持的语义直接报错而非降级忽略。

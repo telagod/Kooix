@@ -1,5 +1,6 @@
 use kooixc::ast::{Expr, FailureValue, Item, PredicateOp, PredicateValue, Statement};
 use kooixc::error::Severity;
+use kooixc::interp::Value;
 use kooixc::native::{
     compile_llvm_ir_to_executable, compile_llvm_ir_to_executable_with_tools,
     run_executable_with_args_and_stdin, run_executable_with_args_and_stdin_and_timeout,
@@ -9,7 +10,7 @@ use kooixc::{
     check_source, compile_and_run_native_source, compile_and_run_native_source_with_args,
     compile_and_run_native_source_with_args_and_stdin,
     compile_and_run_native_source_with_args_stdin_and_timeout, emit_llvm_ir_source, lower_source,
-    lower_to_mir_source, parse_source,
+    lower_to_mir_source, parse_source, run_source,
 };
 
 #[test]
@@ -160,6 +161,34 @@ fn main() -> Int { 0 };
                 && diagnostic.message.contains("MIR/LLVM lowering is not implemented yet")
         }))
     );
+}
+
+#[test]
+fn runs_interpreter_for_simple_main() {
+    let source = r#"
+fn add(a: Int, b: Int) -> Int { a + b };
+fn main() -> Int { add(20, 22) };
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(42));
+}
+
+#[test]
+fn interpreter_rejects_effectful_functions() {
+    let source = r#"
+cap Net<"example.com">;
+fn main() -> Int !{net} requires [Net<"example.com">] { 0 };
+"#;
+
+    let diagnostics = run_source(source).expect_err("run should fail");
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("declares effects and cannot be executed by the interpreter")
+    }));
 }
 
 #[test]

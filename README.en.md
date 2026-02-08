@@ -34,13 +34,13 @@ Kooix already has a runnable minimal compiler pipeline:
   - stop condition target validation (unknown/unreachable state warning).
   - non-termination warning when there is no `max_iterations` guard and no reachable terminal path.
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
-- CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `native`.
+- CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`.
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `120 passed, 0 failed`
+- Result: `122 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -65,6 +65,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 7.2: Agent liveness/termination hints
 - ✅ Phase 7.3: Agent SCC cycle liveness validation
 - ✅ Phase 8.0: Kooix-Core function body frontend (block/let/return/expr)
+- ✅ Phase 8.1: Minimal interpreter `run` loop (pure function-body subset)
 
 See also: `DESIGN.md`
 
@@ -85,6 +86,9 @@ cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
 cargo run -p kooixc -- llvm examples/codegen.kooix
+
+# Interpreter (function body subset)
+cargo run -p kooixc -- run examples/run.kooix
 
 # Build native executable
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo
@@ -117,6 +121,7 @@ cargo test -p kooixc
   - `examples/invalid_missing_model_cap.kooix`
   - `examples/invalid_model_shape.kooix`
   - `examples/codegen.kooix`
+  - `examples/run.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
