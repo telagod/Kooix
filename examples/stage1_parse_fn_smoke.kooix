@@ -20,14 +20,17 @@ fn main() -> Int {
                   if f.name == "main" {
                     match f.params {
                       Nil => {
-                        if f.has_body == false {
-                          if f.return_type.name == "Int" {
-                            match f.return_type.args {
-                              Nil => 0;
-                              _ => 9;
-                            }
-                          } else { 5 }
-                        } else { 8 }
+                        match f.body_tokens {
+                          None => {
+                            if f.return_type.name == "Int" {
+                              match f.return_type.args {
+                                Nil => 0;
+                                _ => 9;
+                              }
+                            } else { 5 }
+                          };
+                          _ => 8;
+                        }
                       };
                       _ => 7;
                     }

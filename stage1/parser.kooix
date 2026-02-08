@@ -69,6 +69,28 @@ fn s1_reverse_enum_variants(xs: List<S1EnumVariant>) -> List<S1EnumVariant> {
   acc
 };
 
+fn s1_reverse_tokens_for_parser(xs: List<S1Token>) -> List<S1Token> {
+  let acc: List<S1Token> = Nil;
+  let cur: List<S1Token> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Token> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_reverse_types(xs: List<S1Type>) -> List<S1Type> {
   let acc: List<S1Type> = Nil;
   let cur: List<S1Type> = xs;
@@ -341,7 +363,7 @@ evidence {
             let params_rev: List<S1Param> = Nil;
             let empty_args: List<S1Type> = Nil;
             let ret_ty: S1Type = S1Type { name: ""; args: empty_args; };
-            let has_body: Bool = false;
+            let body_tokens: Option<List<S1Token>> = None;
 
             // name
             match cur {
@@ -594,16 +616,16 @@ evidence {
                   match cell6.head.kind {
                     Semicolon => {
                       cur = cell6.tail;
-                      has_body = false;
+                      body_tokens = None;
                       0
                     };
                     LBrace => {
-                      has_body = true;
                       cur = cell6.tail;
 
                       let empty_stack: List<Int> = Nil;
                       let stack: List<Int> =
                         Cons(ListCons<Int> { head: 0; tail: empty_stack; });
+                      let body_rev: List<S1Token> = Nil;
                       let scanning: Bool = true;
                       while scanning == true {
                         match cur {
@@ -617,6 +639,8 @@ evidence {
                           Cons(b0) => {
                             match b0.head.kind {
                               LBrace => {
+                                body_rev =
+                                  Cons(ListCons<S1Token> { head: b0.head; tail: body_rev; });
                                 stack =
                                   Cons(ListCons<Int> { head: 0; tail: stack; });
                                 cur = b0.tail;
@@ -632,25 +656,41 @@ evidence {
                                     0
                                   };
                                   Cons(s0) => {
-                                    stack = s0.tail;
-                                    cur = b0.tail;
-                                    match stack {
+                                    match s0.tail {
                                       Nil => {
+                                        // Closing the outermost '{ ... }' of the function body.
+                                        stack = Nil;
+                                        cur = b0.tail;
                                         scanning = false;
                                         0
                                       };
-                                      _ => 0;
+                                      _ => {
+                                        stack = s0.tail;
+                                        body_rev = Cons(ListCons<S1Token> { head: b0.head; tail: body_rev; });
+                                        cur = b0.tail;
+                                        0
+                                      };
                                     }
                                   };
                                 }
                               };
                               _ => {
+                                body_rev =
+                                  Cons(ListCons<S1Token> { head: b0.head; tail: body_rev; });
                                 cur = b0.tail;
                                 0
                               };
                             }
                           };
                         }
+                      };
+
+                      if ok == true {
+                        let body: List<S1Token> = s1_reverse_tokens_for_parser(body_rev);
+                        body_tokens = Some(body);
+                        0
+                      } else {
+                        0
                       };
 
                       if ok == true {
@@ -694,7 +734,7 @@ evidence {
             if ok == true {
               let params: List<S1Param> = s1_reverse_params(params_rev);
               let item: S1Item = Function(
-                S1Function { name: fn_name; params: params; return_type: ret_ty; has_body: has_body; }
+                S1Function { name: fn_name; params: params; return_type: ret_ty; body_tokens: body_tokens; }
               );
               items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
               0

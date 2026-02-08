@@ -1,4 +1,5 @@
 import "../stdlib/prelude";
+import "token";
 
 record S1Program { items: List<S1Item>; };
 
@@ -19,7 +20,7 @@ record S1Function {
   name: Text;
   params: List<S1Param>;
   return_type: S1Type;
-  has_body: Bool;
+  body_tokens: Option<List<S1Token>>;
 };
 
 record S1Param {
