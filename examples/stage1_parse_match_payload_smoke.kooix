@@ -1,0 +1,137 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { match x { Foo(a) => 1; Foo(_) => 2; _ => 3; } };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  match f.body {
+                    Some(b) => {
+                      match b.result {
+                        Some(e) => {
+                          match e {
+                            Match(m) => {
+                              match m.scrutinee {
+                                Path(sp) => {
+                                  if sp.name == "x" {
+                                    match m.arms {
+                                      Cons(a0) => {
+                                        // Foo(a) => 1;
+                                        match a0.head.pat {
+                                          Variant(vp0) => {
+                                            if vp0.path.name == "Foo" {
+                                              match vp0.payload {
+                                                Some(pl0) => {
+                                                  match pl0 {
+                                                    Bind(b0) => {
+                                                      if b0 == "a" {
+                                                        match a0.head.value {
+                                                          IntLit(n0) => {
+                                                            if n0 == "1" {
+                                                              match a0.tail {
+                                                                Cons(a1) => {
+                                                                  // Foo(_) => 2;
+                                                                  match a1.head.pat {
+                                                                    Variant(vp1) => {
+                                                                      if vp1.path.name == "Foo" {
+                                                                        match vp1.payload {
+                                                                          Some(pl1) => {
+                                                                            match pl1 {
+                                                                              Wildcard => {
+                                                                                match a1.head.value {
+                                                                                  IntLit(n1) => {
+                                                                                    if n1 == "2" {
+                                                                                      match a1.tail {
+                                                                                        Cons(a2) => {
+                                                                                          // _ => 3;
+                                                                                          match a2.head.pat {
+                                                                                            Wildcard => {
+                                                                                              match a2.head.value {
+                                                                                                IntLit(n2) => {
+                                                                                                  if n2 == "3" {
+                                                                                                    match a2.tail {
+                                                                                                      Nil => 0;
+                                                                                                      _ => 60;
+                                                                                                    }
+                                                                                                  } else { 59 }
+                                                                                                };
+                                                                                                _ => 58;
+                                                                                              }
+                                                                                            };
+                                                                                            _ => 57;
+                                                                                          }
+                                                                                        };
+                                                                                        _ => 56;
+                                                                                      }
+                                                                                    } else { 55 }
+                                                                                  };
+                                                                                  _ => 54;
+                                                                                }
+                                                                              };
+                                                                              _ => 53;
+                                                                            }
+                                                                          };
+                                                                          _ => 52;
+                                                                        }
+                                                                      } else { 51 }
+                                                                    };
+                                                                    _ => 50;
+                                                                  }
+                                                                };
+                                                                _ => 49;
+                                                              }
+                                                            } else { 48 }
+                                                          };
+                                                          _ => 47;
+                                                        }
+                                                      } else { 46 }
+                                                    };
+                                                    _ => 45;
+                                                  }
+                                                };
+                                                _ => 44;
+                                              }
+                                            } else { 43 }
+                                          };
+                                          _ => 42;
+                                        }
+                                      };
+                                      _ => 41;
+                                    }
+                                  } else { 40 }
+                                };
+                                _ => 39;
+                              }
+                            };
+                            _ => 38;
+                          }
+                        };
+                        _ => 37;
+                      }
+                    };
+                    _ => 36;
+                  }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};
+

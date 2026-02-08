@@ -119,6 +119,17 @@ record S1If {
 enum S1Pattern {
   Wildcard;
   Path(S1Path);
+  Variant(S1VariantPattern);
+};
+
+enum S1VariantPayload {
+  Bind(Text);
+  Wildcard;
+};
+
+record S1VariantPattern {
+  path: S1Path;
+  payload: Option<S1VariantPayload>;
 };
 
 record S1MatchArm {

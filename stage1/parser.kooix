@@ -1028,16 +1028,105 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
                       0
                     };
                     Ident(pname) => {
-                      let pat: S1Pattern = Wildcard;
+                      let pat: S1Pattern = S1Pattern.Wildcard;
                       if pname == "_" {
-                        pat = Wildcard;
+                        pat = S1Pattern.Wildcard;
                         rest = a0.tail;
                         0
                       } else {
                         let parsed_pat: Pair<S1Path, List<S1Token>> =
                           s1_parse_path_tail(pname, a0.tail);
-                        pat = S1Pattern.Path(parsed_pat.a);
+                        let base_path: S1Path = parsed_pat.a;
                         rest = parsed_pat.b;
+
+                        // optional payload: (ident | _)
+                        let payload: Option<S1VariantPayload> = None;
+                        match rest {
+                          Cons(p0) => {
+                            match p0.head.kind {
+                              LParen => {
+                                rest = p0.tail;
+                                match rest {
+                                  Cons(p1) => {
+                                    match p1.head.kind {
+                                      Ident(binder) => {
+                                        if binder == "_" {
+                                          let plopt: Option<S1VariantPayload> =
+                                            Some(S1VariantPayload.Wildcard);
+                                          payload = plopt;
+                                          0
+                                        } else {
+                                          let plopt: Option<S1VariantPayload> =
+                                            Some(S1VariantPayload.Bind(binder));
+                                          payload = plopt;
+                                          0
+                                        };
+                                        rest = p1.tail;
+                                        0
+                                      };
+                                      _ => {
+                                        ok = false;
+                                        diag = s1_diag(Error, p1.head.span.start, p1.head.span.end, "parser: expected binder name or '_' in variant pattern");
+                                        done = true;
+                                        0
+                                      };
+                                    }
+                                  };
+                                  _ => {
+                                    ok = false;
+                                    diag = s1_diag(Error, p0.head.span.start, p0.head.span.end, "parser: expected binder name or '_' in variant pattern");
+                                    done = true;
+                                    0
+                                  };
+                                };
+
+                                if ok == true {
+                                  match rest {
+                                    Cons(p2) => {
+                                      match p2.head.kind {
+                                        RParen => {
+                                          rest = p2.tail;
+                                          0
+                                        };
+                                        _ => {
+                                          ok = false;
+                                          diag = s1_diag(Error, p2.head.span.start, p2.head.span.end, "parser: expected ')' to close variant pattern");
+                                          done = true;
+                                          0
+                                        };
+                                      }
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, p0.head.span.start, p0.head.span.end, "parser: expected ')' to close variant pattern");
+                                      done = true;
+                                      0
+                                    };
+                                  };
+                                  0
+                                } else { 0 };
+
+                                0
+                              };
+                              _ => 0;
+                            }
+                          };
+                          _ => 0;
+                        };
+
+                        match payload {
+                          Some(pl) => {
+                            let plopt: Option<S1VariantPayload> = Some(pl);
+                            let vp: S1VariantPattern =
+                              S1VariantPattern { path: base_path; payload: plopt; };
+                            pat = S1Pattern.Variant(vp);
+                            0
+                          };
+                          None => {
+                            pat = S1Pattern.Path(base_path);
+                            0
+                          };
+                        };
                         0
                       };
 
