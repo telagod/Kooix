@@ -1,0 +1,7 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let xs: List<Int> = list_cons_int(1, list_cons_int(2, Nil));
+  option_unwrap_or_int(Some(9), 0) + list_len_int(xs)
+};
+

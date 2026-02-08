@@ -46,13 +46,14 @@ Kooix already has a runnable minimal compiler pipeline:
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`.
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
+- stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
 
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `137 passed, 0 failed`
+- Result: `138 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -83,6 +84,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.4: record literals + member projection (type checking + interpreter)
 - ✅ Phase 8.5: enum + match (type checking + interpreter)
 - ✅ Phase 8.6: Minimal multi-file import loading (include-style)
+- ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
 
 See also: `DESIGN.md`
 
@@ -142,6 +144,7 @@ cargo test -p kooixc
   - `examples/enum_match.kooix`
   - `examples/import_main.kooix`
   - `examples/import_lib.kooix`
+  - `examples/stdlib_smoke.kooix`
 - Grammar docs:
   - Core v0: `docs/Grammar-Core-v0.ebnf`
   - AI v1: `docs/Grammar-AI-v1.ebnf`
@@ -183,6 +186,7 @@ Recommended order:
 ├── DESIGN.md
 ├── docs/
 ├── examples/
+├── stdlib/
 └── crates/
     └── kooixc/
         ├── src/

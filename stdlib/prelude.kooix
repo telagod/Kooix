@@ -1,0 +1,27 @@
+enum Option<T> { Some(T); None; };
+
+enum Result<T, E> { Ok(T); Err(E); };
+
+record Pair<A, B> { a: A; b: B; };
+
+record ListCons<T> { head: T; tail: List<T>; };
+enum List<T> { Nil; Cons(ListCons<T>); };
+
+fn list_cons_int(head: Int, tail: List<Int>) -> List<Int> {
+  Cons(ListCons<Int> { head: head; tail: tail; })
+};
+
+fn list_len_int(xs: List<Int>) -> Int {
+  match xs {
+    Nil => 0;
+    Cons(cell) => 1 + list_len_int(cell.tail);
+  }
+};
+
+fn option_unwrap_or_int(value: Option<Int>, default: Int) -> Int {
+  match value {
+    Some(v) => v;
+    None => default;
+  }
+};
+
