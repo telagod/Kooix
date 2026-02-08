@@ -377,3 +377,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：提供不依赖 LLVM 工具链的可运行闭环，为 bootstrap 的 runtime/stdlib 演进打底，并让语义扩展可以通过运行测试快速验证。
 - **影响范围**：`interp.rs`、`lib.rs`、`main.rs`、`compiler_tests.rs`、README 与 grammar/mapping 文档。
 - **决策依据**：先解释执行，后字节码/LLVM；优先保证确定性与可审计性，不支持的语义直接报错而非降级忽略。
+
+### 2026-02-08 - Phase 8.2：`if/else` 表达式（类型收敛 + interpreter）
+
+- **变更内容**：为表达式系统增加 `if/else`（以 block 为分支体，`else` 可选）；新增语义规则：条件必须为 `Bool`、分支类型必须收敛；interpreter 支持 `if/else` 执行；补齐 tests 与 grammar/mapping 示例。
+- **变更理由**：补齐编译器自举所需的最小控制流能力，为后续 `while/match` 与更复杂的类型推导打基础。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、tests 与文档。
+- **决策依据**：先从 `if/else` 起步（最小可验证闭环），并强制类型收敛避免隐式动态类型/运行期分支类型漂移。

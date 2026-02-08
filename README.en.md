@@ -19,7 +19,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Implemented Features
 
 - Core language skeleton: top-level `cap`, `fn`.
-- Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`return`, basic expressions (literal/path/call/`+`/`==`/`!=`), and return-type checking.
+- Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`return`, basic expressions (literal/path/call/`if/else`/`+`/`==`/`!=`), and return-type checking.
 - Limitation: programs with function bodies are currently rejected by `mir/llvm/native` (MIR/LLVM lowering is not implemented yet).
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
@@ -40,7 +40,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `122 passed, 0 failed`
+- Result: `124 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -66,6 +66,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 7.3: Agent SCC cycle liveness validation
 - ✅ Phase 8.0: Kooix-Core function body frontend (block/let/return/expr)
 - ✅ Phase 8.1: Minimal interpreter `run` loop (pure function-body subset)
+- ✅ Phase 8.2: `if/else` expressions (type convergence + interpreter)
 
 See also: `DESIGN.md`
 

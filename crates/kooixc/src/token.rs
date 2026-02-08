@@ -33,6 +33,8 @@ pub enum TokenKind {
     KwReturn,
     KwTrue,
     KwFalse,
+    KwIf,
+    KwElse,
     Ident(String),
     StringLiteral(String),
     Number(String),

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    BinaryOp, EnsureClause, Expr, FailureAction, FailureValue, LetStmt, PredicateValue, Program,
-    RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef, WorkflowCallArg,
+    BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, LetStmt, PredicateValue,
+    Program, RecordGenericParam, ReturnStmt, Statement, TypeArg, TypeRef, WorkflowCallArg,
 };
 use crate::error::{Diagnostic, Span};
 use crate::hir::{
@@ -1809,6 +1809,62 @@ fn infer_expr_type(
 
             Some(signature.return_type.clone())
         }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            let Some(cond_ty) = infer_expr_type(function, cond, env, signatures, diagnostics)
+            else {
+                return None;
+            };
+            if cond_ty.head() != "Bool" {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses if condition of type '{}' but expected 'Bool'",
+                        function.name, cond_ty
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            let then_ty =
+                infer_block_expr_type(function, then_block.as_ref(), env, signatures, diagnostics)?;
+            let else_ty = match else_block {
+                Some(block) => {
+                    infer_block_expr_type(function, block.as_ref(), env, signatures, diagnostics)?
+                }
+                None => unit_type(),
+            };
+
+            if else_block.is_none() {
+                if then_ty.head() != "Unit" {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses if expression without else returning '{}' but expected 'Unit'",
+                            function.name, then_ty
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                }
+                return Some(unit_type());
+            }
+
+            if then_ty != else_ty {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' if expression branches return '{}' and '{}' (types differ)",
+                        function.name, then_ty, else_ty
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+
+            Some(then_ty)
+        }
         Expr::Binary { op, left, right } => {
             let left_ty = infer_expr_type(function, left, env, signatures, diagnostics)?;
             let right_ty = infer_expr_type(function, right, env, signatures, diagnostics)?;
@@ -1847,6 +1903,77 @@ fn infer_expr_type(
                 }
             }
         }
+    }
+}
+
+fn infer_block_expr_type(
+    function: &HirFunction,
+    block: &Block,
+    env: &HashMap<String, TypeRef>,
+    signatures: &HashMap<String, InvocableSignature>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<TypeRef> {
+    let mut local_env = env.clone();
+
+    for statement in &block.statements {
+        match statement {
+            Statement::Let(LetStmt { name, ty, value }) => {
+                if local_env.contains_key(name) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' redefines variable '{}' in block expression",
+                            function.name, name
+                        ),
+                        function.span,
+                    ));
+                    return None;
+                }
+
+                let value_ty =
+                    infer_expr_type(function, value, &local_env, signatures, diagnostics)?;
+
+                if let Some(explicit) = ty {
+                    if *explicit != value_ty {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' let '{}' declares type '{}' but value is '{}'",
+                                function.name, name, explicit, value_ty
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    }
+                    local_env.insert(name.clone(), explicit.clone());
+                } else {
+                    local_env.insert(name.clone(), value_ty);
+                }
+            }
+            Statement::Return(ReturnStmt { .. }) => {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' uses 'return' inside a block expression (unsupported)",
+                        function.name
+                    ),
+                    function.span,
+                ));
+                return None;
+            }
+            Statement::Expr(expr) => {
+                let _ = infer_expr_type(function, expr, &local_env, signatures, diagnostics);
+            }
+        }
+    }
+
+    match &block.tail {
+        Some(expr) => infer_expr_type(function, expr, &local_env, signatures, diagnostics),
+        None => Some(unit_type()),
+    }
+}
+
+fn unit_type() -> TypeRef {
+    TypeRef {
+        name: "Unit".to_string(),
+        args: Vec::new(),
     }
 }
 

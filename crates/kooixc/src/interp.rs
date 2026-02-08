@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{BinaryOp, Expr, Program, Statement, TypeRef};
+use crate::ast::{BinaryOp, Block, Expr, Program, Statement, TypeRef};
 use crate::error::{Diagnostic, Span};
 use crate::hir::{lower_program, HirFunction};
 
@@ -211,6 +211,30 @@ fn eval_expr(
 
             eval_function(callee, functions, &values, depth + 1)
         }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            let cond_value = eval_expr(cond, function, functions, env, depth)?;
+            let Value::Bool(flag) = cond_value else {
+                return Err(Diagnostic::error(
+                    format!(
+                        "if condition evaluated to '{}' but expected 'Bool'",
+                        value_type_name(&cond_value)
+                    ),
+                    function.span,
+                ));
+            };
+
+            if flag {
+                eval_block_expr(then_block.as_ref(), function, functions, env, depth)
+            } else if let Some(block) = else_block {
+                eval_block_expr(block.as_ref(), function, functions, env, depth)
+            } else {
+                Ok(Value::Unit)
+            }
+        }
         Expr::Binary { op, left, right } => {
             let left_value = eval_expr(left, function, functions, env, depth)?;
             let right_value = eval_expr(right, function, functions, env, depth)?;
@@ -241,6 +265,40 @@ fn eval_expr(
                 BinaryOp::NotEq => Ok(Value::Bool(left_value != right_value)),
             }
         }
+    }
+}
+
+fn eval_block_expr(
+    block: &Block,
+    function: &HirFunction,
+    functions: &HashMap<String, HirFunction>,
+    env: &HashMap<String, Value>,
+    depth: usize,
+) -> Result<Value, Diagnostic> {
+    let mut local_env = env.clone();
+
+    for statement in &block.statements {
+        match statement {
+            Statement::Let(stmt) => {
+                let value = eval_expr(&stmt.value, function, functions, &local_env, depth)?;
+                local_env.insert(stmt.name.clone(), value);
+            }
+            Statement::Return(_) => {
+                return Err(Diagnostic::error(
+                    "return is not supported inside a block expression",
+                    function.span,
+                ));
+            }
+            Statement::Expr(expr) => {
+                let _ = eval_expr(expr, function, functions, &local_env, depth)?;
+            }
+        }
+    }
+
+    if let Some(expr) = &block.tail {
+        eval_expr(expr, function, functions, &local_env, depth)
+    } else {
+        Ok(Value::Unit)
     }
 }
 

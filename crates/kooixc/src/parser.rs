@@ -1083,6 +1083,10 @@ impl<'a> Parser<'a> {
             return Ok(expr);
         }
 
+        if self.at_kw_if() {
+            return self.parse_if_expr();
+        }
+
         if let Some(value) = self.take_number() {
             return Ok(Expr::Number(value));
         }
@@ -1137,6 +1141,23 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_if_expr(&mut self) -> Result<Expr, Diagnostic> {
+        self.expect_kw_if()?;
+        let cond = self.parse_expr()?;
+        let then_block = self.parse_block()?;
+        let else_block = if self.at_kw_else() {
+            self.expect_kw_else()?;
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
+        Ok(Expr::If {
+            cond: Box::new(cond),
+            then_block: Box::new(then_block),
+            else_block: else_block.map(Box::new),
+        })
+    }
+
     fn expect_kw_cap(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_cap, "'cap'")
     }
@@ -1171,6 +1192,14 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_return(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_return, "'return'")
+    }
+
+    fn expect_kw_if(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_if, "'if'")
+    }
+
+    fn expect_kw_else(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_else, "'else'")
     }
 
     fn expect_kw_intent(&mut self) -> Result<Span, Diagnostic> {
@@ -1428,6 +1457,14 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwFalse)
     }
 
+    fn at_kw_if(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwIf)
+    }
+
+    fn at_kw_else(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwElse)
+    }
+
     fn at_kw_intent(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwIntent)
     }
@@ -1628,6 +1665,8 @@ impl<'a> Parser<'a> {
             TokenKind::KwReturn => "'return'",
             TokenKind::KwTrue => "'true'",
             TokenKind::KwFalse => "'false'",
+            TokenKind::KwIf => "'if'",
+            TokenKind::KwElse => "'else'",
             TokenKind::Ident(_) => "identifier",
             TokenKind::StringLiteral(_) => "string literal",
             TokenKind::Number(_) => "number",

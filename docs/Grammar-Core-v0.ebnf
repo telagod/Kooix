@@ -194,6 +194,7 @@ EqualityExpr       = AddExpr { ("==" | "!=") AddExpr } ;
 AddExpr            = PrimaryExpr { "+" PrimaryExpr } ;
 
 PrimaryExpr        = SymbolPath
+                  |  IfExpr
                   |  CallExpr
                   |  NumberLiteral
                   |  StringLiteral
@@ -201,6 +202,8 @@ PrimaryExpr        = SymbolPath
                   |  "false"
                   |  "(" Expr ")"
                   ;
+
+IfExpr             = "if" Expr Block [ "else" Block ] ;
 
 CallExpr           = Identifier "(" [ Expr { "," Expr } ] ")" ;
 

@@ -92,6 +92,11 @@ pub enum Expr {
         target: String,
         args: Vec<Expr>,
     },
+    If {
+        cond: Box<Expr>,
+        then_block: Box<Block>,
+        else_block: Option<Box<Block>>,
+    },
     Binary {
         op: BinaryOp,
         left: Box<Expr>,

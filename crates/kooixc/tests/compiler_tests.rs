@@ -176,6 +176,32 @@ fn main() -> Int { add(20, 22) };
 }
 
 #[test]
+fn runs_interpreter_with_if_expression() {
+    let source = r#"
+fn main() -> Int { if true { 1 } else { 2 } };
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(1));
+}
+
+#[test]
+fn fails_when_if_expression_branch_types_differ() {
+    let source = r#"
+fn main() -> Int { if true { 1 } else { false } };
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("if expression branches return 'Int' and 'Bool'")
+    }));
+}
+
+#[test]
 fn interpreter_rejects_effectful_functions() {
     let source = r#"
 cap Net<"example.com">;

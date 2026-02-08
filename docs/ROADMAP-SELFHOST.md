@@ -61,9 +61,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 
 当前落地进度（截至 2026-02-08）：
 
-- 已实现：`fn ... { ... }`、`let`/`return`、基础表达式（literal/path/call/`+`/`==`/`!=`）与返回类型静态校验。
+- 已实现：`fn ... { ... }`、`let`/`return`、基础表达式（literal/path/call/`if/else`/`+`/`==`/`!=`）与返回类型静态校验。
 - 已实现（runtime 起步）：最小 interpreter，可 `run` 纯函数体子集（禁用 effects）。
-- 未实现：控制流（`if/while/match`）、赋值、模块系统，以及可自举所需的 runtime/stdlib 与更完整的执行语义（VM/bytecode 或真正 lowering）。
+- 未实现：控制流（`while/match`）、赋值、模块系统，以及可自举所需的 runtime/stdlib 与更完整的执行语义（VM/bytecode 或真正 lowering）。
 
 ### M2：Kooix-Core Runtime
 

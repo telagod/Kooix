@@ -23,6 +23,12 @@ fn add(x: Int, y: Int) -> Int;
 fn add(x: Int, y: Int) -> Int { x + y };
 ```
 
+### Valid: if/else expression (Kooix-Core subset)
+
+```kooix
+fn main() -> Int { if true { 1 } else { 2 } };
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix
