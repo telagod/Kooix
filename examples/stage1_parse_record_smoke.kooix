@@ -1,0 +1,66 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "record Pair { a: Int; b: Bool; }; fn main() -> Int;";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Record(r) => {
+                  if r.name == "Pair" {
+                    match r.fields {
+                      Cons(f0) => {
+                        if f0.head.name == "a" {
+                          if f0.head.ty == "Int" {
+                            match f0.tail {
+                              Cons(f1) => {
+                                if f1.head.name == "b" {
+                                  if f1.head.ty == "Bool" {
+                                    match f1.tail {
+                                      Nil => {
+                                        match i0.tail {
+                                          Cons(i1) => {
+                                            match i1.head {
+                                              Function(fun) => {
+                                                if fun.name == "main" { 0 } else { 20 }
+                                              };
+                                              _ => 21;
+                                            }
+                                          };
+                                          _ => 22;
+                                        }
+                                      };
+                                      _ => 19;
+                                    }
+                                  } else { 18 }
+                                } else { 17 }
+                              };
+                              _ => 16;
+                            }
+                          } else { 15 }
+                        } else { 14 }
+                      };
+                      _ => 13;
+                    }
+                  } else { 12 }
+                };
+                _ => 11;
+              }
+            };
+            _ => 10;
+          }
+        };
+      }
+    };
+  }
+};

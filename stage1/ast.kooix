@@ -20,6 +20,12 @@ record S1Function {
 
 record S1Record {
   name: Text;
+  fields: List<S1RecordField>;
+};
+
+record S1RecordField {
+  name: Text;
+  ty: Text;
 };
 
 record S1Enum {
