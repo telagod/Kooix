@@ -197,6 +197,7 @@ EqualityExpr       = AddExpr { ("==" | "!=") AddExpr } ;
 AddExpr            = PrimaryExpr { "+" PrimaryExpr } ;
 
 PrimaryExpr        = SymbolPath
+                  |  RecordLiteral
                   |  IfExpr
                   |  WhileExpr
                   |  CallExpr
@@ -206,6 +207,13 @@ PrimaryExpr        = SymbolPath
                   |  "false"
                   |  "(" Expr ")"
                   ;
+
+RecordLiteral      = TypeRef "{"
+                     { RecordLiteralField }
+                     "}"
+                   ;
+
+RecordLiteralField = Identifier ":" Expr ";" ;
 
 IfExpr             = "if" Expr Block [ "else" Block ] ;
 

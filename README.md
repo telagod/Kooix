@@ -18,7 +18,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 已可用能力
 
 - Core 语言骨架：`cap`、`fn` 顶层声明。
-- Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`x = ...`/`return`、基础表达式（literal/path/call/`if/else`/`while`/`+`/`==`/`!=`）与返回类型静态校验。
+- Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`x = ...`/`return`、基础表达式（literal/path/call/record literal/成员投影 `x.y`/`if/else`/`while`/`+`/`==`/`!=`）与返回类型静态校验。
 - 限制：含函数体的程序暂不支持 `mir/llvm/native`（MIR/LLVM lowering 尚未实现）。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
@@ -38,7 +38,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`128 passed, 0 failed`
+- 结果：`132 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -66,6 +66,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.1: Interpreter `run` 最小闭环（纯函数体子集）
 - ✅ Phase 8.2: `if/else` 表达式（类型收敛 + interpreter）
 - ✅ Phase 8.3: `while` + assignment（类型校验 + interpreter）
+- ✅ Phase 8.4: record literal + member projection（类型校验 + interpreter）
 
 详见：`DESIGN.md`
 

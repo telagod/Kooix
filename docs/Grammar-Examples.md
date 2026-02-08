@@ -41,6 +41,17 @@ fn main() -> Int {
 };
 ```
 
+### Valid: record literal + member projection (Kooix-Core subset)
+
+```kooix
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 1; b: 2; };
+  p.a + p.b
+};
+```
+
 ### Invalid: malformed capability shape
 
 ```kooix

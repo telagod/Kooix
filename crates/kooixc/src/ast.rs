@@ -90,11 +90,21 @@ pub struct ReturnStmt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordLitField {
+    pub name: String,
+    pub value: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Path(Vec<String>),
     String(String),
     Number(String),
     Bool(bool),
+    RecordLit {
+        ty: TypeRef,
+        fields: Vec<RecordLitField>,
+    },
     Call {
         target: String,
         args: Vec<Expr>,

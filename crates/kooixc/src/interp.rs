@@ -10,6 +10,10 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     Text(String),
+    Record {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -19,6 +23,7 @@ impl std::fmt::Display for Value {
             Value::Int(value) => write!(f, "{value}"),
             Value::Bool(value) => write!(f, "{value}"),
             Value::Text(value) => f.write_str(value),
+            Value::Record { name, .. } => write!(f, "<{name}>"),
         }
     }
 }
@@ -248,20 +253,50 @@ fn eval_expr(
         }
         Expr::String(value) => Ok(Value::Text(value.clone())),
         Expr::Bool(value) => Ok(Value::Bool(*value)),
+        Expr::RecordLit { ty, fields } => {
+            let mut values: HashMap<String, Value> = HashMap::new();
+            for field in fields {
+                let value = eval_expr(&field.value, function, functions, env, depth)?;
+                values.insert(field.name.clone(), value);
+            }
+            Ok(Value::Record {
+                name: ty.name.clone(),
+                fields: values,
+            })
+        }
         Expr::Path(segments) => {
-            if segments.len() != 1 {
-                return Err(Diagnostic::error(
-                    format!(
-                        "unsupported member path '{}' in interpreter (only identifiers are supported)",
-                        segments.join(".")
-                    ),
-                    function.span,
-                ));
+            let Some(name) = segments.first() else {
+                return Err(Diagnostic::error("expected identifier path", function.span));
+            };
+
+            let mut value = env
+                .get(name)
+                .ok_or_else(|| Diagnostic::error(format!("unknown variable '{name}'"), function.span))?;
+
+            for member in segments.iter().skip(1) {
+                match value {
+                    Value::Record { fields, .. } => {
+                        value = fields.get(member).cloned().ok_or_else(|| {
+                            Diagnostic::error(
+                                format!("unknown member '{member}' on record value"),
+                                function.span,
+                            )
+                        })?;
+                    }
+                    other => {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "cannot access member '{}' on value of type '{}'",
+                                member,
+                                value_type_name(&other)
+                            ),
+                            function.span,
+                        ));
+                    }
+                }
             }
 
-            let name = &segments[0];
-            env.get(name)
-                .ok_or_else(|| Diagnostic::error(format!("unknown variable '{name}'"), function.span))
+            Ok(value)
         }
         Expr::Call { target, args } => {
             let Some(callee) = functions.get(target) else {
@@ -435,12 +470,13 @@ fn eval_block_expr(
     result
 }
 
-fn value_type_name(value: &Value) -> &'static str {
+fn value_type_name(value: &Value) -> String {
     match value {
-        Value::Unit => "Unit",
-        Value::Int(_) => "Int",
-        Value::Bool(_) => "Bool",
-        Value::Text(_) => "Text",
+        Value::Unit => "Unit".to_string(),
+        Value::Int(_) => "Int".to_string(),
+        Value::Bool(_) => "Bool".to_string(),
+        Value::Text(_) => "Text".to_string(),
+        Value::Record { name, .. } => name.clone(),
     }
 }
 
@@ -450,6 +486,6 @@ fn value_conforms_to_type(value: &Value, ty: &TypeRef) -> bool {
         "Int" => matches!(value, Value::Int(_)),
         "Bool" => matches!(value, Value::Bool(_)),
         "Text" | "String" => matches!(value, Value::Text(_)),
-        _ => false,
+        record_name => matches!(value, Value::Record { name, .. } if name == record_name),
     }
 }

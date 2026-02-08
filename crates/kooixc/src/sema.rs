@@ -162,7 +162,12 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
         validate_ensures(function, &mut diagnostics);
         validate_failure(function, &mut diagnostics);
         validate_evidence(function, &mut diagnostics);
-        validate_function_body(function, &declared_invocable_signatures, &mut diagnostics);
+        validate_function_body(
+            function,
+            &declared_invocable_signatures,
+            &declared_record_types,
+            &mut diagnostics,
+        );
     }
 
     let mut declared_workflows = HashSet::new();
@@ -1590,6 +1595,7 @@ fn validate_evidence(function: &HirFunction, diagnostics: &mut Vec<Diagnostic>) 
 fn validate_function_body(
     function: &HirFunction,
     signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let Some(body) = &function.body else {
@@ -1619,7 +1625,14 @@ fn validate_function_body(
                 }
 
                 let Some(value_type) =
-                    infer_expr_type(function, value, &env, signatures, diagnostics)
+                    infer_expr_type(
+                        function,
+                        value,
+                        &env,
+                        signatures,
+                        declared_record_types,
+                        diagnostics,
+                    )
                 else {
                     continue;
                 };
@@ -1653,7 +1666,14 @@ fn validate_function_body(
                 };
 
                 let Some(actual_ty) =
-                    infer_expr_type(function, value, &env, signatures, diagnostics)
+                    infer_expr_type(
+                        function,
+                        value,
+                        &env,
+                        signatures,
+                        declared_record_types,
+                        diagnostics,
+                    )
                 else {
                     continue;
                 };
@@ -1686,7 +1706,14 @@ fn validate_function_body(
                     }
                     Some(expr) => {
                         let Some(actual) =
-                            infer_expr_type(function, expr, &env, signatures, diagnostics)
+                            infer_expr_type(
+                                function,
+                                expr,
+                                &env,
+                                signatures,
+                                declared_record_types,
+                                diagnostics,
+                            )
                         else {
                             continue;
                         };
@@ -1703,7 +1730,14 @@ fn validate_function_body(
                 }
             }
             Statement::Expr(expr) => {
-                let _ = infer_expr_type(function, expr, &env, signatures, diagnostics);
+                let _ = infer_expr_type(
+                    function,
+                    expr,
+                    &env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                );
             }
         }
     }
@@ -1718,7 +1752,14 @@ fn validate_function_body(
     }
 
     let tail_type = match &body.tail {
-        Some(expr) => infer_expr_type(function, expr, &env, signatures, diagnostics),
+        Some(expr) => infer_expr_type(
+            function,
+            expr,
+            &env,
+            signatures,
+            declared_record_types,
+            diagnostics,
+        ),
         None => None,
     };
 
@@ -1749,6 +1790,7 @@ fn infer_expr_type(
     expr: &Expr,
     env: &HashMap<String, TypeRef>,
     signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     match expr {
@@ -1764,21 +1806,188 @@ fn infer_expr_type(
             name: "Bool".to_string(),
             args: Vec::new(),
         }),
-        Expr::Path(segments) => {
-            if segments.len() != 1 {
+        Expr::RecordLit { ty, fields } => {
+            let Some(record_schema) = declared_record_types.get(ty.head()) else {
                 diagnostics.push(Diagnostic::error(
                     format!(
-                        "function '{}' uses unsupported member path '{}' in body",
+                        "function '{}' uses record literal of unknown type '{}'",
                         function.name,
-                        segments.join(".")
+                        ty.head()
+                    ),
+                    function.span,
+                ));
+                return None;
+            };
+
+            let expected_arity = record_schema.generics.len();
+            let actual_arity = ty.args.len();
+            if expected_arity != actual_arity {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' record literal uses record type '{}' with {} generic argument(s), expected {}",
+                        function.name,
+                        ty.head(),
+                        actual_arity,
+                        expected_arity
                     ),
                     function.span,
                 ));
                 return None;
             }
 
-            let name = &segments[0];
-            env.get(name).cloned().or_else(|| {
+            for (index, generic) in record_schema.generics.iter().enumerate() {
+                let Some(actual_arg) = ty.args.get(index) else {
+                    continue;
+                };
+
+                match actual_arg {
+                    TypeArg::Type(actual_ty) => {
+                        if generic.bounds.is_empty() {
+                            continue;
+                        }
+
+                        let mut failed_bounds = Vec::new();
+                        for bound in &generic.bounds {
+                            if !type_satisfies_bound(actual_ty, bound, declared_record_types) {
+                                failed_bounds.push(bound.to_string());
+                            }
+                        }
+
+                        if failed_bounds.is_empty() {
+                            continue;
+                        }
+
+                        if failed_bounds.len() == 1 {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' record literal uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bound '{}'",
+                                    function.name,
+                                    ty.head(),
+                                    generic.name,
+                                    actual_ty,
+                                    failed_bounds[0],
+                                ),
+                                function.span,
+                            ));
+                        } else {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "function '{}' record literal uses record type '{}' with generic argument '{}' as '{}' but it must satisfy bounds '{}'",
+                                    function.name,
+                                    ty.head(),
+                                    generic.name,
+                                    actual_ty,
+                                    failed_bounds.join(" + "),
+                                ),
+                                function.span,
+                            ));
+                        }
+                    }
+                    TypeArg::String(actual) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' record literal uses record type '{}' with generic argument '{}' as string '{}' but expected a type",
+                                function.name,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            function.span,
+                        ));
+                    }
+                    TypeArg::Number(actual) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' record literal uses record type '{}' with generic argument '{}' as number '{}' but expected a type",
+                                function.name,
+                                ty.head(),
+                                generic.name,
+                                actual,
+                            ),
+                            function.span,
+                        ));
+                    }
+                }
+            }
+
+            let mut seen_fields: HashSet<String> = HashSet::new();
+            for field in fields {
+                if !seen_fields.insert(field.name.clone()) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' record literal repeats field '{}'",
+                            function.name, field.name
+                        ),
+                        function.span,
+                    ));
+                    continue;
+                }
+
+                let Some(template_type) = record_schema.fields.get(&field.name) else {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' record literal uses unknown field '{}' on type '{}'",
+                            function.name,
+                            field.name,
+                            ty.head()
+                        ),
+                        function.span,
+                    ));
+                    continue;
+                };
+
+                let expected_type = substitute_record_generic_type(
+                    template_type,
+                    &record_schema.generics,
+                    &ty.args,
+                );
+                let Some(actual_type) = infer_expr_type(
+                    function,
+                    &field.value,
+                    env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                ) else {
+                    continue;
+                };
+
+                if actual_type != expected_type {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' record literal field '{}' is '{}' but expected '{}'",
+                            function.name,
+                            field.name,
+                            actual_type,
+                            expected_type
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+
+            for field_name in record_schema.fields.keys() {
+                if !seen_fields.contains(field_name) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' record literal for '{}' is missing field '{}'",
+                            function.name,
+                            ty.head(),
+                            field_name
+                        ),
+                        function.span,
+                    ));
+                }
+            }
+
+            Some(ty.clone())
+        }
+        Expr::Path(segments) => {
+            let Some(name) = segments.first() else {
+                return None;
+            };
+
+            let Some(root_ty) = env.get(name) else {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "function '{}' uses unknown variable '{}' in body",
@@ -1786,8 +1995,29 @@ fn infer_expr_type(
                     ),
                     function.span,
                 ));
-                None
-            })
+                return None;
+            };
+
+            if segments.len() == 1 {
+                return Some(root_ty.clone());
+            }
+
+            match infer_member_projection_type(root_ty, &segments[1..], declared_record_types) {
+                Ok(ty) => Some(ty),
+                Err(projection) => {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "function '{}' uses member path '{}' but cannot infer member '{}' on type '{}'",
+                            function.name,
+                            segments.join("."),
+                            projection.member,
+                            projection.base_type,
+                        ),
+                        function.span,
+                    ));
+                    None
+                }
+            }
         }
         Expr::Call { target, args } => {
             let Some(signature) = signatures.get(target) else {
@@ -1817,8 +2047,14 @@ fn infer_expr_type(
 
             for (index, (arg, expected_ty)) in args.iter().zip(signature.params.iter()).enumerate()
             {
-                let Some(actual_ty) = infer_expr_type(function, arg, env, signatures, diagnostics)
-                else {
+                let Some(actual_ty) = infer_expr_type(
+                    function,
+                    arg,
+                    env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                ) else {
                     continue;
                 };
                 if actual_ty != *expected_ty {
@@ -1843,7 +2079,8 @@ fn infer_expr_type(
             then_block,
             else_block,
         } => {
-            let Some(cond_ty) = infer_expr_type(function, cond, env, signatures, diagnostics)
+            let Some(cond_ty) =
+                infer_expr_type(function, cond, env, signatures, declared_record_types, diagnostics)
             else {
                 return None;
             };
@@ -1859,10 +2096,24 @@ fn infer_expr_type(
             }
 
             let then_ty =
-                infer_block_expr_type(function, then_block.as_ref(), env, signatures, diagnostics)?;
+                infer_block_expr_type(
+                    function,
+                    then_block.as_ref(),
+                    env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                )?;
             let else_ty = match else_block {
                 Some(block) => {
-                    infer_block_expr_type(function, block.as_ref(), env, signatures, diagnostics)?
+                    infer_block_expr_type(
+                        function,
+                        block.as_ref(),
+                        env,
+                        signatures,
+                        declared_record_types,
+                        diagnostics,
+                    )?
                 }
                 None => unit_type(),
             };
@@ -1895,8 +2146,14 @@ fn infer_expr_type(
             Some(then_ty)
         }
         Expr::While { cond, body } => {
-            let Some(cond_ty) = infer_expr_type(function, cond.as_ref(), env, signatures, diagnostics)
-            else {
+            let Some(cond_ty) = infer_expr_type(
+                function,
+                cond.as_ref(),
+                env,
+                signatures,
+                declared_record_types,
+                diagnostics,
+            ) else {
                 return None;
             };
             if cond_ty.head() != "Bool" {
@@ -1910,12 +2167,33 @@ fn infer_expr_type(
                 return None;
             }
 
-            let _ = infer_block_expr_type(function, body.as_ref(), env, signatures, diagnostics)?;
+            let _ = infer_block_expr_type(
+                function,
+                body.as_ref(),
+                env,
+                signatures,
+                declared_record_types,
+                diagnostics,
+            )?;
             Some(unit_type())
         }
         Expr::Binary { op, left, right } => {
-            let left_ty = infer_expr_type(function, left, env, signatures, diagnostics)?;
-            let right_ty = infer_expr_type(function, right, env, signatures, diagnostics)?;
+            let left_ty = infer_expr_type(
+                function,
+                left,
+                env,
+                signatures,
+                declared_record_types,
+                diagnostics,
+            )?;
+            let right_ty = infer_expr_type(
+                function,
+                right,
+                env,
+                signatures,
+                declared_record_types,
+                diagnostics,
+            )?;
             match op {
                 BinaryOp::Add => {
                     if left_ty.head() != "Int" || right_ty.head() != "Int" {
@@ -1959,6 +2237,7 @@ fn infer_block_expr_type(
     block: &Block,
     env: &HashMap<String, TypeRef>,
     signatures: &HashMap<String, InvocableSignature>,
+    declared_record_types: &HashMap<String, RecordSchema>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<TypeRef> {
     let mut local_env = env.clone();
@@ -1977,8 +2256,14 @@ fn infer_block_expr_type(
                     return None;
                 }
 
-                let value_ty =
-                    infer_expr_type(function, value, &local_env, signatures, diagnostics)?;
+                let value_ty = infer_expr_type(
+                    function,
+                    value,
+                    &local_env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                )?;
 
                 if let Some(explicit) = ty {
                     if *explicit != value_ty {
@@ -2008,8 +2293,14 @@ fn infer_block_expr_type(
                     return None;
                 };
 
-                let actual_ty =
-                    infer_expr_type(function, value, &local_env, signatures, diagnostics)?;
+                let actual_ty = infer_expr_type(
+                    function,
+                    value,
+                    &local_env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                )?;
                 if actual_ty != existing_ty {
                     diagnostics.push(Diagnostic::error(
                         format!(
@@ -2032,13 +2323,27 @@ fn infer_block_expr_type(
                 return None;
             }
             Statement::Expr(expr) => {
-                let _ = infer_expr_type(function, expr, &local_env, signatures, diagnostics);
+                let _ = infer_expr_type(
+                    function,
+                    expr,
+                    &local_env,
+                    signatures,
+                    declared_record_types,
+                    diagnostics,
+                );
             }
         }
     }
 
     match &block.tail {
-        Some(expr) => infer_expr_type(function, expr, &local_env, signatures, diagnostics),
+        Some(expr) => infer_expr_type(
+            function,
+            expr,
+            &local_env,
+            signatures,
+            declared_record_types,
+            diagnostics,
+        ),
         None => Some(unit_type()),
     }
 }

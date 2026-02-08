@@ -27,8 +27,8 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
 - Grammar: `FunctionDecl ::= "fn" ... [Block] ";"`
   - AST field: `FunctionDecl.body: Option<Block>`
   - AST nodes: `Block`, `Statement`, `Expr`
-  - Parser: `crates/kooixc/src/parser.rs` (`parse_block` + `parse_expr`, includes `if/else`)
-  - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference, includes `if/else`)
+  - Parser: `crates/kooixc/src/parser.rs` (`parse_block` + `parse_expr`, includes assignment + `if/else` + `while` + record literal)
+  - Sema: `crates/kooixc/src/sema.rs` (`validate_function_body` + minimal expr type inference, includes member projection + record literal + `if/else` + `while`)
   - Runtime: `crates/kooixc/src/interp.rs` (minimal interpreter; effectful functions are rejected)
 
 ### Type system nodes

@@ -2,8 +2,8 @@ use crate::ast::{
     AgentDecl, AgentPolicy, AssignStmt, BinaryOp, Block, CapabilityDecl, EffectSpec, EnsureClause,
     EvidenceSpec, Expr, FailureAction, FailureActionArg, FailurePolicy, FailureRule, FailureValue,
     FunctionDecl, Item, LetStmt, LoopSpec, OutputField, Param, PredicateOp, PredicateValue,
-    Program, RecordDecl, RecordField, RecordGenericParam, ReturnStmt, StateRule, Statement,
-    TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
+    Program, RecordDecl, RecordField, RecordGenericParam, RecordLitField, ReturnStmt, StateRule,
+    Statement, TypeArg, TypeRef, WorkflowCall, WorkflowCallArg, WorkflowDecl, WorkflowStep,
 };
 use crate::error::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
@@ -1147,6 +1147,50 @@ impl<'a> Parser<'a> {
                 return Ok(Expr::Call {
                     target: ident,
                     args,
+                });
+            }
+
+            let mut type_args = Vec::new();
+            if self.at_langle() {
+                let saved = self.index;
+                self.expect_langle()?;
+                if !self.at_rangle() {
+                    loop {
+                        type_args.push(self.parse_type_arg()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect_rangle()?;
+
+                if !self.at_lbrace() {
+                    self.index = saved;
+                    type_args.clear();
+                }
+            }
+
+            if self.at_lbrace() {
+                self.expect_lbrace()?;
+                let mut fields = Vec::new();
+
+                while !self.at_rbrace() {
+                    let (name, _) = self.expect_ident()?;
+                    self.expect_colon()?;
+                    let value = self.parse_expr()?;
+                    self.expect_semicolon()?;
+                    fields.push(RecordLitField { name, value });
+                }
+
+                self.expect_rbrace()?;
+                return Ok(Expr::RecordLit {
+                    ty: TypeRef {
+                        name: ident,
+                        args: type_args,
+                    },
+                    fields,
                 });
             }
 

@@ -204,6 +204,22 @@ fn main() -> Int {
 }
 
 #[test]
+fn runs_interpreter_with_record_literal_and_member_access() {
+    let source = r#"
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 1; b: 2; };
+  p.a + p.b
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(3));
+}
+
+#[test]
 fn fails_when_if_expression_branch_types_differ() {
     let source = r#"
 fn main() -> Int { if true { 1 } else { false } };
@@ -270,6 +286,66 @@ fn main() -> Int {
             && diagnostic
                 .message
                 .contains("assigns to unknown variable 'x' in body")
+    }));
+}
+
+#[test]
+fn fails_when_record_literal_is_missing_field() {
+    let source = r#"
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 1; };
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record literal for 'Pair' is missing field 'b'")
+    }));
+}
+
+#[test]
+fn fails_when_record_literal_uses_unknown_field() {
+    let source = r#"
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 1; c: 2; b: 3; };
+  0
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("record literal uses unknown field 'c' on type 'Pair'")
+    }));
+}
+
+#[test]
+fn fails_when_member_access_is_unknown() {
+    let source = r#"
+record Pair { a: Int; b: Int; };
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 1; b: 2; };
+  p.c
+};
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("cannot infer member 'c' on type 'Pair'")
     }));
 }
 

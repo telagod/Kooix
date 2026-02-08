@@ -391,3 +391,10 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：为自举所需的最小“可迭代状态机”能力铺路：仅靠 `if` 很难实现迭代算法/解释器自身的循环执行；同时保持强类型与可审计（assignment 不允许隐式声明或变更类型）。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与 grammar 示例。
 - **决策依据**：先落地最小可用的循环 + 变量更新（仍保持语义简单），后续再引入 `break/continue`、`mut`、更严谨的 borrow/liveness 规则。
+
+### 2026-02-08 - Phase 8.4：record literal + member projection（类型校验 + interpreter）
+
+- **变更内容**：为 Kooix-Core 表达式增加 record literal：`TypeName { field: expr; ... }`；放开函数体中的 member projection（`x.y.z`）并复用 record schema + generic substitution 做静态类型推导；interpreter 增加 record value 运行时表示与 member access；补齐正反例 tests 与 grammar/mapping 示例。
+- **变更理由**：写编译器必须能“构造结构化数据 + 读取字段”。没有 record value 与字段访问，Stage1 编译器本体几乎无法落地（AST/TypeRef/Token 等都需要结构化表示）。
+- **影响范围**：`ast.rs`、`parser.rs`、`sema.rs`、`interp.rs`、`compiler_tests.rs` 与文档。
+- **决策依据**：先落地最小 record value（仅字段存取，不引入方法/trait/生命周期）；用既有 record schema 与投影推导能力复用实现，避免引入新一套类型规则。
