@@ -7,6 +7,7 @@ use crate::hir::{HirFunction, HirProgram};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirProgram {
     pub records: Vec<MirRecord>,
+    pub enums: Vec<MirEnum>,
     pub functions: Vec<MirFunction>,
 }
 
@@ -20,6 +21,19 @@ pub struct MirRecord {
 pub struct MirRecordField {
     pub name: String,
     pub ty: TypeRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirEnum {
+    pub name: String,
+    pub variants: Vec<MirEnumVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirEnumVariant {
+    pub name: String,
+    pub tag: u8,
+    pub payload: Option<TypeRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +87,18 @@ pub enum MirRvalue {
         record: String,
         index: usize,
     },
+    EnumLit {
+        enum_name: String,
+        tag: u8,
+        payload: Option<MirOperand>,
+        payload_ty: Option<TypeRef>,
+    },
+    EnumTag { base: MirOperand, enum_name: String },
+    EnumPayload {
+        base: MirOperand,
+        enum_name: String,
+        payload_ty: TypeRef,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,18 +135,28 @@ pub fn lower_hir(program: &HirProgram) -> Result<MirProgram, Vec<Diagnostic>> {
         .cloned()
         .map(|record| (record.name.clone(), record))
         .collect();
+    let enums = build_native_enums(program);
+    let enum_map: HashMap<String, MirEnum> = enums
+        .iter()
+        .cloned()
+        .map(|enum_decl| (enum_decl.name.clone(), enum_decl))
+        .collect();
     let mut diagnostics = Vec::new();
     let mut functions = Vec::new();
 
     for function in &program.functions {
-        match lower_function(function, &signatures, &record_map) {
+        match lower_function(function, &signatures, &record_map, &enum_map) {
             Ok(mir_function) => functions.push(mir_function),
             Err(mut errors) => diagnostics.append(&mut errors),
         }
     }
 
     if diagnostics.is_empty() {
-        Ok(MirProgram { records, functions })
+        Ok(MirProgram {
+            records,
+            enums,
+            functions,
+        })
     } else {
         Err(diagnostics)
     }
@@ -145,6 +181,34 @@ fn build_native_records(program: &HirProgram) -> Vec<MirRecord> {
                 .map(|field| MirRecordField {
                     name: field.name.clone(),
                     ty: field.ty.clone(),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn build_native_enums(program: &HirProgram) -> Vec<MirEnum> {
+    program
+        .enums
+        .iter()
+        .filter(|enum_decl| enum_decl.generics.is_empty())
+        .filter(|enum_decl| {
+            enum_decl.variants.len() <= u8::MAX as usize
+                && enum_decl.variants.iter().all(|variant| match &variant.payload {
+                    None => true,
+                    Some(payload) => is_native_enum_payload_type(payload),
+                })
+        })
+        .map(|enum_decl| MirEnum {
+            name: enum_decl.name.clone(),
+            variants: enum_decl
+                .variants
+                .iter()
+                .enumerate()
+                .map(|(index, variant)| MirEnumVariant {
+                    name: variant.name.clone(),
+                    tag: index as u8,
+                    payload: variant.payload.clone(),
                 })
                 .collect(),
         })
@@ -182,6 +246,7 @@ fn lower_function(
     function: &HirFunction,
     signatures: &HashMap<String, FunctionSignature>,
     records: &HashMap<String, MirRecord>,
+    enums: &HashMap<String, MirEnum>,
 ) -> Result<MirFunction, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
 
@@ -207,7 +272,7 @@ fn lower_function(
 
     if function.body.is_some() {
         for param in &function.params {
-            if !is_native_type(&param.ty, records) {
+            if !is_native_type(&param.ty, records, enums) {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "function '{}' parameter '{}' uses type '{}' which is not supported by native lowering yet",
@@ -218,7 +283,7 @@ fn lower_function(
             }
         }
 
-        if !is_native_type(&function.return_type, records) {
+        if !is_native_type(&function.return_type, records, enums) {
             diagnostics.push(Diagnostic::error(
                 format!(
                     "function '{}' return type '{}' is not supported by native lowering yet",
@@ -233,7 +298,7 @@ fn lower_function(
         return Err(diagnostics);
     }
 
-    let mut builder = MirBuilder::new(function, signatures, records);
+    let mut builder = MirBuilder::new(function, signatures, records, enums);
     match &function.body {
         None => {
             builder.emit_stub_body();
@@ -256,7 +321,15 @@ fn is_native_struct_field_type(ty: &TypeRef) -> bool {
     matches!(ty.head(), "Int" | "Bool")
 }
 
-fn is_native_type(ty: &TypeRef, records: &HashMap<String, MirRecord>) -> bool {
+fn is_native_enum_payload_type(ty: &TypeRef) -> bool {
+    matches!(ty.head(), "Int" | "Bool")
+}
+
+fn is_native_type(
+    ty: &TypeRef,
+    records: &HashMap<String, MirRecord>,
+    _enums: &HashMap<String, MirEnum>,
+) -> bool {
     if is_native_scalar_type(ty) {
         return true;
     }
@@ -268,9 +341,10 @@ struct MirBuilder<'a> {
     function: &'a HirFunction,
     signatures: &'a HashMap<String, FunctionSignature>,
     records: &'a HashMap<String, MirRecord>,
+    enums: &'a HashMap<String, MirEnum>,
     params: Vec<MirParam>,
     locals: Vec<MirLocal>,
-    local_map: HashMap<String, usize>,
+    scopes: Vec<HashMap<String, usize>>,
     blocks: Vec<MirBlock>,
     next_block_id: usize,
     current_block: usize,
@@ -281,10 +355,11 @@ impl<'a> MirBuilder<'a> {
         function: &'a HirFunction,
         signatures: &'a HashMap<String, FunctionSignature>,
         records: &'a HashMap<String, MirRecord>,
+        enums: &'a HashMap<String, MirEnum>,
     ) -> Self {
         let mut locals = Vec::new();
         let mut params = Vec::new();
-        let mut local_map = HashMap::new();
+        let mut scopes: Vec<HashMap<String, usize>> = vec![HashMap::new()];
 
         for param in &function.params {
             let local = locals.len();
@@ -292,7 +367,7 @@ impl<'a> MirBuilder<'a> {
                 name: param.name.clone(),
                 ty: param.ty.clone(),
             });
-            local_map.insert(param.name.clone(), local);
+            scopes[0].insert(param.name.clone(), local);
             params.push(MirParam {
                 name: param.name.clone(),
                 ty: param.ty.clone(),
@@ -313,9 +388,10 @@ impl<'a> MirBuilder<'a> {
             function,
             signatures,
             records,
+            enums,
             params,
             locals,
-            local_map,
+            scopes,
             blocks: vec![entry_block],
             next_block_id: 1,
             current_block: 0,
@@ -344,6 +420,66 @@ impl<'a> MirBuilder<'a> {
             locals: self.locals,
             blocks: self.blocks,
         }
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        let popped = self.scopes.pop();
+        if popped.is_none() {
+            panic!("lowering bug: scope underflow");
+        }
+    }
+
+    fn with_scope<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        self.push_scope();
+        let result = f(self);
+        self.pop_scope();
+        result
+    }
+
+    fn lookup_local(&self, name: &str) -> Option<usize> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(*local);
+            }
+        }
+        None
+    }
+
+    fn declare_local(
+        &mut self,
+        name: &str,
+        ty: TypeRef,
+        allow_shadow: bool,
+    ) -> Result<usize, Diagnostic> {
+        if !allow_shadow && self.lookup_local(name).is_some() {
+            return Err(Diagnostic::error(
+                format!(
+                    "function '{}' redefines local '{}' in lowering",
+                    self.function.name, name
+                ),
+                self.function.span,
+            ));
+        }
+
+        let local = self.locals.len();
+        self.locals.push(MirLocal {
+            name: name.to_string(),
+            ty,
+        });
+
+        let scope = self
+            .scopes
+            .last_mut()
+            .expect("lowering bug: no active scope");
+        scope.insert(name.to_string(), local);
+        Ok(local)
     }
 
     fn emit_stub_body(&mut self) {
@@ -381,12 +517,21 @@ impl<'a> MirBuilder<'a> {
 
             match statement {
                 Statement::Let(stmt) => {
-                    let ty = if let Some(ty) = &stmt.ty {
-                        ty.clone()
-                    } else {
-                        self.infer_expr_type(&stmt.value)?
-                    };
-                    if !is_native_type(&ty, self.records) {
+                    let value = self.lower_expr(&stmt.value)?;
+                    let inferred_ty = value.ty.clone();
+                    let ty = stmt.ty.as_ref().unwrap_or(&inferred_ty);
+
+                    if *ty != inferred_ty {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' let '{}' declares type '{}' but value is '{}'",
+                                self.function.name, stmt.name, ty, inferred_ty
+                            ),
+                            self.function.span,
+                        ));
+                    }
+
+                    if !is_native_type(ty, self.records, self.enums) {
                         return Err(Diagnostic::error(
                             format!(
                                 "function '{}' uses let-binding '{}' with type '{}' which is not supported by native lowering yet",
@@ -396,28 +541,11 @@ impl<'a> MirBuilder<'a> {
                         ));
                     }
 
-                    if self.local_map.contains_key(&stmt.name) {
-                        return Err(Diagnostic::error(
-                            format!(
-                                "function '{}' redefines local '{}' in lowering",
-                                self.function.name, stmt.name
-                            ),
-                            self.function.span,
-                        ));
-                    }
-
-                    let local = self.locals.len();
-                    self.locals.push(MirLocal {
-                        name: stmt.name.clone(),
-                        ty: ty.clone(),
-                    });
-                    self.local_map.insert(stmt.name.clone(), local);
-
-                    let value = self.lower_expr(&stmt.value)?;
+                    let local = self.declare_local(&stmt.name, ty.clone(), false)?;
                     self.emit_store(local, value);
                 }
                 Statement::Assign(stmt) => {
-                    let Some(&local) = self.local_map.get(&stmt.name) else {
+                    let Some(local) = self.lookup_local(&stmt.name) else {
                         return Err(Diagnostic::error(
                             format!(
                                 "function '{}' assigns to unknown local '{}'",
@@ -503,7 +631,7 @@ impl<'a> MirBuilder<'a> {
             Expr::Path(segments) => {
                 match segments.as_slice() {
                     [name] => {
-                        let Some(&local) = self.local_map.get(name.as_str()) else {
+                        let Some(local) = self.lookup_local(name.as_str()) else {
                             return Err(Diagnostic::error(
                                 format!(
                                     "function '{}' uses unknown local '{}' in body",
@@ -519,7 +647,7 @@ impl<'a> MirBuilder<'a> {
                         })
                     }
                     [base, field] => {
-                        let Some(&base_local) = self.local_map.get(base.as_str()) else {
+                        let Some(base_local) = self.lookup_local(base.as_str()) else {
                             return Err(Diagnostic::error(
                                 format!(
                                     "function '{}' uses unknown local '{}' in body",
@@ -706,7 +834,7 @@ impl<'a> MirBuilder<'a> {
                 }
 
                 let return_ty = signature.return_type.clone();
-                if !is_native_type(&return_ty, self.records) {
+                if !is_native_type(&return_ty, self.records, self.enums) {
                     return Err(Diagnostic::error(
                         format!(
                             "function '{}' calls '{}' returning '{}' which is not supported by native lowering yet",
@@ -843,17 +971,6 @@ impl<'a> MirBuilder<'a> {
         }
         let cond_operand = cond_value.into_operand_or_unit(self.function)?;
 
-        let result_ty = self.infer_if_result_type(then_block, else_block)?;
-        if !is_native_type(&result_ty, self.records) {
-            return Err(Diagnostic::error(
-                format!(
-                    "function '{}' if expression returns '{}' which is not supported by native lowering yet",
-                    self.function.name, result_ty
-                ),
-                self.function.span,
-            ));
-        }
-
         let then_bb = self.new_block();
         let else_bb = self.new_block();
         let join_bb = self.new_block();
@@ -864,18 +981,10 @@ impl<'a> MirBuilder<'a> {
             else_bb: else_bb.clone(),
         });
 
-        let result_temp = if result_ty.head() == "Unit" {
-            None
-        } else {
-            Some(self.new_temp_local(result_ty.clone()))
-        };
-
         self.switch_to_block(&then_bb);
-        let then_value = self.lower_block_value(then_block)?;
-        if !self.block_is_terminated(self.current_block) {
-            if let Some(temp) = result_temp {
-                self.emit_store(temp, then_value);
-            }
+        let then_value = self.with_scope(|builder| builder.lower_block_value(then_block))?;
+        let then_needs_join = !self.block_is_terminated(self.current_block);
+        if then_needs_join {
             self.set_terminator(MirTerminator::Goto {
                 target: join_bb.clone(),
             });
@@ -883,17 +992,68 @@ impl<'a> MirBuilder<'a> {
 
         self.switch_to_block(&else_bb);
         let else_value = if let Some(block) = else_block {
-            self.lower_block_value(block)?
+            self.with_scope(|builder| builder.lower_block_value(block))?
         } else {
             ExprValue::unit()
         };
-        if !self.block_is_terminated(self.current_block) {
-            if let Some(temp) = result_temp {
-                self.emit_store(temp, else_value);
-            }
+        let else_needs_join = !self.block_is_terminated(self.current_block);
+        if else_needs_join {
             self.set_terminator(MirTerminator::Goto {
                 target: join_bb.clone(),
             });
+        }
+
+        let result_ty = if else_block.is_none() {
+            if then_value.ty.head() != "Unit" {
+                return Err(Diagnostic::error(
+                    format!(
+                        "function '{}' uses if expression without else returning '{}' but expected 'Unit' for native lowering",
+                        self.function.name, then_value.ty
+                    ),
+                    self.function.span,
+                ));
+            }
+            TypeRef {
+                name: "Unit".to_string(),
+                args: Vec::new(),
+            }
+        } else if then_value.ty != else_value.ty {
+            return Err(Diagnostic::error(
+                format!(
+                    "function '{}' if expression branches return '{}' and '{}' (must match for native lowering)",
+                    self.function.name, then_value.ty, else_value.ty
+                ),
+                self.function.span,
+            ));
+        } else {
+            then_value.ty.clone()
+        };
+
+        if !is_native_type(&result_ty, self.records, self.enums) {
+            return Err(Diagnostic::error(
+                format!(
+                    "function '{}' if expression returns '{}' which is not supported by native lowering yet",
+                    self.function.name, result_ty
+                ),
+                self.function.span,
+            ));
+        }
+
+        let result_temp = if result_ty.head() == "Unit" {
+            None
+        } else {
+            Some(self.new_temp_local(result_ty.clone()))
+        };
+
+        if let Some(temp) = result_temp {
+            if then_needs_join {
+                self.switch_to_block(&then_bb);
+                self.emit_store(temp, then_value.clone());
+            }
+            if else_needs_join {
+                self.switch_to_block(&else_bb);
+                self.emit_store(temp, else_value.clone());
+            }
         }
 
         self.switch_to_block(&join_bb);
@@ -931,7 +1091,7 @@ impl<'a> MirBuilder<'a> {
         });
 
         self.switch_to_block(&body_bb);
-        self.lower_block_statements(body, BlockMode::LoopBody)?;
+        self.with_scope(|builder| builder.lower_block_statements(body, BlockMode::LoopBody))?;
         if !self.block_is_terminated(self.current_block) {
             self.set_terminator(MirTerminator::Goto { target: cond_bb });
         }
@@ -957,7 +1117,7 @@ impl<'a> MirBuilder<'a> {
             Expr::Path(segments) => {
                 match segments.as_slice() {
                     [name] => {
-                        let Some(&local) = self.local_map.get(name.as_str()) else {
+                        let Some(local) = self.lookup_local(name.as_str()) else {
                             return Err(Diagnostic::error(
                                 format!(
                                     "function '{}' uses unknown local '{}' in body",
@@ -969,7 +1129,7 @@ impl<'a> MirBuilder<'a> {
                         Ok(self.locals[local].ty.clone())
                     }
                     [base, field] => {
-                        let Some(&base_local) = self.local_map.get(base.as_str()) else {
+                        let Some(base_local) = self.lookup_local(base.as_str()) else {
                             return Err(Diagnostic::error(
                                 format!(
                                     "function '{}' uses unknown local '{}' in body",

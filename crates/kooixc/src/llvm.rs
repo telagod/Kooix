@@ -343,6 +343,11 @@ impl<'a> FunctionEmitter<'a> {
                 );
                 tmp
             }
+            MirRvalue::EnumLit { .. }
+            | MirRvalue::EnumTag { .. }
+            | MirRvalue::EnumPayload { .. } => {
+                panic!("native enum lowering is not implemented yet")
+            }
         }
     }
 
