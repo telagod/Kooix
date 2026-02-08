@@ -1,0 +1,22 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/token";
+
+fn main() -> Int {
+  let r: Result<List<S1Token>, S1Diagnostic> = s1_lex("abc");
+  match r {
+    Ok(ts) => {
+      match ts {
+        Cons(cell) => {
+          match cell.head.kind {
+            Eof => 0;
+            _ => 1;
+          }
+        };
+        Nil => 2;
+      }
+    };
+    Err(_e) => 3;
+  }
+};
+

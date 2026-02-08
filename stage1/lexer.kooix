@@ -9,8 +9,12 @@ evidence {
   metrics [stage1_lex_calls];
 }
 {
-  // Skeleton only: Text scanning intrinsics come later.
-  let _n: Int = text_len(source);
-  let tokens: List<S1Token> = Nil;
+  // v0: minimal token stream with a single Eof token.
+  let n: Int = text_len(source);
+  let eof: S1Token = S1Token { kind: Eof; span: S1Span { start: n; end: n; }; };
+
+  // Build `List<S1Token>` without requiring generic inference for `Nil`.
+  let empty: List<S1Token> = Nil;
+  let tokens: List<S1Token> = Cons(ListCons<S1Token> { head: eof; tail: empty; });
   Ok(tokens)
 };
