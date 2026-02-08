@@ -4,7 +4,8 @@ import "../stage1/parser";
 import "../stage1/ast";
 
 fn main() -> Int {
-  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex("import \"lib\"; fn main() -> Int;");
+  let tr: Result<List<S1Token>, S1Diagnostic> =
+    s1_lex("import \"../stdlib/prelude\"; fn main() -> Int;");
   match tr {
     Err(_e) => 1;
     Ok(ts) => {
@@ -16,7 +17,8 @@ fn main() -> Int {
             Cons(i0) => {
               match i0.head {
                 Import(imp) => {
-                  if imp.path == "lib" {
+                  if imp.path == "../stdlib/prelude" {
+                    if imp.ns == "prelude" {
                     match i0.tail {
                       Cons(i1) => {
                         match i1.head {
@@ -28,6 +30,7 @@ fn main() -> Int {
                       };
                       Nil => 4;
                     }
+                    } else { 33 }
                   } else { 3 }
                 };
                 _ => 7;

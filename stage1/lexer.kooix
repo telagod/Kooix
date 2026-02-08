@@ -29,13 +29,15 @@ fn s1_keyword_or_ident(lexeme: Text) -> S1TokenKind {
     if lexeme == "record" { KwRecord } else {
       if lexeme == "enum" { KwEnum } else {
         if lexeme == "import" { KwImport } else {
-          if lexeme == "let" { KwLet } else {
-            if lexeme == "return" { KwReturn } else {
-              if lexeme == "if" { KwIf } else {
-                if lexeme == "else" { KwElse } else {
-                  if lexeme == "while" { KwWhile } else {
-                    if lexeme == "match" { KwMatch } else {
-                      Ident(lexeme)
+          if lexeme == "as" { KwAs } else {
+            if lexeme == "let" { KwLet } else {
+              if lexeme == "return" { KwReturn } else {
+                if lexeme == "if" { KwIf } else {
+                  if lexeme == "else" { KwElse } else {
+                    if lexeme == "while" { KwWhile } else {
+                      if lexeme == "match" { KwMatch } else {
+                        Ident(lexeme)
+                      }
                     }
                   }
                 }

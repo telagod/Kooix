@@ -18,52 +18,57 @@ fn main() -> Int {
               match i0.head {
                 Enum(e) => {
                   if e.name == "Option" {
-                    match e.variants {
-                      Cons(v0) => {
-                        if v0.head.name == "None" {
-                          match v0.head.payload_ty {
-                            None => {
-                              match v0.tail {
-                                Cons(v1) => {
-                                  if v1.head.name == "Some" {
-                                    match v1.head.payload_ty {
-                                      Some(ty) => {
-                                        if ty.name == "Int" {
-                                          match ty.args {
-                                            Nil => {
-                                              match v1.tail {
+                    match e.generics {
+                      Nil => {
+                        match e.variants {
+                          Cons(v0) => {
+                            if v0.head.name == "None" {
+                              match v0.head.payload_ty {
+                                None => {
+                                  match v0.tail {
+                                    Cons(v1) => {
+                                      if v1.head.name == "Some" {
+                                        match v1.head.payload_ty {
+                                          Some(ty) => {
+                                            if ty.name == "Int" {
+                                              match ty.args {
                                                 Nil => {
-                                                  match i0.tail {
-                                                    Cons(i1) => {
-                                                      match i1.head {
-                                                        Function(fun) => {
-                                                          if fun.name == "main" { 0 } else { 30 }
+                                                  match v1.tail {
+                                                    Nil => {
+                                                      match i0.tail {
+                                                        Cons(i1) => {
+                                                          match i1.head {
+                                                            Function(fun) => {
+                                                              if fun.name == "main" { 0 } else { 30 }
+                                                            };
+                                                            _ => 31;
+                                                          }
                                                         };
-                                                        _ => 31;
+                                                        _ => 32;
                                                       }
                                                     };
-                                                    _ => 32;
+                                                    _ => 29;
                                                   }
                                                 };
-                                                _ => 29;
+                                                _ => 128;
                                               }
-                                            };
-                                            _ => 128;
-                                          }
-                                        } else { 28 }
-                                      };
-                                      _ => 27;
-                                    }
-                                  } else { 26 }
+                                            } else { 28 }
+                                          };
+                                          _ => 27;
+                                        }
+                                      } else { 26 }
+                                    };
+                                    _ => 25;
+                                  }
                                 };
-                                _ => 25;
+                                _ => 24;
                               }
-                            };
-                            _ => 24;
-                          }
-                        } else { 23 }
+                            } else { 23 }
+                          };
+                          _ => 22;
+                        }
                       };
-                      _ => 22;
+                      _ => 21;
                     }
                   } else { 21 }
                 };

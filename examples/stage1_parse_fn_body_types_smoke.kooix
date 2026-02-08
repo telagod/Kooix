@@ -4,7 +4,7 @@ import "../stage1/parser";
 import "../stage1/ast";
 
 fn main() -> Int {
-  let src: Text = "fn len(xs: List<Int>) -> Int { { 0 } };";
+  let src: Text = "fn len(xs: List<Int>) -> Int { 0 };";
   let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
   match tr {
     Err(_e) => 1;
@@ -18,42 +18,64 @@ fn main() -> Int {
               match i0.head {
                 Function(f) => {
                   if f.name == "len" {
-                    match f.body_tokens {
-                      Some(_bt) => {
-                        match f.params {
-                          Cons(p0) => {
-                            if p0.head.name == "xs" {
-                              if p0.head.ty.name == "List" {
-                                match p0.head.ty.args {
-                                  Cons(t0) => {
-                                    if t0.head.name == "Int" {
-                                      match t0.head.args {
-                                        Nil => {
-                                          match t0.tail {
-                                            Nil => {
-                                              if f.return_type.name == "Int" {
-                                                match f.return_type.args {
-                                                  Nil => 0;
-                                                  _ => 30;
-                                                }
-                                              } else { 29 }
+                    match f.generics {
+                      Nil => {
+                        match f.body {
+                          Some(b) => {
+                            match b.stmts {
+                              Nil => {
+                                match b.result {
+                                  Some(e) => {
+                                    match e {
+                                      IntLit(n) => {
+                                        if n == "0" {
+                                          match f.params {
+                                            Cons(p0) => {
+                                              if p0.head.name == "xs" {
+                                                if p0.head.ty.name == "List" {
+                                                  match p0.head.ty.args {
+                                                    Cons(t0) => {
+                                                      if t0.head.name == "Int" {
+                                                        match t0.head.args {
+                                                          Nil => {
+                                                            match t0.tail {
+                                                              Nil => {
+                                                                if f.return_type.name == "Int" {
+                                                                  match f.return_type.args {
+                                                                    Nil => 0;
+                                                                    _ => 30;
+                                                                  }
+                                                                } else { 29 }
+                                                              };
+                                                              _ => 28;
+                                                            }
+                                                          };
+                                                          _ => 27;
+                                                        }
+                                                      } else { 26 }
+                                                    };
+                                                    _ => 25;
+                                                  }
+                                                } else { 24 }
+                                              } else { 23 }
                                             };
-                                            _ => 28;
+                                            _ => 22;
                                           }
-                                        };
-                                        _ => 27;
-                                      }
-                                    } else { 26 }
+                                        } else { 35 }
+                                      };
+                                      _ => 34;
+                                    }
                                   };
-                                  _ => 25;
+                                  _ => 33;
                                 }
-                              } else { 24 }
-                            } else { 23 }
+                              };
+                              _ => 32;
+                            }
                           };
-                          _ => 22;
+                          _ => 21;
                         }
                       };
-                      _ => 21;
+                      _ => 36;
                     }
                   } else { 20 }
                 };

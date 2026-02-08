@@ -1,9 +1,13 @@
 import "../stdlib/prelude";
-import "token";
 
 record S1Program { items: List<S1Item>; };
 
 record S1Type { name: Text; args: List<S1Type>; };
+
+record S1GenericParam {
+  name: Text;
+  bounds: List<S1Type>;
+};
 
 enum S1Item {
   Import(S1Import);
@@ -14,14 +18,15 @@ enum S1Item {
 
 record S1Import {
   path: Text;
+  ns: Text;
 };
 
 record S1Function {
   name: Text;
-  generics: List<Text>;
+  generics: List<S1GenericParam>;
   params: List<S1Param>;
   return_type: S1Type;
-  body_tokens: Option<List<S1Token>>;
+  body: Option<S1Block>;
 };
 
 record S1Param {
@@ -31,7 +36,7 @@ record S1Param {
 
 record S1Record {
   name: Text;
-  generics: List<Text>;
+  generics: List<S1GenericParam>;
   fields: List<S1RecordField>;
 };
 
@@ -42,11 +47,50 @@ record S1RecordField {
 
 record S1Enum {
   name: Text;
-  generics: List<Text>;
+  generics: List<S1GenericParam>;
   variants: List<S1EnumVariant>;
 };
 
 record S1EnumVariant {
   name: Text;
   payload_ty: Option<S1Type>;
+};
+
+record S1Block {
+  stmts: List<S1Stmt>;
+  result: Option<S1Expr>;
+};
+
+enum S1Stmt {
+  Let(S1Let);
+  Assign(S1Assign);
+  Return(S1Return);
+  ExprStmt(S1Expr);
+};
+
+record S1Let {
+  name: Text;
+  ty: S1Type;
+  value: S1Expr;
+};
+
+record S1Assign {
+  name: Text;
+  value: S1Expr;
+};
+
+record S1Return {
+  value: S1Expr;
+};
+
+enum S1Expr {
+  Path(Text);
+  IntLit(Text);
+  StringLit(Text);
+  Call(S1Call);
+};
+
+record S1Call {
+  callee: Text;
+  args: List<S1Expr>;
 };

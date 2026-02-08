@@ -1,0 +1,82 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "record Box<T: Answer + Summary> { value: T; };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Record(r) => {
+                  if r.name == "Box" {
+                    match r.generics {
+                      Cons(g0) => {
+                        if g0.head.name == "T" {
+                          match g0.head.bounds {
+                            Cons(b0) => {
+                              if b0.head.name == "Answer" {
+                                match b0.head.args {
+                                  Nil => {
+                                    match b0.tail {
+                                      Cons(b1) => {
+                                        if b1.head.name == "Summary" {
+                                          match b1.head.args {
+                                            Nil => {
+                                              match b1.tail {
+                                                Nil => {
+                                                  match r.fields {
+                                                    Cons(f0) => {
+                                                      if f0.head.name == "value" {
+                                                        if f0.head.ty.name == "T" {
+                                                          match f0.head.ty.args {
+                                                            Nil => 0;
+                                                            _ => 40;
+                                                          }
+                                                        } else { 39 }
+                                                      } else { 38 }
+                                                    };
+                                                    _ => 37;
+                                                  }
+                                                };
+                                                _ => 36;
+                                              }
+                                            };
+                                            _ => 35;
+                                          }
+                                        } else { 34 }
+                                      };
+                                      _ => 33;
+                                    }
+                                  };
+                                  _ => 32;
+                                }
+                              } else { 31 }
+                            };
+                            _ => 30;
+                          }
+                        } else { 29 }
+                      };
+                      _ => 28;
+                    }
+                  } else { 27 }
+                };
+                _ => 26;
+              }
+            };
+            _ => 25;
+          }
+        };
+      }
+    };
+  }
+};
+

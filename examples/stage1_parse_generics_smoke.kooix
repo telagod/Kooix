@@ -4,8 +4,7 @@ import "../stage1/parser";
 import "../stage1/ast";
 
 fn main() -> Int {
-  let src: Text =
-    "enum Option<T> { None; Some(T); }; record Pair<A, B> { a: A; b: B; }; fn id<T>(x: T) -> T { x };";
+  let src: Text = "fn id<T>(x: T) -> T { x };";
   let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
   match tr {
     Err(_e) => 1;
@@ -17,80 +16,30 @@ fn main() -> Int {
           match p.items {
             Cons(i0) => {
               match i0.head {
-                Enum(e) => {
-                  if e.name == "Option" {
-                    match e.generics {
+                Function(f) => {
+                  if f.name == "id" {
+                    match f.generics {
                       Cons(g0) => {
-                        if g0.head == "T" {
-                          match g0.tail {
+                        if g0.head.name == "T" {
+                          match g0.head.bounds {
                             Nil => {
-                              match i0.tail {
-                                Cons(i1) => {
-                                  match i1.head {
-                                    Record(r) => {
-                                      if r.name == "Pair" {
-                                        match r.generics {
-                                          Cons(ra) => {
-                                            if ra.head == "A" {
-                                              match ra.tail {
-                                                Cons(rb) => {
-                                                  if rb.head == "B" {
-                                                    match rb.tail {
-                                                      Nil => {
-                                                        match i1.tail {
-                                                          Cons(i2) => {
-                                                            match i2.head {
-                                                              Function(f) => {
-                                                                if f.name == "id" {
-                                                                  match f.generics {
-                                                                    Cons(fg) => {
-                                                                      if fg.head == "T" {
-                                                                        match fg.tail {
-                                                                          Nil => 0;
-                                                                          _ => 90;
-                                                                        }
-                                                                      } else { 89 }
-                                                                    };
-                                                                    _ => 88;
-                                                                  }
-                                                                } else { 87 }
-                                                              };
-                                                              _ => 86;
-                                                            }
-                                                          };
-                                                          _ => 85;
-                                                        }
-                                                      };
-                                                      _ => 84;
-                                                    }
-                                                  } else { 83 }
-                                                };
-                                                _ => 82;
-                                              }
-                                            } else { 81 }
-                                          };
-                                          _ => 80;
-                                        }
-                                      } else { 79 }
-                                    };
-                                    _ => 78;
-                                  }
-                                };
-                                _ => 77;
+                              match g0.tail {
+                                Nil => 0;
+                                _ => 10;
                               }
                             };
-                            _ => 76;
+                            _ => 11;
                           }
-                        } else { 75 }
+                        } else { 12 }
                       };
-                      _ => 74;
+                      _ => 13;
                     }
-                  } else { 73 }
+                  } else { 14 }
                 };
-                _ => 72;
+                _ => 15;
               }
             };
-            _ => 71;
+            _ => 16;
           }
         };
       }
