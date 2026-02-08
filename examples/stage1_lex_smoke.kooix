@@ -9,7 +9,19 @@ fn main() -> Int {
       match ts {
         Cons(cell) => {
           match cell.head.kind {
-            Eof => 0;
+            Ident(name) => {
+              if name == "abc" {
+                match cell.tail {
+                  Cons(cell2) => {
+                    match cell2.head.kind {
+                      Eof => 0;
+                      _ => 4;
+                    }
+                  };
+                  Nil => 5;
+                }
+              } else { 6 }
+            };
             _ => 1;
           }
         };
@@ -19,4 +31,3 @@ fn main() -> Int {
     Err(_e) => 3;
   }
 };
-

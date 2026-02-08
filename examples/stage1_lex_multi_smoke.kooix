@@ -1,0 +1,58 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/token";
+
+fn main() -> Int {
+  let r: Result<List<S1Token>, S1Diagnostic> = s1_lex("foo 123 \"bar\"");
+  match r {
+    Ok(ts) => {
+      match ts {
+        Cons(t0) => {
+          match t0.head.kind {
+            Ident(a) => {
+              if a == "foo" {
+                match t0.tail {
+                  Cons(t1) => {
+                    match t1.head.kind {
+                      Number(b) => {
+                        if b == "123" {
+                          match t1.tail {
+                            Cons(t2) => {
+                              match t2.head.kind {
+                                String(c) => {
+                                  if c == "bar" {
+                                    match t2.tail {
+                                      Cons(t3) => {
+                                        match t3.head.kind {
+                                          Eof => 0;
+                                          _ => 11;
+                                        }
+                                      };
+                                      Nil => 12;
+                                    }
+                                  } else { 10 }
+                                };
+                                _ => 9;
+                              }
+                            };
+                            Nil => 8;
+                          }
+                        } else { 7 }
+                      };
+                      _ => 6;
+                    }
+                  };
+                  Nil => 5;
+                }
+              } else { 4 }
+            };
+            _ => 3;
+          }
+        };
+        Nil => 2;
+      }
+    };
+    Err(_e) => 1;
+  }
+};
+

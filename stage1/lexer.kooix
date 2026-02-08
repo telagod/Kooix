@@ -2,6 +2,52 @@ import "../stdlib/prelude";
 import "diag";
 import "token";
 
+fn s1_reverse_tokens(xs: List<S1Token>) -> List<S1Token> {
+  let acc: List<S1Token> = Nil;
+  let cur: List<S1Token> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Token> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
+fn s1_keyword_or_ident(lexeme: Text) -> S1TokenKind {
+  if lexeme == "fn" { KwFn } else {
+    if lexeme == "record" { KwRecord } else {
+      if lexeme == "enum" { KwEnum } else {
+        if lexeme == "import" { KwImport } else {
+          if lexeme == "let" { KwLet } else {
+            if lexeme == "return" { KwReturn } else {
+              if lexeme == "if" { KwIf } else {
+                if lexeme == "else" { KwElse } else {
+                  if lexeme == "while" { KwWhile } else {
+                    if lexeme == "match" { KwMatch } else {
+                      Ident(lexeme)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
 fn s1_lex(source: Text) -> Result<List<S1Token>, S1Diagnostic>
 intent "Stage1 lexer (pure): source -> tokens"
 evidence {
@@ -9,12 +55,248 @@ evidence {
   metrics [stage1_lex_calls];
 }
 {
-  // v0: minimal token stream with a single Eof token.
   let n: Int = text_len(source);
-  let eof: S1Token = S1Token { kind: Eof; span: S1Span { start: n; end: n; }; };
+  let i: Int = 0;
+  let tokens_rev: List<S1Token> = Nil;
 
-  // Build `List<S1Token>` without requiring generic inference for `Nil`.
-  let empty: List<S1Token> = Nil;
-  let tokens: List<S1Token> = Cons(ListCons<S1Token> { head: eof; tail: empty; });
-  Ok(tokens)
+  let running: Bool = true;
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "lexer error");
+
+  while running == true {
+    if i == n {
+      running = false;
+      0
+    } else {
+      // Skip whitespace (ASCII only).
+      let skipping: Bool = true;
+      while skipping == true {
+        if i == n {
+          skipping = false;
+          0
+        } else {
+          let byte_opt: Option<Int> = text_byte_at(source, i);
+          match byte_opt {
+            Some(b) => {
+              if byte_is_ascii_whitespace(b) {
+                i = i + 1;
+                0
+              } else {
+                skipping = false;
+                0
+              }
+            };
+            None => {
+              skipping = false;
+              i = n;
+              0
+            };
+          }
+        }
+      };
+
+      if i == n {
+        // End after whitespace.
+        running = false;
+        0
+      } else {
+        let byte_opt2: Option<Int> = text_byte_at(source, i);
+        match byte_opt2 {
+          None => {
+            running = false;
+            0
+          };
+          Some(b0) => {
+            if b0 == 34 {
+              // String literal: "...." (no escapes in v0).
+              let start: Int = i;
+              let j: Int = i + 1;
+              let scanning: Bool = true;
+              let closed: Bool = false;
+
+              while scanning == true {
+                if j == n {
+                  scanning = false;
+                  ok = false;
+                  diag = s1_diag(Error, start, n, "lexer: unterminated string literal");
+                  running = false;
+                  0
+                } else {
+                  let bopt: Option<Int> = text_byte_at(source, j);
+                  match bopt {
+                    None => {
+                      scanning = false;
+                      ok = false;
+                      diag = s1_diag(Error, start, n, "lexer: unterminated string literal");
+                      running = false;
+                      0
+                    };
+                    Some(b1) => {
+                      if b1 == 34 {
+                        closed = true;
+                        scanning = false;
+                        0
+                      } else {
+                        j = j + 1;
+                        0
+                      }
+                    };
+                  }
+                }
+              };
+
+              if ok == true {
+                if closed == true {
+                  let content_start: Int = start + 1;
+                  let content_end: Int = j;
+                  let end: Int = j + 1;
+
+                  let slice_opt: Option<Text> = text_slice(source, content_start, content_end);
+                  match slice_opt {
+                    None => {
+                      ok = false;
+                      diag = s1_diag(Error, start, end, "lexer: invalid string slice");
+                      running = false;
+                      0
+                    };
+                    Some(content) => {
+                      let tok: S1Token = S1Token {
+                        kind: String(content);
+                        span: S1Span { start: start; end: end; };
+                      };
+                      tokens_rev =
+                        Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                      i = end;
+                      0
+                    };
+                  }
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, start, n, "lexer: unterminated string literal");
+                  running = false;
+                  0
+                }
+              } else {
+                0
+              }
+            } else {
+              if byte_is_ascii_ident_start(b0) {
+                // Identifier/keyword.
+                let start: Int = i;
+                let j: Int = i;
+                let scanning: Bool = true;
+
+                while scanning == true {
+                  if j == n {
+                    scanning = false;
+                    0
+                  } else {
+                    let bopt: Option<Int> = text_byte_at(source, j);
+                    match bopt {
+                      None => {
+                        scanning = false;
+                        0
+                      };
+                      Some(b1) => {
+                        if byte_is_ascii_ident_continue(b1) {
+                          j = j + 1;
+                          0
+                        } else {
+                          scanning = false;
+                          0
+                        }
+                      };
+                    }
+                  }
+                };
+
+                let slice_opt: Option<Text> = text_slice(source, start, j);
+                match slice_opt {
+                  None => {
+                    ok = false;
+                    diag = s1_diag(Error, start, j, "lexer: invalid identifier slice");
+                    running = false;
+                    0
+                  };
+                  Some(lexeme) => {
+                    let kind: S1TokenKind = s1_keyword_or_ident(lexeme);
+                    let tok: S1Token =
+                      S1Token { kind: kind; span: S1Span { start: start; end: j; }; };
+                    tokens_rev =
+                      Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                    i = j;
+                    0
+                  };
+                }
+              } else {
+                if byte_is_ascii_digit(b0) {
+                  // Number (integer digits only).
+                  let start: Int = i;
+                  let j: Int = i;
+                  let scanning: Bool = true;
+
+                  while scanning == true {
+                    if j == n {
+                      scanning = false;
+                      0
+                    } else {
+                      let bopt: Option<Int> = text_byte_at(source, j);
+                      match bopt {
+                        None => {
+                          scanning = false;
+                          0
+                        };
+                        Some(b1) => {
+                          if byte_is_ascii_digit(b1) {
+                            j = j + 1;
+                            0
+                          } else {
+                            scanning = false;
+                            0
+                          }
+                        };
+                      }
+                    }
+                  };
+
+                  let slice_opt: Option<Text> = text_slice(source, start, j);
+                  match slice_opt {
+                    None => {
+                      ok = false;
+                      diag = s1_diag(Error, start, j, "lexer: invalid number slice");
+                      running = false;
+                      0
+                    };
+                    Some(lexeme) => {
+                      let tok: S1Token =
+                        S1Token { kind: Number(lexeme); span: S1Span { start: start; end: j; }; };
+                      tokens_rev =
+                        Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                      i = j;
+                      0
+                    };
+                  }
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, i, i + 1, "lexer: unexpected character");
+                  running = false;
+                  0
+                }
+              }
+            }
+          };
+        }
+      }
+    }
+  };
+
+  let out: Result<List<S1Token>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    let eof: S1Token = S1Token { kind: Eof; span: S1Span { start: n; end: n; }; };
+    tokens_rev = Cons(ListCons<S1Token> { head: eof; tail: tokens_rev; });
+    let tokens: List<S1Token> = s1_reverse_tokens(tokens_rev);
+    out = Ok(tokens);
+  };
+
+  out
 };
