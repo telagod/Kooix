@@ -1190,6 +1190,13 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
                                 rest = a2.tail;
                                 0
                               };
+                              RBrace => {
+                                // Allow omitting ';' on final arm: `... => <expr> }`
+                                let arm: S1MatchArm = S1MatchArm { pat: pat; value: value; };
+                                arms_rev =
+                                  Cons(ListCons<S1MatchArm> { head: arm; tail: arms_rev; });
+                                0
+                              };
                               _ => {
                                 ok = false;
                                 diag = s1_diag(Error, a2.head.span.start, a2.head.span.end, "parser: expected ';' after match arm");

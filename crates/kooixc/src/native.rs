@@ -138,7 +138,14 @@ pub fn run_executable_with_args_and_stdin_and_timeout(
                 "failed to open child stdin",
             )));
         };
-        stdin.write_all(data).map_err(NativeError::Io)?;
+        match stdin.write_all(data) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+                // Child exited (or closed stdin) before consuming all input. Treat as non-fatal to
+                // keep runs deterministic for programs that don't read stdin.
+            }
+            Err(error) => return Err(NativeError::Io(error)),
+        }
     }
 
     if let Some(timeout_ms) = timeout_ms {
