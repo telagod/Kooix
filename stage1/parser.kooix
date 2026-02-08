@@ -601,6 +601,179 @@ fn s1_infer_import_ns(path: Text) -> Text {
 };
 
 fn s1_parse_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> {
+  s1_parse_equality(tokens)
+};
+
+fn s1_parse_equality(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
+
+  let left: S1Expr = S1Expr.Path("");
+  let rest: List<S1Token> = tokens;
+
+  let parsed_l: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+    s1_parse_additive(tokens);
+  match parsed_l {
+    Err(e) => {
+      ok = false;
+      diag = e;
+      0
+    };
+    Ok(pair) => {
+      left = pair.a;
+      rest = pair.b;
+      0
+    };
+  };
+
+  if ok == true {
+    let done: Bool = false;
+    while done == false {
+      match rest {
+        Cons(opcell) => {
+          match opcell.head.kind {
+            EqEq => {
+              rest = opcell.tail;
+              let rhs: S1Expr = S1Expr.Path("");
+              let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                s1_parse_additive(rest);
+              match parsed_r {
+                Err(e) => {
+                  ok = false;
+                  diag = e;
+                  done = true;
+                  0
+                };
+                Ok(pair) => {
+                  rhs = pair.a;
+                  rest = pair.b;
+                  let prev: S1Expr = left;
+                  left =
+                    Binary(S1Binary { op: S1BinOp.Equals; left: prev; right: rhs; });
+                  0
+                };
+              };
+              0
+            };
+            NotEq => {
+              rest = opcell.tail;
+              let rhs: S1Expr = S1Expr.Path("");
+              let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                s1_parse_additive(rest);
+              match parsed_r {
+                Err(e) => {
+                  ok = false;
+                  diag = e;
+                  done = true;
+                  0
+                };
+                Ok(pair) => {
+                  rhs = pair.a;
+                  rest = pair.b;
+                  let prev: S1Expr = left;
+                  left =
+                    Binary(S1Binary { op: S1BinOp.NotEquals; left: prev; right: rhs; });
+                  0
+                };
+              };
+              0
+            };
+            _ => {
+              done = true;
+              0
+            };
+          }
+        };
+        _ => {
+          done = true;
+          0
+        };
+      }
+    };
+    0;
+  };
+
+  let out: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(Pair<S1Expr, List<S1Token>> { a: left; b: rest; });
+  };
+  out
+};
+
+fn s1_parse_additive(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
+
+  let left: S1Expr = S1Expr.Path("");
+  let rest: List<S1Token> = tokens;
+
+  let parsed_l: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+    s1_parse_primary_expr(tokens);
+  match parsed_l {
+    Err(e) => {
+      ok = false;
+      diag = e;
+      0
+    };
+    Ok(pair) => {
+      left = pair.a;
+      rest = pair.b;
+      0
+    };
+  };
+
+  if ok == true {
+    let done: Bool = false;
+    while done == false {
+      match rest {
+        Cons(opcell) => {
+          match opcell.head.kind {
+            Plus => {
+              rest = opcell.tail;
+              let rhs: S1Expr = S1Expr.Path("");
+              let parsed_r: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                s1_parse_primary_expr(rest);
+              match parsed_r {
+                Err(e) => {
+                  ok = false;
+                  diag = e;
+                  done = true;
+                  0
+                };
+                Ok(pair) => {
+                  rhs = pair.a;
+                  rest = pair.b;
+                  let prev: S1Expr = left;
+                  left =
+                    Binary(S1Binary { op: S1BinOp.Add; left: prev; right: rhs; });
+                  0
+                };
+              };
+              0
+            };
+            _ => {
+              done = true;
+              0
+            };
+          }
+        };
+        _ => {
+          done = true;
+          0
+        };
+      }
+    };
+    0;
+  };
+
+  let out: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(Pair<S1Expr, List<S1Token>> { a: left; b: rest; });
+  };
+  out
+};
+
+fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> {
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected expression");
 

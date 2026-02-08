@@ -1,0 +1,97 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { x == y + z; 0 };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  match f.body {
+                    Some(b) => {
+                      match b.stmts {
+                        Cons(s0) => {
+                          match s0.head {
+                            ExprStmt(e0) => {
+                              match e0 {
+                                Binary(beq) => {
+                                  match beq.op {
+                                    Equals => {
+                                      match beq.left {
+                                        Path(lname) => {
+                                          if lname == "x" {
+                                            match beq.right {
+                                              Binary(badd) => {
+                                                match badd.op {
+                                                  Add => {
+                                                    match badd.left {
+                                                      Path(yname) => {
+                                                        if yname == "y" {
+                                                          match badd.right {
+                                                            Path(zname) => {
+                                                              if zname == "z" {
+                                                                match b.result {
+                                                                  Some(re) => {
+                                                                    match re {
+                                                                      IntLit(n) => {
+                                                                        if n == "0" { 0 } else { 30 }
+                                                                      };
+                                                                      _ => 29;
+                                                                    }
+                                                                  };
+                                                                  _ => 28;
+                                                                }
+                                                              } else { 27 }
+                                                            };
+                                                            _ => 26;
+                                                          }
+                                                        } else { 25 }
+                                                      };
+                                                      _ => 24;
+                                                    }
+                                                  };
+                                                  _ => 23;
+                                                }
+                                              };
+                                              _ => 22;
+                                            }
+                                          } else { 21 }
+                                        };
+                                        _ => 20;
+                                      }
+                                  };
+                                    _ => 19;
+                                  }
+                                };
+                                _ => 18;
+                              }
+                            };
+                            _ => 17;
+                          }
+                        };
+                        _ => 16;
+                      }
+                    };
+                    _ => 15;
+                  }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};

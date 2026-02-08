@@ -97,6 +97,7 @@ enum S1Expr {
   Block(S1Block);
   If(S1If);
   Match(S1Match);
+  Binary(S1Binary);
 };
 
 record S1Call {
@@ -123,4 +124,16 @@ record S1MatchArm {
 record S1Match {
   scrutinee: S1Expr;
   arms: List<S1MatchArm>;
+};
+
+enum S1BinOp {
+  Add;
+  Equals;
+  NotEquals;
+};
+
+record S1Binary {
+  op: S1BinOp;
+  left: S1Expr;
+  right: S1Expr;
 };
