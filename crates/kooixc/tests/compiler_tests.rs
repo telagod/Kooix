@@ -239,6 +239,28 @@ fn main() -> Int {
 }
 
 #[test]
+fn infers_generic_enum_variants_in_function_call_arguments() {
+    let source = r#"
+enum Option<T> { Some(T); None; };
+
+fn unwrap_or_zero(x: Option<Int>) -> Int {
+  match x {
+    Some(v) => v;
+    None => 0;
+  }
+};
+
+fn main() -> Int {
+  unwrap_or_zero(Some(7)) + unwrap_or_zero(None)
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(7));
+}
+
+#[test]
 fn fails_when_if_expression_branch_types_differ() {
     let source = r#"
 fn main() -> Int { if true { 1 } else { false } };

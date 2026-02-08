@@ -2421,13 +2421,14 @@ fn infer_expr_type_with_expected(
                 for (index, (arg, expected_ty)) in
                     args.iter().zip(signature.params.iter()).enumerate()
                 {
-                    let Some(actual_ty) = infer_expr_type(
+                    let Some(actual_ty) = infer_expr_type_with_expected(
                         function,
                         arg,
                         env,
                         signatures,
                         declared_record_types,
                         declared_enum_types,
+                        Some(expected_ty),
                         diagnostics,
                     ) else {
                         continue;
