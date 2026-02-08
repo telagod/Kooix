@@ -1,0 +1,32 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex("fn main() -> Int;");
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Nil => 3;
+            Cons(cell) => {
+              match cell.head {
+                Function(f) => {
+                  if f.name == "main" {
+                    if f.return_type == "Int" { 0 } else { 5 }
+                  } else { 4 }
+                };
+                _ => 6;
+              }
+            };
+          }
+        };
+      }
+    };
+  }
+};

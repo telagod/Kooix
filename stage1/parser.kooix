@@ -3,6 +3,28 @@ import "diag";
 import "token";
 import "ast";
 
+fn s1_reverse_items(xs: List<S1Item>) -> List<S1Item> {
+  let acc: List<S1Item> = Nil;
+  let cur: List<S1Item> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Item> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_parse(tokens: List<S1Token>) -> Result<S1Program, S1Diagnostic>
 intent "Stage1 parser (pure): tokens -> AST"
 evidence {
@@ -10,7 +32,214 @@ evidence {
   metrics [stage1_parse_calls];
 }
 {
-  let _ignore: List<S1Token> = tokens;
-  let items: List<S1Item> = Nil;
-  Ok(S1Program { items: items; })
+  let cur: List<S1Token> = tokens;
+  let items_rev: List<S1Item> = Nil;
+
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser error");
+
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        ok = false;
+        diag = s1_diag(Error, 0, 0, "parser: unexpected end of token stream");
+        done = true;
+        0
+      };
+      Cons(cell0) => {
+        match cell0.head.kind {
+          Eof => {
+            done = true;
+            0
+          };
+          KwFn => {
+            // Parse: fn <Ident> ( ) -> <Ident> ;
+            let fn_start: Int = cell0.head.span.start;
+            cur = cell0.tail;
+
+            let fn_name: Text = "";
+            let ret_ty: Text = "";
+
+            // name
+            match cur {
+              Nil => {
+                ok = false;
+                diag = s1_diag(Error, fn_start, fn_start, "parser: expected function name");
+                done = true;
+                0
+              };
+              Cons(cell1) => {
+                match cell1.head.kind {
+                  Ident(name) => {
+                    fn_name = name;
+                    cur = cell1.tail;
+                    0
+                  };
+                  _ => {
+                    ok = false;
+                    diag = s1_diag(Error, cell1.head.span.start, cell1.head.span.end, "parser: expected function name");
+                    done = true;
+                    0
+                  };
+                }
+              };
+            };
+
+            // (
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected '('");
+                  done = true;
+                  0
+                };
+                Cons(cell2) => {
+                  match cell2.head.kind {
+                    LParen => {
+                      cur = cell2.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell2.head.span.start, cell2.head.span.end, "parser: expected '('");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            // )
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ')'");
+                  done = true;
+                  0
+                };
+                Cons(cell3) => {
+                  match cell3.head.kind {
+                    RParen => {
+                      cur = cell3.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell3.head.span.start, cell3.head.span.end, "parser: expected ')'");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            // ->
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected '->'");
+                  done = true;
+                  0
+                };
+                Cons(cell4) => {
+                  match cell4.head.kind {
+                    Arrow => {
+                      cur = cell4.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell4.head.span.start, cell4.head.span.end, "parser: expected '->'");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            // return type
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected return type");
+                  done = true;
+                  0
+                };
+                Cons(cell5) => {
+                  match cell5.head.kind {
+                    Ident(name) => {
+                      ret_ty = name;
+                      cur = cell5.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell5.head.span.start, cell5.head.span.end, "parser: expected return type");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            // ;
+            if ok == true {
+              match cur {
+                Nil => {
+                  ok = false;
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ';'");
+                  done = true;
+                  0
+                };
+                Cons(cell6) => {
+                  match cell6.head.kind {
+                    Semicolon => {
+                      cur = cell6.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, cell6.head.span.start, cell6.head.span.end, "parser: expected ';'");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+              }
+            } else { 0 };
+
+            if ok == true {
+              let item: S1Item = Function(S1Function { name: fn_name; return_type: ret_ty; });
+              items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
+              0
+            } else {
+              0
+            }
+          };
+          _ => {
+            ok = false;
+            diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: unexpected token (expected 'fn' or EOF)");
+            done = true;
+            0
+          };
+        }
+      };
+    }
+  };
+
+  let out: Result<S1Program, S1Diagnostic> = Err(diag);
+  if ok == true {
+    let items: List<S1Item> = s1_reverse_items(items_rev);
+    out = Ok(S1Program { items: items; });
+  };
+  out
 };

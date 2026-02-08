@@ -10,6 +10,7 @@ enum S1Item {
 
 record S1Function {
   name: Text;
+  return_type: Text;
 };
 
 record S1Record {
@@ -19,4 +20,3 @@ record S1Record {
 record S1Enum {
   name: Text;
 };
-

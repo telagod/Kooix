@@ -2405,6 +2405,24 @@ fn stage1_lexer_punctuation_smoke() {
 }
 
 #[test]
+fn stage1_parser_fn_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_parse_fn_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 parser smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 parser smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined).expect("stage1 parser smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;
