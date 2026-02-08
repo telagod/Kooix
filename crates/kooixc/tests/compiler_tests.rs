@@ -2278,6 +2278,41 @@ fn ping() -> Unit !{net} requires [Net<"api.openai.com">];
 }
 
 #[test]
+fn native_lowering_scopes_let_bindings_per_if_branch() {
+    let source = r#"
+fn main() -> Int {
+  if true {
+    let x: Int = 1;
+    x
+  } else {
+    let x: Int = 2;
+    x
+  }
+};
+"#;
+
+    let mir = lower_to_mir_source(source).expect("scoped let in if branches should lower to mir");
+    assert!(mir.functions.iter().any(|function| function.name == "main"));
+}
+
+#[test]
+fn native_lowering_scopes_let_bindings_inside_while_body() {
+    let source = r#"
+fn main() -> Int {
+  while false {
+    let x: Int = 1;
+    x
+  };
+  let x: Int = 2;
+  x
+};
+"#;
+
+    let mir = lower_to_mir_source(source).expect("scoped let in while body should lower to mir");
+    assert!(mir.functions.iter().any(|function| function.name == "main"));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;
