@@ -11,7 +11,7 @@ evidence {
 {
   // No CLI args yet for `run`; keep this deterministic and pure.
   let boot_src: Text =
-    "enum Option { None; Some(Int); }; record Pair { a: Int; b: Int; }; fn main() -> Int;";
+    "enum Option { None; Some(Int); }; record Pair { a: List<Int>; b: Option<Int>; }; fn main() -> Int { { 0 } };";
   let result: Result<Int, S1Diagnostic> = s1_compile(boot_src);
   match result {
     Ok(code) => code;

@@ -21,31 +21,41 @@ fn main() -> Int {
                     match r.fields {
                       Cons(f0) => {
                         if f0.head.name == "a" {
-                          if f0.head.ty == "Int" {
-                            match f0.tail {
-                              Cons(f1) => {
-                                if f1.head.name == "b" {
-                                  if f1.head.ty == "Bool" {
-                                    match f1.tail {
-                                      Nil => {
-                                        match i0.tail {
-                                          Cons(i1) => {
-                                            match i1.head {
-                                              Function(fun) => {
-                                                if fun.name == "main" { 0 } else { 20 }
+                          if f0.head.ty.name == "Int" {
+                            match f0.head.ty.args {
+                              Nil => {
+                                match f0.tail {
+                                  Cons(f1) => {
+                                    if f1.head.name == "b" {
+                                      if f1.head.ty.name == "Bool" {
+                                        match f1.head.ty.args {
+                                          Nil => {
+                                            match f1.tail {
+                                              Nil => {
+                                                match i0.tail {
+                                                  Cons(i1) => {
+                                                    match i1.head {
+                                                      Function(fun) => {
+                                                        if fun.name == "main" { 0 } else { 20 }
+                                                      };
+                                                      _ => 21;
+                                                    }
+                                                  };
+                                                  _ => 22;
+                                                }
                                               };
-                                              _ => 21;
+                                              _ => 19;
                                             }
                                           };
-                                          _ => 22;
+                                          _ => 118;
                                         }
-                                      };
-                                      _ => 19;
-                                    }
-                                  } else { 18 }
-                                } else { 17 }
+                                      } else { 18 }
+                                    } else { 17 }
+                                  };
+                                  _ => 16;
+                                }
                               };
-                              _ => 16;
+                              _ => 115;
                             }
                           } else { 15 }
                         } else { 14 }

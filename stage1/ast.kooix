@@ -2,6 +2,8 @@ import "../stdlib/prelude";
 
 record S1Program { items: List<S1Item>; };
 
+record S1Type { name: Text; args: List<S1Type>; };
+
 enum S1Item {
   Import(S1Import);
   Function(S1Function);
@@ -15,7 +17,14 @@ record S1Import {
 
 record S1Function {
   name: Text;
-  return_type: Text;
+  params: List<S1Param>;
+  return_type: S1Type;
+  has_body: Bool;
+};
+
+record S1Param {
+  name: Text;
+  ty: S1Type;
 };
 
 record S1Record {
@@ -25,7 +34,7 @@ record S1Record {
 
 record S1RecordField {
   name: Text;
-  ty: Text;
+  ty: S1Type;
 };
 
 record S1Enum {
@@ -35,5 +44,5 @@ record S1Enum {
 
 record S1EnumVariant {
   name: Text;
-  payload_ty: Option<Text>;
+  payload_ty: Option<S1Type>;
 };

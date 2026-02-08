@@ -69,6 +69,178 @@ fn s1_reverse_enum_variants(xs: List<S1EnumVariant>) -> List<S1EnumVariant> {
   acc
 };
 
+fn s1_reverse_types(xs: List<S1Type>) -> List<S1Type> {
+  let acc: List<S1Type> = Nil;
+  let cur: List<S1Type> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Type> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
+fn s1_reverse_params(xs: List<S1Param>) -> List<S1Param> {
+  let acc: List<S1Param> = Nil;
+  let cur: List<S1Param> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Param> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
+fn s1_parse_type(tokens: List<S1Token>) -> Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "parser: expected type");
+
+  let empty_args: List<S1Type> = Nil;
+  let ty: S1Type = S1Type { name: ""; args: empty_args; };
+  let rest: List<S1Token> = tokens;
+
+  match tokens {
+    Nil => {
+      ok = false;
+      0
+    };
+    Cons(cell0) => {
+      match cell0.head.kind {
+        Ident(name) => {
+          ty = S1Type { name: name; args: empty_args; };
+          rest = cell0.tail;
+          0
+        };
+        _ => {
+          ok = false;
+          diag = s1_diag(
+            Error,
+            cell0.head.span.start,
+            cell0.head.span.end,
+            "parser: expected type"
+          );
+          0
+        };
+      }
+    };
+  };
+
+  if ok == true {
+    match rest {
+      Cons(cell1) => {
+        match cell1.head.kind {
+          LAngle => {
+            rest = cell1.tail;
+            let args_rev: List<S1Type> = Nil;
+
+            let args_done: Bool = false;
+            while args_done == false {
+              let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
+                s1_parse_type(rest);
+              match parsed {
+                Err(e) => {
+                  ok = false;
+                  diag = e;
+                  args_done = true;
+                  0
+                };
+                Ok(pair) => {
+                  args_rev =
+                    Cons(ListCons<S1Type> { head: pair.a; tail: args_rev; });
+                  rest = pair.b;
+                  0
+                };
+              };
+
+              if ok == true {
+                match rest {
+                  Nil => {
+                    ok = false;
+                    diag = s1_diag(
+                      Error,
+                      cell1.head.span.start,
+                      cell1.head.span.end,
+                      "parser: expected ',' or '>' after type argument"
+                    );
+                    args_done = true;
+                    0
+                  };
+                  Cons(cell2) => {
+                    match cell2.head.kind {
+                      Comma => {
+                        rest = cell2.tail;
+                        0
+                      };
+                      RAngle => {
+                        rest = cell2.tail;
+                        args_done = true;
+                        0
+                      };
+                      _ => {
+                        ok = false;
+                        diag = s1_diag(
+                          Error,
+                          cell2.head.span.start,
+                          cell2.head.span.end,
+                          "parser: expected ',' or '>' after type argument"
+                        );
+                        args_done = true;
+                        0
+                      };
+                    }
+                  };
+                }
+              } else {
+                0
+              }
+            };
+
+            if ok == true {
+              let args: List<S1Type> = s1_reverse_types(args_rev);
+              ty = S1Type { name: ty.name; args: args; };
+              0
+            } else {
+              0
+            }
+          };
+          _ => 0;
+        }
+      };
+      _ => 0;
+    }
+  } else {
+    0
+  };
+
+  let out: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(Pair<S1Type, List<S1Token>> { a: ty; b: rest; });
+  };
+  out
+};
+
 fn s1_parse(tokens: List<S1Token>) -> Result<S1Program, S1Diagnostic>
 intent "Stage1 parser (pure): tokens -> AST"
 evidence {
@@ -161,12 +333,15 @@ evidence {
             0
           };
           KwFn => {
-            // Parse: fn <Ident> ( ) -> <Ident> ;
+            // Parse: fn <Ident> ( <params>? ) -> <type> ( ';' | <block> ';' )
             let fn_start: Int = cell0.head.span.start;
             cur = cell0.tail;
 
             let fn_name: Text = "";
-            let ret_ty: Text = "";
+            let params_rev: List<S1Param> = Nil;
+            let empty_args: List<S1Type> = Nil;
+            let ret_ty: S1Type = S1Type { name: ""; args: empty_args; };
+            let has_body: Bool = false;
 
             // name
             match cur {
@@ -219,12 +394,12 @@ evidence {
               };
             };
 
-            // )
+            // params? )
             if ok == true {
               match cur {
                 Nil => {
                   ok = false;
-                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ')'");
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ')' or parameter");
                   done = true;
                   0
                 };
@@ -235,9 +410,126 @@ evidence {
                       0
                     };
                     _ => {
-                      ok = false;
-                      diag = s1_diag(Error, cell3.head.span.start, cell3.head.span.end, "parser: expected ')'");
-                      done = true;
+                      let params_done: Bool = false;
+                      while params_done == false {
+                        let p_name: Text = "";
+                        let p_ty: S1Type = S1Type { name: ""; args: empty_args; };
+
+                        // param name
+                        match cur {
+                          Nil => {
+                            ok = false;
+                            diag = s1_diag(Error, fn_start, fn_start, "parser: expected parameter name");
+                            done = true;
+                            params_done = true;
+                            0
+                          };
+                          Cons(p0) => {
+                            match p0.head.kind {
+                              Ident(name) => {
+                                p_name = name;
+                                cur = p0.tail;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, p0.head.span.start, p0.head.span.end, "parser: expected parameter name");
+                                done = true;
+                                params_done = true;
+                                0
+                              };
+                            }
+                          };
+                        };
+
+                        // :
+                        if ok == true {
+                          match cur {
+                            Nil => {
+                              ok = false;
+                              diag = s1_diag(Error, fn_start, fn_start, "parser: expected ':' after parameter name");
+                              done = true;
+                              params_done = true;
+                              0
+                            };
+                            Cons(p1) => {
+                              match p1.head.kind {
+                                Colon => {
+                                  cur = p1.tail;
+                                  0
+                                };
+                                _ => {
+                                  ok = false;
+                                  diag = s1_diag(Error, p1.head.span.start, p1.head.span.end, "parser: expected ':' after parameter name");
+                                  done = true;
+                                  params_done = true;
+                                  0
+                                };
+                              }
+                            };
+                          };
+                        };
+
+                        // type
+                        if ok == true {
+                          let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
+                            s1_parse_type(cur);
+                          match parsed {
+                            Err(e) => {
+                              ok = false;
+                              diag = e;
+                              done = true;
+                              params_done = true;
+                              0
+                            };
+                            Ok(pair) => {
+                              p_ty = pair.a;
+                              cur = pair.b;
+                              0
+                            };
+                          };
+                        };
+
+                        if ok == true {
+                          let param: S1Param = S1Param { name: p_name; ty: p_ty; };
+                          params_rev =
+                            Cons(ListCons<S1Param> { head: param; tail: params_rev; });
+                          0;
+                        };
+
+                        // , or )
+                        if ok == true {
+                          match cur {
+                            Nil => {
+                              ok = false;
+                              diag = s1_diag(Error, fn_start, fn_start, "parser: expected ',' or ')' after parameter");
+                              done = true;
+                              params_done = true;
+                              0
+                            };
+                            Cons(p2) => {
+                              match p2.head.kind {
+                                Comma => {
+                                  cur = p2.tail;
+                                  0
+                                };
+                                RParen => {
+                                  cur = p2.tail;
+                                  params_done = true;
+                                  0
+                                };
+                                _ => {
+                                  ok = false;
+                                  diag = s1_diag(Error, p2.head.span.start, p2.head.span.end, "parser: expected ',' or ')' after parameter");
+                                  done = true;
+                                  params_done = true;
+                                  0
+                                };
+                              }
+                            };
+                          };
+                        };
+                      };
                       0
                     };
                   }
@@ -273,37 +565,28 @@ evidence {
 
             // return type
             if ok == true {
-              match cur {
-                Nil => {
+              let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> = s1_parse_type(cur);
+              match parsed {
+                Err(e) => {
                   ok = false;
-                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected return type");
+                  diag = e;
                   done = true;
                   0
                 };
-                Cons(cell5) => {
-                  match cell5.head.kind {
-                    Ident(name) => {
-                      ret_ty = name;
-                      cur = cell5.tail;
-                      0
-                    };
-                    _ => {
-                      ok = false;
-                      diag = s1_diag(Error, cell5.head.span.start, cell5.head.span.end, "parser: expected return type");
-                      done = true;
-                      0
-                    };
-                  }
+                Ok(pair) => {
+                  ret_ty = pair.a;
+                  cur = pair.b;
+                  0
                 };
               };
             };
 
-            // ;
+            // ';' or '{' ... '}' ';'
             if ok == true {
               match cur {
                 Nil => {
                   ok = false;
-                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ';'");
+                  diag = s1_diag(Error, fn_start, fn_start, "parser: expected ';' or function body block");
                   done = true;
                   0
                 };
@@ -311,11 +594,95 @@ evidence {
                   match cell6.head.kind {
                     Semicolon => {
                       cur = cell6.tail;
+                      has_body = false;
+                      0
+                    };
+                    LBrace => {
+                      has_body = true;
+                      cur = cell6.tail;
+
+                      let empty_stack: List<Int> = Nil;
+                      let stack: List<Int> =
+                        Cons(ListCons<Int> { head: 0; tail: empty_stack; });
+                      let scanning: Bool = true;
+                      while scanning == true {
+                        match cur {
+                          Nil => {
+                            ok = false;
+                            diag = s1_diag(Error, fn_start, fn_start, "parser: expected '}' to close function body");
+                            done = true;
+                            scanning = false;
+                            0
+                          };
+                          Cons(b0) => {
+                            match b0.head.kind {
+                              LBrace => {
+                                stack =
+                                  Cons(ListCons<Int> { head: 0; tail: stack; });
+                                cur = b0.tail;
+                                0
+                              };
+                              RBrace => {
+                                match stack {
+                                  Nil => {
+                                    ok = false;
+                                    diag = s1_diag(Error, fn_start, fn_start, "parser: unexpected '}' in function body");
+                                    done = true;
+                                    scanning = false;
+                                    0
+                                  };
+                                  Cons(s0) => {
+                                    stack = s0.tail;
+                                    cur = b0.tail;
+                                    match stack {
+                                      Nil => {
+                                        scanning = false;
+                                        0
+                                      };
+                                      _ => 0;
+                                    }
+                                  };
+                                }
+                              };
+                              _ => {
+                                cur = b0.tail;
+                                0
+                              };
+                            }
+                          };
+                        }
+                      };
+
+                      if ok == true {
+                        match cur {
+                          Nil => {
+                            ok = false;
+                            diag = s1_diag(Error, fn_start, fn_start, "parser: expected ';' after function body");
+                            done = true;
+                            0
+                          };
+                          Cons(semi) => {
+                            match semi.head.kind {
+                              Semicolon => {
+                                cur = semi.tail;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, semi.head.span.start, semi.head.span.end, "parser: expected ';' after function body");
+                                done = true;
+                                0
+                              };
+                            }
+                          };
+                        };
+                      };
+
                       0
                     };
                     _ => {
                       ok = false;
-                      diag = s1_diag(Error, cell6.head.span.start, cell6.head.span.end, "parser: expected ';'");
+                      diag = s1_diag(Error, cell6.head.span.start, cell6.head.span.end, "parser: expected ';' or function body block");
                       done = true;
                       0
                     };
@@ -325,7 +692,10 @@ evidence {
             };
 
             if ok == true {
-              let item: S1Item = Function(S1Function { name: fn_name; return_type: ret_ty; });
+              let params: List<S1Param> = s1_reverse_params(params_rev);
+              let item: S1Item = Function(
+                S1Function { name: fn_name; params: params; return_type: ret_ty; has_body: has_body; }
+              );
               items_rev = Cons(ListCons<S1Item> { head: item; tail: items_rev; });
               0
             } else {
@@ -455,37 +825,24 @@ evidence {
                           };
                         };
 
-                        // type ident
-                        let field_ty: Text = "";
+                        // type
+                        let empty_args: List<S1Type> = Nil;
+                        let field_ty: S1Type = S1Type { name: ""; args: empty_args; };
                         if ok == true {
-                          match cur {
-                            Nil => {
+                          let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
+                            s1_parse_type(cur);
+                          match parsed {
+                            Err(e) => {
                               ok = false;
-                              diag = s1_diag(Error, field_start, field_start, "parser: expected type in record field");
+                              diag = e;
                               done = true;
                               field_done = true;
                               0
                             };
-                            Cons(cellf2) => {
-                              match cellf2.head.kind {
-                                Ident(ty_name) => {
-                                  field_ty = ty_name;
-                                  cur = cellf2.tail;
-                                  0
-                                };
-                                _ => {
-                                  ok = false;
-                                  diag = s1_diag(
-                                    Error,
-                                    cellf2.head.span.start,
-                                    cellf2.head.span.end,
-                                    "parser: expected type in record field"
-                                  );
-                                  done = true;
-                                  field_done = true;
-                                  0
-                                };
-                              }
+                            Ok(pair) => {
+                              field_ty = pair.a;
+                              cur = pair.b;
+                              0
                             };
                           };
                         };
@@ -683,7 +1040,7 @@ evidence {
                     };
                     Ident(vname) => {
                       cur = v0.tail;
-                      let payload_ty: Option<Text> = None;
+                      let payload_ty: Option<S1Type> = None;
 
                       // optional payload: (Ty)
                       match cur {
@@ -693,39 +1050,20 @@ evidence {
                             LParen => {
                               cur = v1.tail;
 
-                              match cur {
-                                Nil => {
+                              let parsed: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
+                                s1_parse_type(cur);
+                              match parsed {
+                                Err(e) => {
                                   ok = false;
-                                  diag = s1_diag(
-                                    Error,
-                                    enum_start,
-                                    enum_start,
-                                    "parser: expected payload type inside '(...)'"
-                                  );
+                                  diag = e;
                                   done = true;
                                   variant_done = true;
                                   0
                                 };
-                                Cons(v2) => {
-                                  match v2.head.kind {
-                                    Ident(ty) => {
-                                      payload_ty = Some(ty);
-                                      cur = v2.tail;
-                                      0
-                                    };
-                                    _ => {
-                                      ok = false;
-                                      diag = s1_diag(
-                                        Error,
-                                        v2.head.span.start,
-                                        v2.head.span.end,
-                                        "parser: expected payload type inside '(...)'"
-                                      );
-                                      done = true;
-                                      variant_done = true;
-                                      0
-                                    };
-                                  }
+                                Ok(pair) => {
+                                  payload_ty = Some(pair.a);
+                                  cur = pair.b;
+                                  0
                                 };
                               };
 

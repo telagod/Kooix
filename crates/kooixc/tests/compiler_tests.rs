@@ -2477,6 +2477,26 @@ fn stage1_parser_enum_smoke() {
 }
 
 #[test]
+fn stage1_parser_fn_body_and_type_args_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_parse_fn_body_types_smoke.kooix");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 parser fn body + type args smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 parser fn body + type args smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 parser fn body + type args smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;

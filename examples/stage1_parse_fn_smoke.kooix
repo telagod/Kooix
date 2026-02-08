@@ -18,7 +18,19 @@ fn main() -> Int {
               match cell.head {
                 Function(f) => {
                   if f.name == "main" {
-                    if f.return_type == "Int" { 0 } else { 5 }
+                    match f.params {
+                      Nil => {
+                        if f.has_body == false {
+                          if f.return_type.name == "Int" {
+                            match f.return_type.args {
+                              Nil => 0;
+                              _ => 9;
+                            }
+                          } else { 5 }
+                        } else { 8 }
+                      };
+                      _ => 7;
+                    }
                   } else { 4 }
                 };
                 _ => 6;
