@@ -1,0 +1,18 @@
+record S1Span { start: Int; end: Int; };
+
+enum S1Severity { Error; Warning; };
+
+record S1Diagnostic {
+  severity: S1Severity;
+  span: S1Span;
+  message: Text;
+};
+
+fn s1_diag(severity: S1Severity, start: Int, end: Int, message: Text) -> S1Diagnostic {
+  S1Diagnostic {
+    severity: severity;
+    span: S1Span { start: start; end: end; };
+    message: message;
+  }
+};
+

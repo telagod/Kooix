@@ -1,0 +1,22 @@
+import "../stdlib/prelude";
+
+record S1Program { items: List<S1Item>; };
+
+enum S1Item {
+  Function(S1Function);
+  Record(S1Record);
+  Enum(S1Enum);
+};
+
+record S1Function {
+  name: Text;
+};
+
+record S1Record {
+  name: Text;
+};
+
+record S1Enum {
+  name: Text;
+};
+

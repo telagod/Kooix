@@ -1,0 +1,16 @@
+import "../stdlib/prelude";
+import "diag";
+import "token";
+import "ast";
+
+fn s1_parse(tokens: List<S1Token>) -> Result<S1Program, S1Diagnostic>
+intent "Stage1 parser (pure): tokens -> AST"
+evidence {
+  trace "stage1.parser.v0";
+  metrics [stage1_parse_calls];
+}
+{
+  let _ignore: List<S1Token> = tokens;
+  let items: List<S1Item> = Nil;
+  Ok(S1Program { items: items; })
+};

@@ -1,0 +1,16 @@
+import "../stdlib/prelude";
+import "diag";
+import "token";
+
+fn s1_lex(source: Text) -> Result<List<S1Token>, S1Diagnostic>
+intent "Stage1 lexer (pure): source -> tokens"
+evidence {
+  trace "stage1.lexer.v0";
+  metrics [stage1_lex_calls];
+}
+{
+  // Skeleton only: Text scanning intrinsics come later.
+  let _ignore: Text = source;
+  Ok(Nil)
+};
+

@@ -92,8 +92,8 @@ cargo run -p kooixc -- native examples/run.kooix /tmp/kooix-run --run
 验收（示例）：
 
 ```bash
-# stage0 解释执行 stage1 编译器（先不追求性能）
-cargo run -p kooixc -- run stage1/compiler_main.kooix -- examples/valid.kooix
+# stage0 解释执行 stage1 编译器骨架（纯函数；当前不读取文件/参数）
+cargo run -p kooixc -- run stage1/compiler_main.kooix
 ```
 
 ### M4：Stage0 native 编译 Stage1（性能闭环）
@@ -103,7 +103,8 @@ cargo run -p kooixc -- run stage1/compiler_main.kooix -- examples/valid.kooix
 验收（示例）：
 
 ```bash
-cargo run -p kooixc -- native stage1/compiler_main.kooix /tmp/kooixc-stage1 --run -- examples/valid.kooix
+# 需要等 native lowering / runtime 覆盖 `Text`/`List`/`Result` 等基础能力后才能成立
+# cargo run -p kooixc -- native stage1/compiler_main.kooix /tmp/kooixc-stage1 --run -- examples/valid.kooix
 ```
 
 ### M5：Stage1 自编译（进入真正自举）

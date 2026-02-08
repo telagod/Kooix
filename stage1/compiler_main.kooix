@@ -1,0 +1,18 @@
+import "../stdlib/prelude";
+import "diag";
+import "compiler";
+
+fn main() -> Int
+intent "Run Stage1 compiler skeleton (pure, no I/O) to prove bootstrap wiring"
+evidence {
+  trace "stage1.main.v0";
+  metrics [stage1_main_calls];
+}
+{
+  // No CLI args yet for `run`; keep this deterministic and pure.
+  let result: Result<Int, S1Diagnostic> = s1_compile("stage1:boot");
+  match result {
+    Ok(code) => code;
+    Err(_e) => 2;
+  }
+};

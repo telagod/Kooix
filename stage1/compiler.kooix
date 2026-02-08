@@ -1,0 +1,23 @@
+import "../stdlib/prelude";
+import "diag";
+import "token";
+import "lexer";
+import "parser";
+
+fn s1_compile(source: Text) -> Result<Int, S1Diagnostic>
+intent "Stage1 compiler (pure): source -> (future) diagnostics + artifacts"
+evidence {
+  trace "stage1.compile.v0";
+  metrics [stage1_compile_calls];
+}
+{
+  // Skeleton only: for now we prove the Stage1 module graph typechecks and runs.
+  let tokens: Result<List<S1Token>, S1Diagnostic> = s1_lex(source);
+  match tokens {
+    Ok(ts) => {
+      let _ast: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      Ok(0)
+    };
+    Err(e) => Err(e);
+  }
+};

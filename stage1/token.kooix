@@ -1,0 +1,24 @@
+import "diag";
+
+enum S1TokenKind {
+  Ident(Text);
+  Number(Text);
+  String(Text);
+  KwFn;
+  KwRecord;
+  KwEnum;
+  KwImport;
+  KwLet;
+  KwReturn;
+  KwIf;
+  KwElse;
+  KwWhile;
+  KwMatch;
+  Eof;
+};
+
+record S1Token {
+  kind: S1TokenKind;
+  span: S1Span;
+};
+

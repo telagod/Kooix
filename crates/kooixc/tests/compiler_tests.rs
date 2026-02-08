@@ -1,6 +1,7 @@
 use kooixc::ast::{Expr, FailureValue, Item, PredicateOp, PredicateValue, Statement};
 use kooixc::error::Severity;
 use kooixc::interp::Value;
+use kooixc::loader::load_source_map;
 use kooixc::native::{
     compile_llvm_ir_to_executable, compile_llvm_ir_to_executable_with_tools,
     run_executable_with_args_and_stdin, run_executable_with_args_and_stdin_and_timeout,
@@ -2310,6 +2311,24 @@ fn main() -> Int {
 
     let mir = lower_to_mir_source(source).expect("scoped let in while body should lower to mir");
     assert!(mir.functions.iter().any(|function| function.name == "main"));
+}
+
+#[test]
+fn stage1_compiler_skeleton_typechecks_and_runs() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/compiler_main.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 compiler skeleton should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 compiler skeleton should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined).expect("stage1 compiler skeleton should run");
+    assert_eq!(result.value, Value::Int(0));
 }
 
 #[test]
