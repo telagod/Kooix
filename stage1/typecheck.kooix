@@ -1954,6 +1954,7 @@ fn s1_tc_expr_type(
               let enum_ty_path: S1Path = s1_tc_empty_path();
               let enum_opt: Option<S1Enum> = None;
               let variant_name: Text = "";
+              let handled_import_fn: Bool = false;
 
               let plen: Int = s1_tc_path_len(cp);
               if plen == 2 {
@@ -1964,16 +1965,103 @@ fn s1_tc_expr_type(
                     0
                   };
                   Some(pair) => {
-                    enum_ty_path = s1_tc_simple_path(pair.a);
-                    variant_name = pair.b;
-                    enum_opt = s1_tc_lookup_enum(items, pair.a);
-                    match enum_opt {
+                    // If head is an imported namespace, treat this as an imported function call: ns::fn(...)
+                    match s1_mod_lookup(mods, pair.a) {
                       None => {
-                        ok = false;
-                        diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                        enum_ty_path = s1_tc_simple_path(pair.a);
+                        variant_name = pair.b;
+                        enum_opt = s1_tc_lookup_enum(items, pair.a);
+                        match enum_opt {
+                          None => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                            0
+                          };
+                          Some(_) => 0;
+                        };
                         0
                       };
-                      Some(_) => 0;
+                      Some(m) => {
+                        match s1_mod_lookup_fn(m, pair.b) {
+                          None => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: unknown imported function");
+                            0
+                          };
+                          Some(f) => {
+                            // check args
+                            let pcur: List<S1Param> = f.params;
+                            let acur: List<S1Expr> = c.args;
+                            let pc: List<S1Param> = pcur;
+                            let ac: List<S1Expr> = acur;
+                            let done: Bool = false;
+                            while done == false {
+                              match pc {
+                                Nil => {
+                                  match ac {
+                                    Nil => {
+                                      done = true;
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, 0, 0, "typecheck: too many call arguments");
+                                      done = true;
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                                Cons(pcell) => {
+                                  match ac {
+                                    Nil => {
+                                      ok = false;
+                                      diag = s1_diag(Error, 0, 0, "typecheck: missing call arguments");
+                                      done = true;
+                                      0
+                                    };
+                                    Cons(acell) => {
+                                      let ar: Result<S1Type, S1Diagnostic> =
+                                        s1_tc_expr_type(items, mods, fns, env, Some(pcell.head.ty), acell.head);
+                                      match ar {
+                                        Err(e2) => {
+                                          ok = false;
+                                          diag = e2;
+                                          done = true;
+                                          0
+                                        };
+                                        Ok(at) => {
+                                          if s1_tc_types_eq(at, pcell.head.ty) == true {
+                                            pc = pcell.tail;
+                                            ac = acell.tail;
+                                            0
+                                          } else {
+                                            ok = false;
+                                            diag = s1_diag(Error, 0, 0, "typecheck: call argument type mismatch");
+                                            done = true;
+                                            0
+                                          };
+                                          0
+                                        };
+                                      };
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                              }
+                            };
+
+                            if ok == true {
+                              ty = f.return_type;
+                              handled_import_fn = true;
+                              0
+                            } else { 0 };
+                            0
+                          };
+                        };
+                        0
+                      };
                     };
                     0
                   };
@@ -2038,6 +2126,9 @@ fn s1_tc_expr_type(
               };
 
               if ok == true {
+                if handled_import_fn == true {
+                  0
+                } else {
                 match enum_opt {
                   None => {
                     ok = false;
@@ -2258,6 +2349,8 @@ fn s1_tc_expr_type(
                     };
                     0
                   };
+                };
+                0
                 };
                 0
               } else { 0 };

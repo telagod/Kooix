@@ -127,6 +127,56 @@ fn s1_mod_fields2(f0: S1RecordField, f1: S1RecordField) -> List<S1RecordField> {
 };
 
 fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
+  // fn text_len(s: Text) -> Int;
+  let empty_fn_generics: List<S1GenericParam> = Nil;
+  let empty_params: List<S1Param> = Nil;
+  let no_body: Option<S1Block> = None;
+  let p_s: S1Param = S1Param { name: "s"; ty: s1_mod_type_simple("Text"); };
+  let ps1: List<S1Param> = Cons(ListCons<S1Param> { head: p_s; tail: empty_params; });
+  let f_len: S1Function = S1Function {
+    name: "text_len";
+    generics: empty_fn_generics;
+    params: ps1;
+    return_type: s1_mod_type_simple("Int");
+    body: no_body;
+  };
+  let f_len_i: S1Item = Function(f_len);
+
+  // fn text_byte_at(s: Text, i: Int) -> Option<Int>;
+  let p_i: S1Param = S1Param { name: "i"; ty: s1_mod_type_simple("Int"); };
+  let tail1: List<S1Param> = Cons(ListCons<S1Param> { head: p_i; tail: empty_params; });
+  let ps2: List<S1Param> = Cons(ListCons<S1Param> { head: p_s; tail: tail1; });
+  let empty_ty_args: List<S1Type> = Nil;
+  let opt_int_args: List<S1Type> =
+    Cons(ListCons<S1Type> { head: s1_mod_type_simple("Int"); tail: empty_ty_args; });
+  let opt_int: S1Type = s1_mod_type_ns(ns, "Option", opt_int_args);
+  let f_ba: S1Function = S1Function {
+    name: "text_byte_at";
+    generics: empty_fn_generics;
+    params: ps2;
+    return_type: opt_int;
+    body: no_body;
+  };
+  let f_ba_i: S1Item = Function(f_ba);
+
+  // fn text_slice(s: Text, start: Int, end: Int) -> Option<Text>;
+  let p_start: S1Param = S1Param { name: "start"; ty: s1_mod_type_simple("Int"); };
+  let p_end: S1Param = S1Param { name: "end"; ty: s1_mod_type_simple("Int"); };
+  let tail2a: List<S1Param> = Cons(ListCons<S1Param> { head: p_end; tail: empty_params; });
+  let tail2b: List<S1Param> = Cons(ListCons<S1Param> { head: p_start; tail: tail2a; });
+  let ps3: List<S1Param> = Cons(ListCons<S1Param> { head: p_s; tail: tail2b; });
+  let opt_text_args: List<S1Type> =
+    Cons(ListCons<S1Type> { head: s1_mod_type_simple("Text"); tail: empty_ty_args; });
+  let opt_text: S1Type = s1_mod_type_ns(ns, "Option", opt_text_args);
+  let f_sl: S1Function = S1Function {
+    name: "text_slice";
+    generics: empty_fn_generics;
+    params: ps3;
+    return_type: opt_text;
+    body: no_body;
+  };
+  let f_sl_i: S1Item = Function(f_sl);
+
   // enum Option<T> { Some(T); None; }
   let gen_t: List<S1GenericParam> = s1_mod_generics1("T");
   let t_ty: S1Type = s1_mod_type_simple("T");
@@ -156,7 +206,6 @@ fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
   // record ListCons<T> { head: T; tail: List<T>; }
   let gen_t2: List<S1GenericParam> = s1_mod_generics1("T");
   let head_f: S1RecordField = S1RecordField { name: "head"; ty: s1_mod_type_simple("T"); };
-  let empty_ty_args: List<S1Type> = Nil;
   let list_t_args: List<S1Type> =
     Cons(ListCons<S1Type> { head: s1_mod_type_simple("T"); tail: empty_ty_args; });
   let tail_f: S1RecordField = S1RecordField { name: "tail"; ty: s1_mod_type_ns(ns, "List", list_t_args); };
@@ -181,7 +230,10 @@ fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
   let xs2: List<S1Item> = Cons(ListCons<S1Item> { head: pair_i; tail: xs1; });
   let xs3: List<S1Item> = Cons(ListCons<S1Item> { head: listcons_i; tail: xs2; });
   let xs4: List<S1Item> = Cons(ListCons<S1Item> { head: list_i; tail: xs3; });
-  xs4
+  let xs5: List<S1Item> = Cons(ListCons<S1Item> { head: f_len_i; tail: xs4; });
+  let xs6: List<S1Item> = Cons(ListCons<S1Item> { head: f_ba_i; tail: xs5; });
+  let xs7: List<S1Item> = Cons(ListCons<S1Item> { head: f_sl_i; tail: xs6; });
+  xs7
 };
 
 fn s1_mod_infer_basename_no_ext(path: Text) -> Text {
@@ -440,6 +492,41 @@ fn s1_mod_lookup_record(m: S1Module, name: Text) -> Option<S1Record> {
           Record(r) => {
             if r.name == name {
               out = Some(r);
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_mod_lookup_fn(m: S1Module, name: Text) -> Option<S1Function> {
+  let out: Option<S1Function> = None;
+  let cur: List<S1Item> = m.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Function(f) => {
+            if f.name == name {
+              out = Some(f);
               done = true;
               0
             } else {
