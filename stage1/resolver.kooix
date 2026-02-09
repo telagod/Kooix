@@ -1,0 +1,933 @@
+import "../stdlib/prelude";
+import "diag";
+import "ast";
+
+fn s1_resolver_reverse_texts(xs: List<Text>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<Text> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_resolver_list_contains_text(xs: List<Text>, needle: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head == needle {
+          found = true;
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  found
+};
+
+fn s1_resolver_collect_import_namespaces(items: List<S1Item>) -> List<Text> {
+  let ns_rev: List<Text> = Nil;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Import(imp) => {
+            ns_rev = Cons(ListCons<Text> { head: imp.ns; tail: ns_rev; });
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  s1_resolver_reverse_texts(ns_rev)
+};
+
+fn s1_resolver_collect_local_item_names(items: List<S1Item>) -> List<Text> {
+  let names_rev: List<Text> = Nil;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Function(f) => {
+            names_rev = Cons(ListCons<Text> { head: f.name; tail: names_rev; });
+            0
+          };
+          Record(r) => {
+            names_rev = Cons(ListCons<Text> { head: r.name; tail: names_rev; });
+            0
+          };
+          Enum(e) => {
+            names_rev = Cons(ListCons<Text> { head: e.name; tail: names_rev; });
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  s1_resolver_reverse_texts(names_rev)
+};
+
+fn s1_resolver_path_head_and_is_qualified(path: S1Path) -> Pair<Option<Text>, Bool> {
+  let head: Option<Text> = None;
+  let qualified: Bool = false;
+  match path.segments {
+    Nil => 0;
+    Cons(c0) => {
+      head = Some(c0.head);
+      match c0.tail {
+        Nil => 0;
+        _ => {
+          qualified = true;
+          0
+        };
+      };
+      0
+    };
+  };
+  Pair<Option<Text>, Bool> { a: head; b: qualified; }
+};
+
+fn s1_resolver_resolve_path(
+  path: S1Path,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic =
+    s1_diag(Error, 0, 0, "resolver: unknown path head (not imported namespace or local item)");
+
+  let pair: Pair<Option<Text>, Bool> = s1_resolver_path_head_and_is_qualified(path);
+  match pair.a {
+    None => 0;
+    Some(h) => {
+      if pair.b == false {
+        0
+      } else {
+        let allowed: Bool = false;
+        if s1_resolver_list_contains_text(import_ns, h) == true {
+          allowed = true;
+          0
+        } else {
+          if s1_resolver_list_contains_text(locals, h) == true {
+            allowed = true;
+            0
+          } else { 0 };
+          0
+        };
+        if allowed == false {
+          ok = false;
+          0
+        } else { 0 };
+        0
+      };
+      0
+    };
+  };
+
+  let out: Result<Int, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(0);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_resolver_resolve_type(
+  ty: S1Type,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: expected type");
+
+  let r0: Result<Int, S1Diagnostic> = s1_resolver_resolve_path(ty.path, import_ns, locals);
+  match r0 {
+    Err(e) => {
+      ok = false;
+      diag = e;
+      0
+    };
+    Ok(_) => 0;
+  };
+
+  if ok == true {
+    let cur: List<S1Type> = ty.args;
+    let done: Bool = false;
+    while done == false {
+      match cur {
+        Nil => {
+          done = true;
+          0
+        };
+        Cons(cell) => {
+          let r: Result<Int, S1Diagnostic> =
+            s1_resolver_resolve_type(cell.head, import_ns, locals);
+          match r {
+            Err(e2) => {
+              ok = false;
+              diag = e2;
+              done = true;
+              0
+            };
+            Ok(_) => {
+              cur = cell.tail;
+              0
+            };
+          };
+          0
+        };
+      }
+    };
+    0
+  } else { 0 };
+
+  let out: Result<Int, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(0);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_resolver_resolve_pattern(
+  pat: S1Pattern,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let out: Result<Int, S1Diagnostic> = Ok(0);
+  match pat {
+    Wildcard => 0;
+    Path(p) => {
+      out = s1_resolver_resolve_path(p, import_ns, locals);
+      0
+    };
+    Variant(vp) => {
+      out = s1_resolver_resolve_path(vp.path, import_ns, locals);
+      0
+    };
+  };
+  out
+};
+
+fn s1_resolver_resolve_expr(
+  expr: S1Expr,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: expected expression");
+
+  match expr {
+    Path(p) => {
+      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_path(p, import_ns, locals);
+      match r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+      0
+    };
+    IntLit(_) => 0;
+    StringLit(_) => 0;
+    Member(m) => {
+      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(m.base, import_ns, locals);
+      match r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+      0
+    };
+    Binary(b) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_expr(b.left, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let r1: Result<Int, S1Diagnostic> =
+          s1_resolver_resolve_expr(b.right, import_ns, locals);
+        match r1 {
+          Err(e2) => {
+            ok = false;
+            diag = e2;
+            0
+          };
+          Ok(_) => 0;
+        };
+        0
+      } else { 0 };
+      0
+    };
+    Call(c) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_expr(c.callee, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let cur: List<S1Expr> = c.args;
+        let done: Bool = false;
+        while done == false {
+          match cur {
+            Nil => {
+              done = true;
+              0
+            };
+            Cons(cell) => {
+              let r: Result<Int, S1Diagnostic> =
+                s1_resolver_resolve_expr(cell.head, import_ns, locals);
+              match r {
+                Err(e2) => {
+                  ok = false;
+                  diag = e2;
+                  done = true;
+                  0
+                };
+                Ok(_) => {
+                  cur = cell.tail;
+                  0
+                };
+              };
+              0
+            };
+          }
+        };
+        0
+      } else { 0 };
+      0
+    };
+    Block(b) => {
+      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_block(b, import_ns, locals);
+      match r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+      0
+    };
+    If(i) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_expr(i.cond, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let r1: Result<Int, S1Diagnostic> =
+          s1_resolver_resolve_block(i.then_block, import_ns, locals);
+        match r1 {
+          Err(e2) => {
+            ok = false;
+            diag = e2;
+            0
+          };
+          Ok(_) => 0;
+        };
+        0
+      } else { 0 };
+
+      if ok == true {
+        match i.else_block {
+          None => 0;
+          Some(eb) => {
+            let r2: Result<Int, S1Diagnostic> =
+              s1_resolver_resolve_block(eb, import_ns, locals);
+            match r2 {
+              Err(e3) => {
+                ok = false;
+                diag = e3;
+                0
+              };
+              Ok(_) => 0;
+            };
+            0
+          };
+        };
+        0
+      } else { 0 };
+      0
+    };
+    Match(m) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_expr(m.scrutinee, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let cur: List<S1MatchArm> = m.arms;
+        let done: Bool = false;
+        while done == false {
+          match cur {
+            Nil => {
+              done = true;
+              0
+            };
+            Cons(cell) => {
+              let rpat: Result<Int, S1Diagnostic> =
+                s1_resolver_resolve_pattern(cell.head.pat, import_ns, locals);
+              match rpat {
+                Err(e2) => {
+                  ok = false;
+                  diag = e2;
+                  done = true;
+                  0
+                };
+                Ok(_) => 0;
+              };
+
+              if ok == true {
+                let rval: Result<Int, S1Diagnostic> =
+                  s1_resolver_resolve_expr(cell.head.value, import_ns, locals);
+                match rval {
+                  Err(e3) => {
+                    ok = false;
+                    diag = e3;
+                    done = true;
+                    0
+                  };
+                  Ok(_) => 0;
+                };
+                0
+              } else { 0 };
+
+              if ok == true {
+                cur = cell.tail;
+                0
+              } else {
+                done = true;
+                0
+              };
+              0
+            };
+          }
+        };
+        0
+      } else { 0 };
+      0
+    };
+  };
+
+  let out: Result<Int, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(0);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_resolver_resolve_stmt(
+  st: S1Stmt,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let out: Result<Int, S1Diagnostic> = Ok(0);
+  match st {
+    Let(l) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_type(l.ty, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          out = Err(e);
+          0
+        };
+        Ok(_) => {
+          out = s1_resolver_resolve_expr(l.value, import_ns, locals);
+          0
+        };
+      };
+      0
+    };
+    Assign(a) => {
+      out = s1_resolver_resolve_expr(a.value, import_ns, locals);
+      0
+    };
+    Return(r) => {
+      out = s1_resolver_resolve_expr(r.value, import_ns, locals);
+      0
+    };
+    While(w) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_expr(w.cond, import_ns, locals);
+      match r0 {
+        Err(e) => {
+          out = Err(e);
+          0
+        };
+        Ok(_) => {
+          out = s1_resolver_resolve_block(w.body, import_ns, locals);
+          0
+        };
+      };
+      0
+    };
+    ExprStmt(e) => {
+      out = s1_resolver_resolve_expr(e, import_ns, locals);
+      0
+    };
+  };
+  out
+};
+
+fn s1_resolver_resolve_block(
+  b: S1Block,
+  import_ns: List<Text>,
+  locals: List<Text>
+) -> Result<Int, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: expected block");
+
+  let cur: List<S1Stmt> = b.stmts;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        let r: Result<Int, S1Diagnostic> =
+          s1_resolver_resolve_stmt(cell.head, import_ns, locals);
+        match r {
+          Err(e) => {
+            ok = false;
+            diag = e;
+            done = true;
+            0
+          };
+          Ok(_) => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+
+  if ok == true {
+    match b.result {
+      None => 0;
+      Some(e) => {
+        let r2: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(e, import_ns, locals);
+        match r2 {
+          Err(e2) => {
+            ok = false;
+            diag = e2;
+            0
+          };
+          Ok(_) => 0;
+        };
+        0
+      };
+    }
+  } else { 0 };
+
+  let out: Result<Int, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(0);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_resolve_program(p: S1Program) -> Result<S1Program, S1Diagnostic>
+intent "Stage1 resolver (pure): validate basic path heads for namespace/local usage"
+evidence {
+  trace "stage1.resolve.v0";
+  metrics [stage1_resolve_calls];
+}
+{
+  let import_ns: List<Text> = s1_resolver_collect_import_namespaces(p.items);
+  let locals: List<Text> = s1_resolver_collect_local_item_names(p.items);
+
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: error");
+
+  let cur: List<S1Item> = p.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Import(_imp) => 0;
+          Function(f) => {
+            // generics bounds
+            let gcur: List<S1GenericParam> = f.generics;
+            let gdone: Bool = false;
+            while gdone == false {
+              match gcur {
+                Nil => {
+                  gdone = true;
+                  0
+                };
+                Cons(gcell) => {
+                  let bcur: List<S1Type> = gcell.head.bounds;
+                  let bdone: Bool = false;
+                  while bdone == false {
+                    match bcur {
+                      Nil => {
+                        bdone = true;
+                        0
+                      };
+                      Cons(bcell) => {
+                        let rb: Result<Int, S1Diagnostic> =
+                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                        match rb {
+                          Err(e) => {
+                            ok = false;
+                            diag = e;
+                            done = true;
+                            gdone = true;
+                            bdone = true;
+                            0
+                          };
+                          Ok(_) => {
+                            bcur = bcell.tail;
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+                  gcur = gcell.tail;
+                  0
+                };
+              }
+            };
+
+            // params
+            if ok == true {
+              let pcur: List<S1Param> = f.params;
+              let pdone: Bool = false;
+              while pdone == false {
+                match pcur {
+                  Nil => {
+                    pdone = true;
+                    0
+                  };
+                  Cons(pcell) => {
+                    let rt: Result<Int, S1Diagnostic> =
+                      s1_resolver_resolve_type(pcell.head.ty, import_ns, locals);
+                    match rt {
+                      Err(e2) => {
+                        ok = false;
+                        diag = e2;
+                        done = true;
+                        pdone = true;
+                        0
+                      };
+                      Ok(_) => {
+                        pcur = pcell.tail;
+                        0
+                      };
+                    };
+                    0
+                  };
+                }
+              };
+              0
+            } else { 0 };
+
+            // return type
+            if ok == true {
+              let rr: Result<Int, S1Diagnostic> =
+                s1_resolver_resolve_type(f.return_type, import_ns, locals);
+              match rr {
+                Err(e3) => {
+                  ok = false;
+                  diag = e3;
+                  done = true;
+                  0
+                };
+                Ok(_) => 0;
+              };
+              0
+            } else { 0 };
+
+            // body
+            if ok == true {
+              match f.body {
+                None => 0;
+                Some(b) => {
+                  let rb: Result<Int, S1Diagnostic> =
+                    s1_resolver_resolve_block(b, import_ns, locals);
+                  match rb {
+                    Err(e4) => {
+                      ok = false;
+                      diag = e4;
+                      done = true;
+                      0
+                    };
+                    Ok(_) => 0;
+                  };
+                  0
+                };
+              };
+              0
+            } else { 0 };
+            0
+          };
+          Record(r) => {
+            // generics bounds
+            let gcur: List<S1GenericParam> = r.generics;
+            let gdone: Bool = false;
+            while gdone == false {
+              match gcur {
+                Nil => {
+                  gdone = true;
+                  0
+                };
+                Cons(gcell) => {
+                  let bcur: List<S1Type> = gcell.head.bounds;
+                  let bdone: Bool = false;
+                  while bdone == false {
+                    match bcur {
+                      Nil => {
+                        bdone = true;
+                        0
+                      };
+                      Cons(bcell) => {
+                        let rb: Result<Int, S1Diagnostic> =
+                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                        match rb {
+                          Err(e) => {
+                            ok = false;
+                            diag = e;
+                            done = true;
+                            gdone = true;
+                            bdone = true;
+                            0
+                          };
+                          Ok(_) => {
+                            bcur = bcell.tail;
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+                  gcur = gcell.tail;
+                  0
+                };
+              }
+            };
+
+            // fields
+            if ok == true {
+              let fcur: List<S1RecordField> = r.fields;
+              let fdone: Bool = false;
+              while fdone == false {
+                match fcur {
+                  Nil => {
+                    fdone = true;
+                    0
+                  };
+                  Cons(fcell) => {
+                    let rt: Result<Int, S1Diagnostic> =
+                      s1_resolver_resolve_type(fcell.head.ty, import_ns, locals);
+                    match rt {
+                      Err(e2) => {
+                        ok = false;
+                        diag = e2;
+                        done = true;
+                        fdone = true;
+                        0
+                      };
+                      Ok(_) => {
+                        fcur = fcell.tail;
+                        0
+                      };
+                    };
+                    0
+                  };
+                }
+              };
+              0
+            } else { 0 };
+            0
+          };
+          Enum(e) => {
+            // generics bounds
+            let gcur: List<S1GenericParam> = e.generics;
+            let gdone: Bool = false;
+            while gdone == false {
+              match gcur {
+                Nil => {
+                  gdone = true;
+                  0
+                };
+                Cons(gcell) => {
+                  let bcur: List<S1Type> = gcell.head.bounds;
+                  let bdone: Bool = false;
+                  while bdone == false {
+                    match bcur {
+                      Nil => {
+                        bdone = true;
+                        0
+                      };
+                      Cons(bcell) => {
+                        let rb: Result<Int, S1Diagnostic> =
+                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                        match rb {
+                          Err(e2) => {
+                            ok = false;
+                            diag = e2;
+                            done = true;
+                            gdone = true;
+                            bdone = true;
+                            0
+                          };
+                          Ok(_) => {
+                            bcur = bcell.tail;
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+                  gcur = gcell.tail;
+                  0
+                };
+              }
+            };
+
+            // variants payload types
+            if ok == true {
+              let vcur: List<S1EnumVariant> = e.variants;
+              let vdone: Bool = false;
+              while vdone == false {
+                match vcur {
+                  Nil => {
+                    vdone = true;
+                    0
+                  };
+                  Cons(vcell) => {
+                    match vcell.head.payload_ty {
+                      None => 0;
+                      Some(pt) => {
+                        let rt: Result<Int, S1Diagnostic> =
+                          s1_resolver_resolve_type(pt, import_ns, locals);
+                        match rt {
+                          Err(e3) => {
+                            ok = false;
+                            diag = e3;
+                            done = true;
+                            vdone = true;
+                            0
+                          };
+                          Ok(_) => 0;
+                        };
+                        0
+                      };
+                    };
+                    vcur = vcell.tail;
+                    0
+                  };
+                }
+              };
+              0
+            } else { 0 };
+            0
+          };
+        };
+
+        if ok == true {
+          cur = cell.tail;
+          0
+        } else {
+          done = true;
+          0
+        };
+        0
+      };
+    }
+  };
+
+  let out: Result<S1Program, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(p);
+    0
+  } else { 0 };
+  out
+};

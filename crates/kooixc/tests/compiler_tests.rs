@@ -2728,6 +2728,45 @@ fn stage1_parser_member_smoke() {
 }
 
 #[test]
+fn stage1_resolver_namespaces_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_resolve_ns_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 resolver namespaces smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 resolver namespaces smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 resolver namespaces smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+fn stage1_resolver_missing_namespace_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_resolve_missing_ns_smoke.kooix");
+    let source_map =
+        load_source_map(&entry).expect("stage1 resolver missing namespace smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 resolver missing namespace smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined)
+        .expect("stage1 resolver missing namespace smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;

@@ -3,6 +3,7 @@ import "diag";
 import "token";
 import "lexer";
 import "parser";
+import "resolver";
 
 fn s1_compile(source: Text) -> Result<Int, S1Diagnostic>
 intent "Stage1 compiler (pure): source -> (future) diagnostics + artifacts"
@@ -16,7 +17,13 @@ evidence {
     Ok(ts) => {
       let ast: Result<S1Program, S1Diagnostic> = s1_parse(ts);
       match ast {
-        Ok(_p) => Ok(0);
+        Ok(p) => {
+          let resolved: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
+          match resolved {
+            Ok(_p2) => Ok(0);
+            Err(e3) => Err(e3);
+          }
+        };
         Err(e2) => Err(e2);
       }
     };
