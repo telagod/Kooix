@@ -1,6 +1,7 @@
 import "../stdlib/prelude";
 import "diag";
 import "ast";
+import "modules";
 
 record S1VarBind { name: Text; ty: S1Type; };
 record S1FnSig { name: Text; params: List<S1Type>; ret: S1Type; };
@@ -232,6 +233,75 @@ fn s1_tc_path_two(path: S1Path) -> Option<Pair<Text, Text>> {
     _ => 0;
   };
   out
+};
+
+fn s1_tc_path_len(path: S1Path) -> Int {
+  let n: Int = 0;
+  let cur: List<Text> = path.segments;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        n = n + 1;
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  n
+};
+
+fn s1_tc_path_second(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Cons(c0) => {
+      match c0.tail {
+        Cons(c1) => {
+          out = Some(c1.head);
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
+fn s1_tc_path_third(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Cons(c0) => {
+      match c0.tail {
+        Cons(c1) => {
+          match c1.tail {
+            Cons(c2) => {
+              out = Some(c2.head);
+              0
+            };
+            _ => 0;
+          };
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
+fn s1_tc_ns_path2(ns: Text, name: Text) -> S1Path {
+  let empty: List<Text> = Nil;
+  let tail: List<Text> = Cons(ListCons<Text> { head: name; tail: empty; });
+  let segs: List<Text> = Cons(ListCons<Text> { head: ns; tail: tail; });
+  S1Path { segments: segs; }
 };
 
 fn s1_tc_list_contains_text(xs: List<Text>, needle: Text) -> Bool {
@@ -715,6 +785,7 @@ fn s1_tc_unify(
 
 fn s1_tc_block_type(
   items: List<S1Item>,
+  mods: List<S1Module>,
   fns: List<S1FnSig>,
   env_in: List<S1VarBind>,
   ret_ty: S1Type,
@@ -738,7 +809,7 @@ fn s1_tc_block_type(
         match st {
           Let(l) => {
             let r: Result<S1Type, S1Diagnostic> =
-              s1_tc_expr_type(items, fns, env, Some(l.ty), l.value);
+              s1_tc_expr_type(items, mods, fns, env, Some(l.ty), l.value);
             match r {
               Err(e) => {
                 ok = false;
@@ -772,7 +843,7 @@ fn s1_tc_block_type(
               };
               Some(vty) => {
                 let r: Result<S1Type, S1Diagnostic> =
-                  s1_tc_expr_type(items, fns, env, Some(vty), a.value);
+                  s1_tc_expr_type(items, mods, fns, env, Some(vty), a.value);
                 match r {
                   Err(e) => {
                     ok = false;
@@ -800,7 +871,7 @@ fn s1_tc_block_type(
           };
           Return(rst) => {
             let r: Result<S1Type, S1Diagnostic> =
-              s1_tc_expr_type(items, fns, env, Some(ret_ty), rst.value);
+              s1_tc_expr_type(items, mods, fns, env, Some(ret_ty), rst.value);
             match r {
               Err(e) => {
                 ok = false;
@@ -825,7 +896,7 @@ fn s1_tc_block_type(
           };
           While(w) => {
             let cond_r: Result<S1Type, S1Diagnostic> =
-              s1_tc_expr_type(items, fns, env, Some(s1_tc_bool_type()), w.cond);
+              s1_tc_expr_type(items, mods, fns, env, Some(s1_tc_bool_type()), w.cond);
             match cond_r {
               Err(e) => {
                 ok = false;
@@ -834,9 +905,9 @@ fn s1_tc_block_type(
                 0
               };
               Ok(ct) => {
-                if s1_tc_types_eq(ct, s1_tc_bool_type()) == true {
-                  let body_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
-                    s1_tc_block_type(items, fns, env, ret_ty, None, w.body);
+                  if s1_tc_types_eq(ct, s1_tc_bool_type()) == true {
+                    let body_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+                      s1_tc_block_type(items, mods, fns, env, ret_ty, None, w.body);
                   match body_r {
                     Err(e2) => {
                       ok = false;
@@ -863,7 +934,7 @@ fn s1_tc_block_type(
           };
           ExprStmt(e) => {
             let r: Result<S1Type, S1Diagnostic> =
-              s1_tc_expr_type(items, fns, env, None, e);
+              s1_tc_expr_type(items, mods, fns, env, None, e);
             match r {
               Err(e2) => {
                 ok = false;
@@ -893,7 +964,7 @@ fn s1_tc_block_type(
       };
       Some(e) => {
         let r: Result<S1Type, S1Diagnostic> =
-          s1_tc_expr_type(items, fns, env, expected, e);
+          s1_tc_expr_type(items, mods, fns, env, expected, e);
         match r {
           Err(e3) => {
             ok = false;
@@ -918,25 +989,55 @@ fn s1_tc_block_type(
   out
 };
 
-fn s1_tc_record_field_type(items: List<S1Item>, base_ty: S1Type, field: Text) -> Result<S1Type, S1Diagnostic> {
+fn s1_tc_record_field_type(
+  items: List<S1Item>,
+  mods: List<S1Module>,
+  base_ty: S1Type,
+  field: Text
+) -> Result<S1Type, S1Diagnostic> {
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: member access requires record type");
   let out_ty: S1Type = s1_tc_unit_type();
 
+  let rec_opt: Option<S1Record> = None;
+
   let head_opt: Option<Text> = s1_tc_path_singleton(base_ty.path);
   match head_opt {
+    None => 0;
+    Some(name) => {
+      rec_opt = s1_tc_lookup_record(items, name);
+      0
+    };
+  };
+
+  match rec_opt {
+    Some(_) => 0;
+    None => {
+      // Try imported module record: ns::Name
+      let two_opt: Option<Pair<Text, Text>> = s1_tc_path_two(base_ty.path);
+      match two_opt {
+        None => 0;
+        Some(pair) => {
+          match s1_mod_lookup(mods, pair.a) {
+            None => 0;
+            Some(m) => {
+              rec_opt = s1_mod_lookup_record(m, pair.b);
+              0
+            };
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+
+  match rec_opt {
     None => {
       ok = false;
       0
     };
-    Some(name) => {
-      let rec_opt: Option<S1Record> = s1_tc_lookup_record(items, name);
-      match rec_opt {
-        None => {
-          ok = false;
-          0
-        };
-        Some(rec) => {
+    Some(rec) => {
           let gen_names: List<Text> = s1_tc_collect_generic_names(rec.generics);
           let subst: List<S1Subst> = Nil;
 
@@ -992,9 +1093,6 @@ fn s1_tc_record_field_type(items: List<S1Item>, base_ty: S1Type, field: Text) ->
               };
             }
           };
-          0
-        };
-      };
       0
     };
   };
@@ -1009,6 +1107,7 @@ fn s1_tc_record_field_type(items: List<S1Item>, base_ty: S1Type, field: Text) ->
 
 fn s1_tc_expr_type(
   items: List<S1Item>,
+  mods: List<S1Module>,
   fns: List<S1FnSig>,
   env: List<S1VarBind>,
   expected: Option<S1Type>,
@@ -1054,7 +1153,7 @@ fn s1_tc_expr_type(
     };
     Binary(b) => {
       // type left/right without expected; operations constrain them.
-      let l_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, None, b.left);
+      let l_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, mods, fns, env, None, b.left);
       match l_r {
         Err(e) => {
           ok = false;
@@ -1062,7 +1161,7 @@ fn s1_tc_expr_type(
           0
         };
         Ok(lt) => {
-          let r_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, Some(lt), b.right);
+          let r_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, mods, fns, env, Some(lt), b.right);
           match r_r {
             Err(e2) => {
               ok = false;
@@ -1121,7 +1220,7 @@ fn s1_tc_expr_type(
       0
     };
     Member(m) => {
-      let base_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, None, m.base);
+      let base_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, mods, fns, env, None, m.base);
       match base_r {
         Err(e) => {
           ok = false;
@@ -1129,7 +1228,7 @@ fn s1_tc_expr_type(
           0
         };
         Ok(bt) => {
-          let fr: Result<S1Type, S1Diagnostic> = s1_tc_record_field_type(items, bt, m.name);
+          let fr: Result<S1Type, S1Diagnostic> = s1_tc_record_field_type(items, mods, bt, m.name);
           match fr {
             Err(e2) => {
               ok = false;
@@ -1148,7 +1247,7 @@ fn s1_tc_expr_type(
     };
     Block(b) => {
       let r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
-        s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, b);
+        s1_tc_block_type(items, mods, fns, env, s1_tc_unit_type(), expected, b);
       match r {
         Err(e) => {
           ok = false;
@@ -1164,7 +1263,7 @@ fn s1_tc_expr_type(
     };
     If(i) => {
       let cond_r: Result<S1Type, S1Diagnostic> =
-        s1_tc_expr_type(items, fns, env, Some(s1_tc_bool_type()), i.cond);
+        s1_tc_expr_type(items, mods, fns, env, Some(s1_tc_bool_type()), i.cond);
       match cond_r {
         Err(e) => {
           ok = false;
@@ -1183,7 +1282,7 @@ fn s1_tc_expr_type(
 
       if ok == true {
         let then_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
-          s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, i.then_block);
+          s1_tc_block_type(items, mods, fns, env, s1_tc_unit_type(), expected, i.then_block);
         match then_r {
           Err(e2) => {
             ok = false;
@@ -1199,7 +1298,7 @@ fn s1_tc_expr_type(
               };
               Some(eb) => {
                 let else_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
-                  s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, eb);
+                  s1_tc_block_type(items, mods, fns, env, s1_tc_unit_type(), expected, eb);
                 match else_r {
                   Err(e3) => {
                     ok = false;
@@ -1230,7 +1329,7 @@ fn s1_tc_expr_type(
     };
     Match(m) => {
       let _scrut: Result<S1Type, S1Diagnostic> =
-        s1_tc_expr_type(items, fns, env, None, m.scrutinee);
+        s1_tc_expr_type(items, mods, fns, env, None, m.scrutinee);
       match _scrut {
         Err(e) => {
           ok = false;
@@ -1252,7 +1351,7 @@ fn s1_tc_expr_type(
             };
             Cons(cell) => {
               let vr: Result<S1Type, S1Diagnostic> =
-                s1_tc_expr_type(items, fns, env, expected, cell.head.value);
+                s1_tc_expr_type(items, mods, fns, env, expected, cell.head.value);
               match vr {
                 Err(e2) => {
                   ok = false;
@@ -1350,7 +1449,7 @@ fn s1_tc_expr_type(
                           };
                           Cons(acell) => {
                             let ar: Result<S1Type, S1Diagnostic> =
-                              s1_tc_expr_type(items, fns, env, Some(pcell.head), acell.head);
+                              s1_tc_expr_type(items, mods, fns, env, Some(pcell.head), acell.head);
                             match ar {
                               Err(e2) => {
                                 ok = false;
@@ -1390,42 +1489,137 @@ fn s1_tc_expr_type(
               0
             };
             None => {
-              // Try enum constructor: Enum::Variant(...)
-              let two_opt: Option<Pair<Text, Text>> = s1_tc_path_two(cp);
-              match two_opt {
-                None => {
+              // Try enum constructor:
+              // - local: Enum::Variant(...)
+              // - imported: ns::Enum::Variant(...)
+              let enum_ty_path: S1Path = s1_tc_empty_path();
+              let enum_opt: Option<S1Enum> = None;
+              let variant_name: Text = "";
+
+              let plen: Int = s1_tc_path_len(cp);
+              if plen == 2 {
+                match s1_tc_path_two(cp) {
+                  None => {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: unsupported call callee path");
+                    0
+                  };
+                  Some(pair) => {
+                    enum_ty_path = s1_tc_simple_path(pair.a);
+                    variant_name = pair.b;
+                    enum_opt = s1_tc_lookup_enum(items, pair.a);
+                    match enum_opt {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                        0
+                      };
+                      Some(_) => 0;
+                    };
+                    0
+                  };
+                };
+                0
+              } else {
+                if plen == 3 {
+                  let ns: Text = "";
+                  let enum_name: Text = "";
+                  let vn: Text = "";
+                  match cp.segments {
+                    Cons(c0) => {
+                      ns = c0.head;
+                      match c0.tail {
+                        Cons(c1) => {
+                          enum_name = c1.head;
+                          match c1.tail {
+                            Cons(c2) => {
+                              vn = c2.head;
+                              0
+                            };
+                            _ => 0;
+                          };
+                          0
+                        };
+                        _ => 0;
+                      };
+                      0
+                    };
+                    _ => 0;
+                  };
+
+                  enum_ty_path = s1_tc_ns_path2(ns, enum_name);
+                  variant_name = vn;
+
+                  match s1_mod_lookup(mods, ns) {
+                    None => {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: unknown imported module in constructor call");
+                      0
+                    };
+                    Some(m) => {
+                      enum_opt = s1_mod_lookup_enum(m, enum_name);
+                      match enum_opt {
+                        None => {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: unknown imported enum in constructor call");
+                          0
+                        };
+                        Some(_) => 0;
+                      };
+                      0
+                    };
+                  };
+                  0
+                } else {
                   ok = false;
                   diag = s1_diag(Error, 0, 0, "typecheck: unsupported call callee path");
                   0
                 };
-                Some(pair) => {
-                  let enum_opt: Option<S1Enum> = s1_tc_lookup_enum(items, pair.a);
-                  match enum_opt {
-                    None => {
-                      ok = false;
-                      diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
-                      0
-                    };
-                    Some(ed) => {
-                      let var_opt: Option<S1EnumVariant> = s1_tc_lookup_enum_variant(ed, pair.b);
-                      match var_opt {
-                        None => {
-                          ok = false;
-                          diag = s1_diag(Error, 0, 0, "typecheck: unknown enum variant in constructor call");
-                          0
-                        };
-                        Some(vd) => {
-                          let enum_path: S1Path = s1_tc_simple_path(ed.name);
-                          let gen_names: List<Text> = s1_tc_collect_generic_names(ed.generics);
-                          let subst: List<S1Subst> = Nil;
+                0
+              };
 
-                          match vd.payload_ty {
-                            None => {
-                              // unit variant: need expected to fix generics (or no generics).
+              if ok == true {
+                match enum_opt {
+                  None => {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                    0
+                  };
+                  Some(ed) => {
+                    let var_opt: Option<S1EnumVariant> =
+                      s1_tc_lookup_enum_variant(ed, variant_name);
+                    match var_opt {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unknown enum variant in constructor call");
+                        0
+                      };
+                      Some(vd) => {
+                        let gen_names: List<Text> = s1_tc_collect_generic_names(ed.generics);
+                        let subst: List<S1Subst> = Nil;
+
+                        match vd.payload_ty {
+                          None => {
+                            // unit variant: requires zero args.
+                            let args_empty: Bool = false;
+                            match c.args {
+                              Nil => {
+                                args_empty = true;
+                                0
+                              };
+                              _ => 0;
+                            };
+
+                            if args_empty == false {
+                              ok = false;
+                              diag = s1_diag(Error, 0, 0, "typecheck: unit enum constructor expects no arguments");
+                              0
+                            } else {
+                              // need expected to fix generics (or no generics).
                               match expected {
                                 Some(et) => {
-                                  // expected must be EnumName<...>
-                                  let head_ok: Bool = s1_tc_texts_eq(et.path.segments, enum_path.segments);
+                                  let head_ok: Bool =
+                                    s1_tc_texts_eq(et.path.segments, enum_ty_path.segments);
                                   if head_ok == false {
                                     ok = false;
                                     diag = s1_diag(Error, 0, 0, "typecheck: constructor expected type mismatch");
@@ -1440,12 +1634,17 @@ fn s1_tc_expr_type(
                                   match gen_names {
                                     Nil => {
                                       let empty_args: List<S1Type> = Nil;
-                                      ty = S1Type { path: s1_tc_simple_path(ed.name); args: empty_args; };
+                                      ty = S1Type { path: enum_ty_path; args: empty_args; };
                                       0
                                     };
                                     _ => {
                                       ok = false;
-                                      diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic enum constructor without expected type");
+                                      diag = s1_diag(
+                                        Error,
+                                        0,
+                                        0,
+                                        "typecheck: cannot infer generic enum constructor without expected type"
+                                      );
                                       0
                                     };
                                   };
@@ -1454,144 +1653,155 @@ fn s1_tc_expr_type(
                               };
                               0
                             };
-                            Some(pat_ty) => {
-                              // payload variant: exactly 1 arg
-                              match c.args {
-                                Cons(arg0) => {
-                                  match arg0.tail {
-                                    Nil => {
-                                      let at_r: Result<S1Type, S1Diagnostic> =
-                                        s1_tc_expr_type(items, fns, env, Some(pat_ty), arg0.head);
-                                      match at_r {
-                                        Err(e4) => {
-                                          ok = false;
-                                          diag = e4;
-                                          0
-                                        };
-                                        Ok(at) => {
-                                          let uni: Result<List<S1Subst>, S1Diagnostic> =
-                                            s1_tc_unify(pat_ty, at, gen_names, subst);
-                                          match uni {
-                                            Err(e5) => {
-                                              ok = false;
-                                              diag = e5;
-                                              0
-                                            };
-                                            Ok(s2) => {
-                                              // build Enum<...> args in generic order
-                                              let args_rev: List<S1Type> = Nil;
-                                              let gcur: List<Text> = gen_names;
-                                              let has_expected: Bool = false;
-                                              let ecur: List<S1Type> = Nil;
+                            0
+                          };
+                          Some(pat_ty) => {
+                            // payload variant: exactly 1 arg
+                            match c.args {
+                              Cons(arg0) => {
+                                match arg0.tail {
+                                  Nil => {
+                                    let at_r: Result<S1Type, S1Diagnostic> =
+                                      s1_tc_expr_type(items, mods, fns, env, Some(pat_ty), arg0.head);
+                                    match at_r {
+                                      Err(e4) => {
+                                        ok = false;
+                                        diag = e4;
+                                        0
+                                      };
+                                      Ok(at) => {
+                                        let uni: Result<List<S1Subst>, S1Diagnostic> =
+                                          s1_tc_unify(pat_ty, at, gen_names, subst);
+                                        match uni {
+                                          Err(e5) => {
+                                            ok = false;
+                                            diag = e5;
+                                            0
+                                          };
+                                          Ok(s2) => {
+                                            // build Enum<...> args in generic order
+                                            let args_rev: List<S1Type> = Nil;
+                                            let gcur: List<Text> = gen_names;
+                                            let has_expected: Bool = false;
+                                            let ecur: List<S1Type> = Nil;
 
-                                              match expected {
-                                                None => 0;
-                                                Some(et2) => {
-                                                  if s1_tc_texts_eq(et2.path.segments, enum_path.segments) == true {
-                                                    has_expected = true;
-                                                    ecur = et2.args;
-                                                    0
-                                                  } else { 0 };
+                                            match expected {
+                                              None => 0;
+                                              Some(et2) => {
+                                                if s1_tc_texts_eq(et2.path.segments, enum_ty_path.segments) == true {
+                                                  has_expected = true;
+                                                  ecur = et2.args;
+                                                  0
+                                                } else { 0 };
+                                                0
+                                              };
+                                            };
+
+                                            let done2: Bool = false;
+                                            while done2 == false {
+                                              match gcur {
+                                                Nil => {
+                                                  done2 = true;
                                                   0
                                                 };
-                                              };
-
-                                              let done2: Bool = false;
-                                              while done2 == false {
-                                                match gcur {
-                                                  Nil => {
-                                                    done2 = true;
-                                                    0
-                                                  };
-                                                  Cons(gcell) => {
-                                                    let bound_opt: Option<S1Type> =
-                                                      s1_tc_subst_lookup(s2, gcell.head);
-                                                    match bound_opt {
-                                                      None => {
-                                                        if has_expected == true {
-                                                          match ecur {
-                                                            Nil => {
-                                                              ok = false;
-                                                              diag = s1_diag(Error, 0, 0, "typecheck: constructor expected type missing args");
-                                                              done2 = true;
-                                                              0
-                                                            };
-                                                            Cons(ecell) => {
-                                                              args_rev = Cons(ListCons<S1Type> { head: ecell.head; tail: args_rev; });
-                                                              ecur = ecell.tail;
-                                                              gcur = gcell.tail;
-                                                              0
-                                                            };
+                                                Cons(gcell) => {
+                                                  let bound_opt: Option<S1Type> =
+                                                    s1_tc_subst_lookup(s2, gcell.head);
+                                                  match bound_opt {
+                                                    None => {
+                                                      if has_expected == true {
+                                                        match ecur {
+                                                          Nil => {
+                                                            ok = false;
+                                                            diag = s1_diag(
+                                                              Error,
+                                                              0,
+                                                              0,
+                                                              "typecheck: constructor expected type missing args"
+                                                            );
+                                                            done2 = true;
+                                                            0
                                                           };
-                                                          0
-                                                        } else {
-                                                          ok = false;
-                                                          diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic enum constructor");
-                                                          done2 = true;
-                                                          0
+                                                          Cons(ecell) => {
+                                                            args_rev = Cons(ListCons<S1Type> { head: ecell.head; tail: args_rev; });
+                                                            ecur = ecell.tail;
+                                                            gcur = gcell.tail;
+                                                            0
+                                                          };
                                                         };
                                                         0
-                                                      };
-                                                      Some(t0) => {
-                                                        args_rev = Cons(ListCons<S1Type> { head: t0; tail: args_rev; });
-                                                        if has_expected == true {
-                                                          match ecur {
-                                                            Nil => 0;
-                                                            Cons(ecell) => {
-                                                              ecur = ecell.tail;
-                                                              0
-                                                            };
-                                                          };
-                                                          0
-                                                        } else { 0 };
-                                                        gcur = gcell.tail;
+                                                      } else {
+                                                        ok = false;
+                                                        diag = s1_diag(
+                                                          Error,
+                                                          0,
+                                                          0,
+                                                          "typecheck: cannot infer generic enum constructor"
+                                                        );
+                                                        done2 = true;
                                                         0
                                                       };
+                                                      0
                                                     };
-                                                    0
+                                                    Some(t0) => {
+                                                      args_rev = Cons(ListCons<S1Type> { head: t0; tail: args_rev; });
+                                                      if has_expected == true {
+                                                        match ecur {
+                                                          Nil => 0;
+                                                          Cons(ecell) => {
+                                                            ecur = ecell.tail;
+                                                            0
+                                                          };
+                                                        };
+                                                        0
+                                                      } else { 0 };
+                                                      gcur = gcell.tail;
+                                                      0
+                                                    };
                                                   };
-                                                }
-                                              };
-
-                                              if ok == true {
-                                                let args: List<S1Type> = s1_tc_reverse_types(args_rev);
-                                                ty = S1Type { path: s1_tc_simple_path(ed.name); args: args; };
-                                                0
-                                              } else { 0 };
-                                              0
+                                                  0
+                                                };
+                                              }
                                             };
+
+                                            if ok == true {
+                                              let args: List<S1Type> = s1_tc_reverse_types(args_rev);
+                                              ty = S1Type { path: enum_ty_path; args: args; };
+                                              0
+                                            } else { 0 };
+                                            0
                                           };
-                                          0
                                         };
+                                        0
                                       };
-                                      0
                                     };
-                                    _ => {
-                                      ok = false;
-                                      diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
-                                      0
-                                    };
+                                    0
                                   };
-                                  0
+                                  _ => {
+                                    ok = false;
+                                    diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
+                                    0
+                                  };
                                 };
-                                _ => {
-                                  ok = false;
-                                  diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
-                                  0
-                                };
+                                0
                               };
-                              0
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
+                                0
+                              };
                             };
+                            0
                           };
-                          0
                         };
+                        0
                       };
-                      0
                     };
+                    0
                   };
-                  0
                 };
-              };
+                0
+              } else { 0 };
               0
             };
           };
@@ -1623,6 +1833,7 @@ evidence {
 }
 {
   let fns: List<S1FnSig> = s1_tc_collect_fn_sigs(p.items);
+  let mods: List<S1Module> = s1_mod_build(p.items);
 
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: error");
@@ -1661,7 +1872,7 @@ evidence {
                 };
 
                 let br: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
-                  s1_tc_block_type(p.items, fns, env2, f.return_type, Some(f.return_type), b);
+                  s1_tc_block_type(p.items, mods, fns, env2, f.return_type, Some(f.return_type), b);
                 match br {
                   Err(e) => {
                     ok = false;

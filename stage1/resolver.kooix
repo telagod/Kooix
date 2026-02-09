@@ -1,6 +1,7 @@
 import "../stdlib/prelude";
 import "diag";
 import "ast";
+import "modules";
 
 fn s1_resolver_path_len(path: S1Path) -> Int {
   let n: Int = 0;
@@ -29,6 +30,30 @@ fn s1_resolver_path_second(path: S1Path) -> Option<Text> {
       match c0.tail {
         Cons(c1) => {
           out = Some(c1.head);
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
+fn s1_resolver_path_third(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Cons(c0) => {
+      match c0.tail {
+        Cons(c1) => {
+          match c1.tail {
+            Cons(c2) => {
+              out = Some(c2.head);
+              0
+            };
+            _ => 0;
+          };
           0
         };
         _ => 0;
@@ -104,43 +129,87 @@ fn s1_resolver_enum_has_variant(e: S1Enum, vname: Text) -> Bool {
 fn s1_resolver_validate_enum_variant_path(
   path: S1Path,
   import_ns: List<Text>,
+  mods: List<S1Module>,
   items: List<S1Item>
 ) -> Result<Int, S1Diagnostic> {
   let ok: Bool = true;
-  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: unknown enum variant in path");
+  let diag: S1Diagnostic =
+    s1_diag(Error, 0, 0, "resolver: unknown enum variant in path");
 
-  let plen: Int = s1_resolver_path_len(path);
+  // This check must not reject general qualified paths. It only validates paths
+  // that actually look like enum variant references:
+  // - local: Enum::Variant
+  // - imported: ns::Enum::Variant (only when Enum is known in stub module)
   let head_pair: Pair<Option<Text>, Bool> = s1_resolver_path_head_and_is_qualified(path);
   match head_pair.a {
     None => 0;
     Some(h) => {
       if head_pair.b == true {
+        let plen: Int = s1_resolver_path_len(path);
+
         if s1_resolver_list_contains_text(import_ns, h) == true {
-          0
-        } else {
-          match s1_resolver_lookup_enum(items, h) {
-            None => 0;
-            Some(e) => {
-              if plen == 2 {
+          // Imported namespace.
+          if plen == 3 {
+            match s1_mod_lookup(mods, h) {
+              None => 0;
+              Some(m) => {
                 match s1_resolver_path_second(path) {
                   None => 0;
-                  Some(vn) => {
-                    if s1_resolver_enum_has_variant(e, vn) == true { 0 } else {
+                  Some(enum_name) => {
+                    match s1_mod_lookup_enum(m, enum_name) {
+                      None => 0;
+                      Some(e) => {
+                        match s1_resolver_path_third(path) {
+                          None => 0;
+                          Some(vn) => {
+                            if s1_resolver_enum_has_variant(e, vn) == true { 0 } else {
+                              ok = false;
+                              diag = s1_diag(
+                                Error,
+                                0,
+                                0,
+                                "resolver: unknown enum variant in imported module"
+                              );
+                              0
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                    };
+                    0
+                  };
+                };
+                0
+              };
+            };
+            0
+          } else { 0 };
+          0
+        } else {
+          // Local item.
+          if plen == 2 {
+            match s1_resolver_lookup_enum(items, h) {
+              None => 0;
+              Some(e2) => {
+                match s1_resolver_path_second(path) {
+                  None => 0;
+                  Some(vn2) => {
+                    if s1_resolver_enum_has_variant(e2, vn2) == true { 0 } else {
                       ok = false;
+                      diag =
+                        s1_diag(Error, 0, 0, "resolver: unknown enum variant in path");
                       0
                     };
                     0
                   };
                 };
                 0
-              } else {
-                ok = false;
-                diag = s1_diag(Error, 0, 0, "resolver: multi-segment enum variant path is unsupported in Stage1");
-                0
               };
-              0
             };
-          };
+            0
+          } else { 0 };
           0
         };
         0
@@ -372,7 +441,8 @@ fn s1_resolver_resolve_path(
 fn s1_resolver_resolve_type(
   ty: S1Type,
   import_ns: List<Text>,
-  locals: List<Text>
+  locals: List<Text>,
+  mods: List<S1Module>
 ) -> Result<Int, S1Diagnostic> {
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: expected type");
@@ -398,7 +468,7 @@ fn s1_resolver_resolve_type(
         };
         Cons(cell) => {
           let r: Result<Int, S1Diagnostic> =
-            s1_resolver_resolve_type(cell.head, import_ns, locals);
+            s1_resolver_resolve_type(cell.head, import_ns, locals, mods);
           match r {
             Err(e2) => {
               ok = false;
@@ -418,6 +488,49 @@ fn s1_resolver_resolve_type(
     0
   } else { 0 };
 
+  // If this is an imported namespace type, validate the type name against stubbed module (if present).
+  if ok == true {
+    let pair: Pair<Option<Text>, Bool> = s1_resolver_path_head_and_is_qualified(ty.path);
+    match pair.a {
+      None => 0;
+      Some(h) => {
+        if pair.b == true {
+          if s1_resolver_list_contains_text(import_ns, h) == true {
+            match s1_mod_lookup(mods, h) {
+              None => 0;
+              Some(m) => {
+                let plen: Int = s1_resolver_path_len(ty.path);
+                if plen == 2 {
+                  match s1_resolver_path_second(ty.path) {
+                    None => 0;
+                    Some(tn) => {
+                      if s1_mod_module_has_type(m, tn) == true { 0 } else {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "resolver: unknown imported type");
+                        0
+                      };
+                      0
+                    };
+                  };
+                  0
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "resolver: imported type path must be ns::Type");
+                  0
+                };
+                0
+              };
+            };
+            0
+          } else { 0 };
+          0
+        } else { 0 };
+        0
+      };
+    };
+    0
+  } else { 0 };
+
   let out: Result<Int, S1Diagnostic> = Err(diag);
   if ok == true {
     out = Ok(0);
@@ -430,6 +543,7 @@ fn s1_resolver_resolve_pattern(
   pat: S1Pattern,
   import_ns: List<Text>,
   locals: List<Text>,
+  mods: List<S1Module>,
   items: List<S1Item>
 ) -> Result<Int, S1Diagnostic> {
   let out: Result<Int, S1Diagnostic> = Ok(0);
@@ -439,7 +553,7 @@ fn s1_resolver_resolve_pattern(
       out = s1_resolver_resolve_path(p, import_ns, locals);
       match out {
         Ok(_) => {
-          out = s1_resolver_validate_enum_variant_path(p, import_ns, items);
+          out = s1_resolver_validate_enum_variant_path(p, import_ns, mods, items);
           0
         };
         Err(_e) => 0;
@@ -450,7 +564,7 @@ fn s1_resolver_resolve_pattern(
       out = s1_resolver_resolve_path(vp.path, import_ns, locals);
       match out {
         Ok(_) => {
-          out = s1_resolver_validate_enum_variant_path(vp.path, import_ns, items);
+          out = s1_resolver_validate_enum_variant_path(vp.path, import_ns, mods, items);
           0
         };
         Err(_e) => 0;
@@ -465,6 +579,7 @@ fn s1_resolver_resolve_expr(
   expr: S1Expr,
   import_ns: List<Text>,
   locals: List<Text>,
+  mods: List<S1Module>,
   items: List<S1Item>
 ) -> Result<Int, S1Diagnostic> {
   let ok: Bool = true;
@@ -486,7 +601,7 @@ fn s1_resolver_resolve_expr(
     IntLit(_) => 0;
     StringLit(_) => 0;
     Member(m) => {
-      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(m.base, import_ns, locals, items);
+      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(m.base, import_ns, locals, mods, items);
       match r {
         Err(e) => {
           ok = false;
@@ -499,7 +614,7 @@ fn s1_resolver_resolve_expr(
     };
     Binary(b) => {
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_expr(b.left, import_ns, locals, items);
+        s1_resolver_resolve_expr(b.left, import_ns, locals, mods, items);
       match r0 {
         Err(e) => {
           ok = false;
@@ -511,7 +626,7 @@ fn s1_resolver_resolve_expr(
 
       if ok == true {
         let r1: Result<Int, S1Diagnostic> =
-          s1_resolver_resolve_expr(b.right, import_ns, locals, items);
+          s1_resolver_resolve_expr(b.right, import_ns, locals, mods, items);
         match r1 {
           Err(e2) => {
             ok = false;
@@ -528,44 +643,13 @@ fn s1_resolver_resolve_expr(
       // Extra: Enum::Variant path must reference an existing local enum variant.
       match c.callee {
         Path(pp) => {
-          let plen: Int = s1_resolver_path_len(pp);
-          let head_pair: Pair<Option<Text>, Bool> = s1_resolver_path_head_and_is_qualified(pp);
-          match head_pair.a {
-            None => 0;
-            Some(h) => {
-              if head_pair.b == true {
-                if s1_resolver_list_contains_text(import_ns, h) == true {
-                  0
-                } else {
-                  // treat as local enum constructor
-                  if plen == 2 {
-                    match s1_resolver_path_second(pp) {
-                      None => 0;
-                      Some(vn) => {
-                        match s1_resolver_lookup_enum(items, h) {
-                          None => 0;
-                          Some(e) => {
-                            if s1_resolver_enum_has_variant(e, vn) == true { 0 } else {
-                              ok = false;
-                              diag = s1_diag(Error, 0, 0, "resolver: unknown enum variant in path");
-                              0
-                            };
-                            0
-                          };
-                        };
-                        0
-                      };
-                    };
-                    0
-                  } else {
-                    ok = false;
-                    diag = s1_diag(Error, 0, 0, "resolver: multi-segment enum constructor path is unsupported in Stage1");
-                    0
-                  };
-                  0
-                };
-                0
-              } else { 0 };
+          let vr: Result<Int, S1Diagnostic> =
+            s1_resolver_validate_enum_variant_path(pp, import_ns, mods, items);
+          match vr {
+            Ok(_) => 0;
+            Err(e) => {
+              ok = false;
+              diag = e;
               0
             };
           };
@@ -575,7 +659,7 @@ fn s1_resolver_resolve_expr(
       };
 
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_expr(c.callee, import_ns, locals, items);
+        s1_resolver_resolve_expr(c.callee, import_ns, locals, mods, items);
       match r0 {
         Err(e) => {
           ok = false;
@@ -596,7 +680,7 @@ fn s1_resolver_resolve_expr(
             };
             Cons(cell) => {
               let r: Result<Int, S1Diagnostic> =
-                s1_resolver_resolve_expr(cell.head, import_ns, locals, items);
+                s1_resolver_resolve_expr(cell.head, import_ns, locals, mods, items);
               match r {
                 Err(e2) => {
                   ok = false;
@@ -618,7 +702,7 @@ fn s1_resolver_resolve_expr(
       0
     };
     Block(b) => {
-      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_block(b, import_ns, locals, items);
+      let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_block(b, import_ns, locals, mods, items);
       match r {
         Err(e) => {
           ok = false;
@@ -631,7 +715,7 @@ fn s1_resolver_resolve_expr(
     };
     If(i) => {
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_expr(i.cond, import_ns, locals, items);
+        s1_resolver_resolve_expr(i.cond, import_ns, locals, mods, items);
       match r0 {
         Err(e) => {
           ok = false;
@@ -643,7 +727,7 @@ fn s1_resolver_resolve_expr(
 
       if ok == true {
         let r1: Result<Int, S1Diagnostic> =
-          s1_resolver_resolve_block(i.then_block, import_ns, locals, items);
+          s1_resolver_resolve_block(i.then_block, import_ns, locals, mods, items);
         match r1 {
           Err(e2) => {
             ok = false;
@@ -660,7 +744,7 @@ fn s1_resolver_resolve_expr(
           None => 0;
           Some(eb) => {
             let r2: Result<Int, S1Diagnostic> =
-              s1_resolver_resolve_block(eb, import_ns, locals, items);
+              s1_resolver_resolve_block(eb, import_ns, locals, mods, items);
             match r2 {
               Err(e3) => {
                 ok = false;
@@ -678,7 +762,7 @@ fn s1_resolver_resolve_expr(
     };
     Match(m) => {
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_expr(m.scrutinee, import_ns, locals, items);
+        s1_resolver_resolve_expr(m.scrutinee, import_ns, locals, mods, items);
       match r0 {
         Err(e) => {
           ok = false;
@@ -699,7 +783,7 @@ fn s1_resolver_resolve_expr(
             };
             Cons(cell) => {
               let rpat: Result<Int, S1Diagnostic> =
-                s1_resolver_resolve_pattern(cell.head.pat, import_ns, locals, items);
+                s1_resolver_resolve_pattern(cell.head.pat, import_ns, locals, mods, items);
               match rpat {
                 Err(e2) => {
                   ok = false;
@@ -712,7 +796,7 @@ fn s1_resolver_resolve_expr(
 
               if ok == true {
                 let rval: Result<Int, S1Diagnostic> =
-                  s1_resolver_resolve_expr(cell.head.value, import_ns, locals, items);
+                  s1_resolver_resolve_expr(cell.head.value, import_ns, locals, mods, items);
                 match rval {
                   Err(e3) => {
                     ok = false;
@@ -754,50 +838,51 @@ fn s1_resolver_resolve_stmt(
   st: S1Stmt,
   import_ns: List<Text>,
   locals: List<Text>,
+  mods: List<S1Module>,
   items: List<S1Item>
 ) -> Result<Int, S1Diagnostic> {
   let out: Result<Int, S1Diagnostic> = Ok(0);
   match st {
     Let(l) => {
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_type(l.ty, import_ns, locals);
+        s1_resolver_resolve_type(l.ty, import_ns, locals, mods);
       match r0 {
         Err(e) => {
           out = Err(e);
           0
         };
         Ok(_) => {
-          out = s1_resolver_resolve_expr(l.value, import_ns, locals, items);
+          out = s1_resolver_resolve_expr(l.value, import_ns, locals, mods, items);
           0
         };
       };
       0
     };
     Assign(a) => {
-      out = s1_resolver_resolve_expr(a.value, import_ns, locals, items);
+      out = s1_resolver_resolve_expr(a.value, import_ns, locals, mods, items);
       0
     };
     Return(r) => {
-      out = s1_resolver_resolve_expr(r.value, import_ns, locals, items);
+      out = s1_resolver_resolve_expr(r.value, import_ns, locals, mods, items);
       0
     };
     While(w) => {
       let r0: Result<Int, S1Diagnostic> =
-        s1_resolver_resolve_expr(w.cond, import_ns, locals, items);
+        s1_resolver_resolve_expr(w.cond, import_ns, locals, mods, items);
       match r0 {
         Err(e) => {
           out = Err(e);
           0
         };
         Ok(_) => {
-          out = s1_resolver_resolve_block(w.body, import_ns, locals, items);
+          out = s1_resolver_resolve_block(w.body, import_ns, locals, mods, items);
           0
         };
       };
       0
     };
     ExprStmt(e) => {
-      out = s1_resolver_resolve_expr(e, import_ns, locals, items);
+      out = s1_resolver_resolve_expr(e, import_ns, locals, mods, items);
       0
     };
   };
@@ -808,6 +893,7 @@ fn s1_resolver_resolve_block(
   b: S1Block,
   import_ns: List<Text>,
   locals: List<Text>,
+  mods: List<S1Module>,
   items: List<S1Item>
 ) -> Result<Int, S1Diagnostic> {
   let ok: Bool = true;
@@ -821,9 +907,9 @@ fn s1_resolver_resolve_block(
         done = true;
         0
       };
-      Cons(cell) => {
-        let r: Result<Int, S1Diagnostic> =
-          s1_resolver_resolve_stmt(cell.head, import_ns, locals, items);
+    Cons(cell) => {
+      let r: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_stmt(cell.head, import_ns, locals, mods, items);
         match r {
           Err(e) => {
             ok = false;
@@ -845,7 +931,7 @@ fn s1_resolver_resolve_block(
     match b.result {
       None => 0;
       Some(e) => {
-        let r2: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(e, import_ns, locals, items);
+        let r2: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(e, import_ns, locals, mods, items);
         match r2 {
           Err(e2) => {
             ok = false;
@@ -876,6 +962,7 @@ evidence {
 {
   let import_ns: List<Text> = s1_resolver_collect_import_namespaces(p.items);
   let locals: List<Text> = s1_resolver_collect_local_item_names(p.items);
+  let mods: List<S1Module> = s1_mod_build(p.items);
 
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: error");
@@ -947,8 +1034,8 @@ evidence {
                         0
                       };
                       Cons(bcell) => {
-                        let rb: Result<Int, S1Diagnostic> =
-                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                  let rb: Result<Int, S1Diagnostic> =
+                    s1_resolver_resolve_type(bcell.head, import_ns, locals, mods);
                         match rb {
                           Err(e) => {
                             ok = false;
@@ -985,7 +1072,7 @@ evidence {
                   };
                   Cons(pcell) => {
                     let rt: Result<Int, S1Diagnostic> =
-                      s1_resolver_resolve_type(pcell.head.ty, import_ns, locals);
+                      s1_resolver_resolve_type(pcell.head.ty, import_ns, locals, mods);
                     match rt {
                       Err(e2) => {
                         ok = false;
@@ -1009,7 +1096,7 @@ evidence {
             // return type
             if ok == true {
               let rr: Result<Int, S1Diagnostic> =
-                s1_resolver_resolve_type(f.return_type, import_ns, locals);
+                s1_resolver_resolve_type(f.return_type, import_ns, locals, mods);
               match rr {
                 Err(e3) => {
                   ok = false;
@@ -1028,7 +1115,7 @@ evidence {
                 None => 0;
                 Some(b) => {
                   let rb: Result<Int, S1Diagnostic> =
-                    s1_resolver_resolve_block(b, import_ns, locals, p.items);
+                    s1_resolver_resolve_block(b, import_ns, locals, mods, p.items);
                   match rb {
                     Err(e4) => {
                       ok = false;
@@ -1066,7 +1153,7 @@ evidence {
                       };
                       Cons(bcell) => {
                         let rb: Result<Int, S1Diagnostic> =
-                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                          s1_resolver_resolve_type(bcell.head, import_ns, locals, mods);
                         match rb {
                           Err(e) => {
                             ok = false;
@@ -1103,7 +1190,7 @@ evidence {
                   };
                   Cons(fcell) => {
                     let rt: Result<Int, S1Diagnostic> =
-                      s1_resolver_resolve_type(fcell.head.ty, import_ns, locals);
+                      s1_resolver_resolve_type(fcell.head.ty, import_ns, locals, mods);
                     match rt {
                       Err(e2) => {
                         ok = false;
@@ -1146,7 +1233,7 @@ evidence {
                       };
                       Cons(bcell) => {
                         let rb: Result<Int, S1Diagnostic> =
-                          s1_resolver_resolve_type(bcell.head, import_ns, locals);
+                          s1_resolver_resolve_type(bcell.head, import_ns, locals, mods);
                         match rb {
                           Err(e2) => {
                             ok = false;
@@ -1186,7 +1273,7 @@ evidence {
                       None => 0;
                       Some(pt) => {
                         let rt: Result<Int, S1Diagnostic> =
-                          s1_resolver_resolve_type(pt, import_ns, locals);
+                          s1_resolver_resolve_type(pt, import_ns, locals, mods);
                         match rt {
                           Err(e3) => {
                             ok = false;

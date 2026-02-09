@@ -1,0 +1,461 @@
+import "../stdlib/prelude";
+import "ast";
+
+record S1Module { ns: Text; items: List<S1Item>; };
+
+fn s1_mod_reverse_items(xs: List<S1Item>) -> List<S1Item> {
+  let acc: List<S1Item> = Nil;
+  let cur: List<S1Item> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Item> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_mod_reverse_texts(xs: List<Text>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<Text> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_mod_reverse_types(xs: List<S1Type>) -> List<S1Type> {
+  let acc: List<S1Type> = Nil;
+  let cur: List<S1Type> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Type> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_mod_simple_path(name: Text) -> S1Path {
+  let empty: List<Text> = Nil;
+  let segs: List<Text> = Cons(ListCons<Text> { head: name; tail: empty; });
+  S1Path { segments: segs; }
+};
+
+fn s1_mod_ns_path(ns: Text, name: Text) -> S1Path {
+  let empty: List<Text> = Nil;
+  let tail: List<Text> = Cons(ListCons<Text> { head: ns; tail: empty; });
+  let segs_rev: List<Text> = Cons(ListCons<Text> {
+    head: name;
+    tail: tail;
+  });
+  S1Path { segments: s1_mod_reverse_texts(segs_rev); }
+};
+
+fn s1_mod_type_path(path: S1Path, args: List<S1Type>) -> S1Type {
+  S1Type { path: path; args: args; }
+};
+
+fn s1_mod_type_simple(name: Text) -> S1Type {
+  let args: List<S1Type> = Nil;
+  s1_mod_type_path(s1_mod_simple_path(name), args)
+};
+
+fn s1_mod_type_ns(ns: Text, name: Text, args: List<S1Type>) -> S1Type {
+  s1_mod_type_path(s1_mod_ns_path(ns, name), args)
+};
+
+fn s1_mod_generic(name: Text) -> S1GenericParam {
+  let bounds: List<S1Type> = Nil;
+  S1GenericParam { name: name; bounds: bounds; }
+};
+
+fn s1_mod_generics1(a: Text) -> List<S1GenericParam> {
+  let empty: List<S1GenericParam> = Nil;
+  Cons(ListCons<S1GenericParam> { head: s1_mod_generic(a); tail: empty; })
+};
+
+fn s1_mod_generics2(a: Text, b: Text) -> List<S1GenericParam> {
+  let empty: List<S1GenericParam> = Nil;
+  let tail: List<S1GenericParam> =
+    Cons(ListCons<S1GenericParam> { head: s1_mod_generic(b); tail: empty; });
+  Cons(ListCons<S1GenericParam> {
+    head: s1_mod_generic(a);
+    tail: tail;
+  })
+};
+
+fn s1_mod_variants2(v0: S1EnumVariant, v1: S1EnumVariant) -> List<S1EnumVariant> {
+  let empty: List<S1EnumVariant> = Nil;
+  let tail: List<S1EnumVariant> =
+    Cons(ListCons<S1EnumVariant> { head: v1; tail: empty; });
+  Cons(ListCons<S1EnumVariant> { head: v0; tail: tail; })
+};
+
+fn s1_mod_fields2(f0: S1RecordField, f1: S1RecordField) -> List<S1RecordField> {
+  let empty: List<S1RecordField> = Nil;
+  let tail: List<S1RecordField> =
+    Cons(ListCons<S1RecordField> { head: f1; tail: empty; });
+  Cons(ListCons<S1RecordField> { head: f0; tail: tail; })
+};
+
+fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
+  // enum Option<T> { Some(T); None; }
+  let gen_t: List<S1GenericParam> = s1_mod_generics1("T");
+  let t_ty: S1Type = s1_mod_type_simple("T");
+  let some_pl: Option<S1Type> = Some(t_ty);
+  let none_pl: Option<S1Type> = None;
+  let some_v: S1EnumVariant = S1EnumVariant { name: "Some"; payload_ty: some_pl; };
+  let none_v: S1EnumVariant = S1EnumVariant { name: "None"; payload_ty: none_pl; };
+  let opt_e: S1Enum = S1Enum { name: "Option"; generics: gen_t; variants: s1_mod_variants2(some_v, none_v); };
+  let opt_i: S1Item = Enum(opt_e);
+
+  // enum Result<T, E> { Ok(T); Err(E); }
+  let gen_te: List<S1GenericParam> = s1_mod_generics2("T", "E");
+  let ok_pl: Option<S1Type> = Some(s1_mod_type_simple("T"));
+  let err_pl: Option<S1Type> = Some(s1_mod_type_simple("E"));
+  let ok_v: S1EnumVariant = S1EnumVariant { name: "Ok"; payload_ty: ok_pl; };
+  let err_v: S1EnumVariant = S1EnumVariant { name: "Err"; payload_ty: err_pl; };
+  let res_e: S1Enum = S1Enum { name: "Result"; generics: gen_te; variants: s1_mod_variants2(ok_v, err_v); };
+  let res_i: S1Item = Enum(res_e);
+
+  // record Pair<A, B> { a: A; b: B; }
+  let gen_ab: List<S1GenericParam> = s1_mod_generics2("A", "B");
+  let a_f: S1RecordField = S1RecordField { name: "a"; ty: s1_mod_type_simple("A"); };
+  let b_f: S1RecordField = S1RecordField { name: "b"; ty: s1_mod_type_simple("B"); };
+  let pair_r: S1Record = S1Record { name: "Pair"; generics: gen_ab; fields: s1_mod_fields2(a_f, b_f); };
+  let pair_i: S1Item = Record(pair_r);
+
+  // record ListCons<T> { head: T; tail: List<T>; }
+  let gen_t2: List<S1GenericParam> = s1_mod_generics1("T");
+  let head_f: S1RecordField = S1RecordField { name: "head"; ty: s1_mod_type_simple("T"); };
+  let empty_ty_args: List<S1Type> = Nil;
+  let list_t_args: List<S1Type> =
+    Cons(ListCons<S1Type> { head: s1_mod_type_simple("T"); tail: empty_ty_args; });
+  let tail_f: S1RecordField = S1RecordField { name: "tail"; ty: s1_mod_type_ns(ns, "List", list_t_args); };
+  let listcons_r: S1Record = S1Record { name: "ListCons"; generics: gen_t2; fields: s1_mod_fields2(head_f, tail_f); };
+  let listcons_i: S1Item = Record(listcons_r);
+
+  // enum List<T> { Nil; Cons(ListCons<T>); }
+  let gen_t3: List<S1GenericParam> = s1_mod_generics1("T");
+  let nil_pl: Option<S1Type> = None;
+  let nil_v: S1EnumVariant = S1EnumVariant { name: "Nil"; payload_ty: nil_pl; };
+  let lc_args: List<S1Type> =
+    Cons(ListCons<S1Type> { head: s1_mod_type_simple("T"); tail: empty_ty_args; });
+  let cons_payload: S1Type = s1_mod_type_ns(ns, "ListCons", lc_args);
+  let cons_pl: Option<S1Type> = Some(cons_payload);
+  let cons_v: S1EnumVariant = S1EnumVariant { name: "Cons"; payload_ty: cons_pl; };
+  let list_e: S1Enum = S1Enum { name: "List"; generics: gen_t3; variants: s1_mod_variants2(nil_v, cons_v); };
+  let list_i: S1Item = Enum(list_e);
+
+  let empty_items: List<S1Item> = Nil;
+  let xs0: List<S1Item> = Cons(ListCons<S1Item> { head: opt_i; tail: empty_items; });
+  let xs1: List<S1Item> = Cons(ListCons<S1Item> { head: res_i; tail: xs0; });
+  let xs2: List<S1Item> = Cons(ListCons<S1Item> { head: pair_i; tail: xs1; });
+  let xs3: List<S1Item> = Cons(ListCons<S1Item> { head: listcons_i; tail: xs2; });
+  let xs4: List<S1Item> = Cons(ListCons<S1Item> { head: list_i; tail: xs3; });
+  xs4
+};
+
+fn s1_mod_infer_basename_no_ext(path: Text) -> Text {
+  let n: Int = text_len(path);
+
+  let i: Int = 0;
+  let last_sep: Option<Int> = None;
+  let scanning: Bool = true;
+  while scanning == true {
+    if i == n {
+      scanning = false;
+      0
+    } else {
+      let bopt: Option<Int> = text_byte_at(path, i);
+      match bopt {
+        None => {
+          scanning = false;
+          0
+        };
+        Some(b) => {
+          if b == 47 {
+            last_sep = Some(i);
+            0
+          } else { 0 };
+          i = i + 1;
+          0
+        };
+      }
+    }
+  };
+
+  let start: Int = 0;
+  match last_sep {
+    None => 0;
+    Some(p) => {
+      start = p + 1;
+      0
+    };
+  };
+
+  let j: Int = start;
+  let last_dot: Option<Int> = None;
+  let scanning2: Bool = true;
+  while scanning2 == true {
+    if j == n {
+      scanning2 = false;
+      0
+    } else {
+      let bopt: Option<Int> = text_byte_at(path, j);
+      match bopt {
+        None => {
+          scanning2 = false;
+          0
+        };
+        Some(b) => {
+          if b == 46 {
+            last_dot = Some(j);
+            0
+          } else { 0 };
+          j = j + 1;
+          0
+        };
+      }
+    }
+  };
+
+  let end: Int = n;
+  match last_dot {
+    None => 0;
+    Some(p) => {
+      end = p;
+      0
+    };
+  };
+
+  let slice_opt: Option<Text> = text_slice(path, start, end);
+  match slice_opt {
+    Some(s) => s;
+    None => path;
+  }
+};
+
+fn s1_mod_is_prelude_path(path: Text) -> Bool {
+  s1_mod_infer_basename_no_ext(path) == "prelude"
+};
+
+fn s1_mod_reverse_modules(xs: List<S1Module>) -> List<S1Module> {
+  let acc: List<S1Module> = Nil;
+  let cur: List<S1Module> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Module> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_mod_build(items: List<S1Item>) -> List<S1Module> {
+  let rev: List<S1Module> = Nil;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Import(imp) => {
+            if s1_mod_is_prelude_path(imp.path) == true {
+              let stub: List<S1Item> = s1_mod_prelude_stub_items(imp.ns);
+              rev = Cons(ListCons<S1Module> { head: S1Module { ns: imp.ns; items: stub; }; tail: rev; });
+              0
+            } else { 0 };
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  s1_mod_reverse_modules(rev)
+};
+
+fn s1_mod_lookup(mods: List<S1Module>, ns: Text) -> Option<S1Module> {
+  let out: Option<S1Module> = None;
+  let cur: List<S1Module> = mods;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head.ns == ns {
+          out = Some(cell.head);
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_mod_module_has_type(m: S1Module, name: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<S1Item> = m.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Record(r) => {
+            if r.name == name {
+              found = true;
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          Enum(e) => {
+            if e.name == name {
+              found = true;
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  found
+};
+
+fn s1_mod_lookup_enum(m: S1Module, name: Text) -> Option<S1Enum> {
+  let out: Option<S1Enum> = None;
+  let cur: List<S1Item> = m.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Enum(e) => {
+            if e.name == name {
+              out = Some(e);
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_mod_lookup_record(m: S1Module, name: Text) -> Option<S1Record> {
+  let out: Option<S1Record> = None;
+  let cur: List<S1Item> = m.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Record(r) => {
+            if r.name == name {
+              out = Some(r);
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  out
+};
