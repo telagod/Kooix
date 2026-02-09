@@ -1,0 +1,1709 @@
+import "../stdlib/prelude";
+import "diag";
+import "ast";
+
+record S1VarBind { name: Text; ty: S1Type; };
+record S1FnSig { name: Text; params: List<S1Type>; ret: S1Type; };
+record S1Subst { name: Text; ty: S1Type; };
+
+fn s1_tc_empty_path() -> S1Path {
+  let segs: List<Text> = Nil;
+  S1Path { segments: segs; }
+};
+
+fn s1_tc_simple_path(name: Text) -> S1Path {
+  let empty: List<Text> = Nil;
+  let segs: List<Text> = Cons(ListCons<Text> { head: name; tail: empty; });
+  S1Path { segments: segs; }
+};
+
+fn s1_tc_builtin_type(name: Text) -> S1Type {
+  let args: List<S1Type> = Nil;
+  S1Type { path: s1_tc_simple_path(name); args: args; }
+};
+
+fn s1_tc_unit_type() -> S1Type { s1_tc_builtin_type("Unit") };
+fn s1_tc_int_type() -> S1Type { s1_tc_builtin_type("Int") };
+fn s1_tc_bool_type() -> S1Type { s1_tc_builtin_type("Bool") };
+fn s1_tc_text_type() -> S1Type { s1_tc_builtin_type("Text") };
+
+fn s1_tc_reverse_texts(xs: List<Text>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<Text> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_tc_reverse_types(xs: List<S1Type>) -> List<S1Type> {
+  let acc: List<S1Type> = Nil;
+  let cur: List<S1Type> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1Type> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_tc_reverse_var_binds(xs: List<S1VarBind>) -> List<S1VarBind> {
+  let acc: List<S1VarBind> = Nil;
+  let cur: List<S1VarBind> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1VarBind> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_tc_texts_eq(a: List<Text>, b: List<Text>) -> Bool {
+  let eq: Bool = true;
+  let ca: List<Text> = a;
+  let cb: List<Text> = b;
+  let done: Bool = false;
+  while done == false {
+    match ca {
+      Nil => {
+        match cb {
+          Nil => {
+            done = true;
+            0
+          };
+          _ => {
+            eq = false;
+            done = true;
+            0
+          };
+        };
+        0
+      };
+      Cons(aa) => {
+        match cb {
+          Nil => {
+            eq = false;
+            done = true;
+            0
+          };
+          Cons(bb) => {
+            if aa.head == bb.head {
+              ca = aa.tail;
+              cb = bb.tail;
+              0
+            } else {
+              eq = false;
+              done = true;
+              0
+            };
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  eq
+};
+
+fn s1_tc_types_eq(a: S1Type, b: S1Type) -> Bool {
+  let eq: Bool = true;
+  if s1_tc_texts_eq(a.path.segments, b.path.segments) == false {
+    eq = false;
+    0
+  } else { 0 };
+
+  if eq == true {
+    let ca: List<S1Type> = a.args;
+    let cb: List<S1Type> = b.args;
+    let done: Bool = false;
+    while done == false {
+      match ca {
+        Nil => {
+          match cb {
+            Nil => {
+              done = true;
+              0
+            };
+            _ => {
+              eq = false;
+              done = true;
+              0
+            };
+          };
+          0
+        };
+        Cons(aa) => {
+          match cb {
+            Nil => {
+              eq = false;
+              done = true;
+              0
+            };
+            Cons(bb) => {
+              if s1_tc_types_eq(aa.head, bb.head) == true {
+                ca = aa.tail;
+                cb = bb.tail;
+                0
+              } else {
+                eq = false;
+                done = true;
+                0
+              };
+              0
+            };
+          };
+          0
+        };
+      }
+    };
+    0
+  } else { 0 };
+
+  eq
+};
+
+fn s1_tc_path_singleton(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Cons(c0) => {
+      match c0.tail {
+        Nil => {
+          out = Some(c0.head);
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
+fn s1_tc_path_two(path: S1Path) -> Option<Pair<Text, Text>> {
+  let out: Option<Pair<Text, Text>> = None;
+  match path.segments {
+    Cons(a0) => {
+      match a0.tail {
+        Cons(a1) => {
+          match a1.tail {
+            Nil => {
+              out = Some(Pair<Text, Text> { a: a0.head; b: a1.head; });
+              0
+            };
+            _ => 0;
+          };
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
+fn s1_tc_list_contains_text(xs: List<Text>, needle: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head == needle {
+          found = true;
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  found
+};
+
+fn s1_tc_collect_generic_names(generics: List<S1GenericParam>) -> List<Text> {
+  let rev: List<Text> = Nil;
+  let cur: List<S1GenericParam> = generics;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        rev = Cons(ListCons<Text> { head: cell.head.name; tail: rev; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  s1_tc_reverse_texts(rev)
+};
+
+fn s1_tc_lookup_var(env: List<S1VarBind>, name: Text) -> Option<S1Type> {
+  let out: Option<S1Type> = None;
+  let cur: List<S1VarBind> = env;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head.name == name {
+          out = Some(cell.head.ty);
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_env_add(env: List<S1VarBind>, name: Text, ty: S1Type) -> List<S1VarBind> {
+  Cons(ListCons<S1VarBind> { head: S1VarBind { name: name; ty: ty; }; tail: env; })
+};
+
+fn s1_tc_collect_fn_sigs(items: List<S1Item>) -> List<S1FnSig> {
+  let rev: List<S1FnSig> = Nil;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Function(f) => {
+            let params_rev: List<S1Type> = Nil;
+            let pcur: List<S1Param> = f.params;
+            let pdone: Bool = false;
+            while pdone == false {
+              match pcur {
+                Nil => {
+                  pdone = true;
+                  0
+                };
+                Cons(pcell) => {
+                  params_rev =
+                    Cons(ListCons<S1Type> { head: pcell.head.ty; tail: params_rev; });
+                  pcur = pcell.tail;
+                  0
+                };
+              }
+            };
+            let params: List<S1Type> = s1_tc_reverse_types(params_rev);
+            rev = Cons(ListCons<S1FnSig> {
+              head: S1FnSig { name: f.name; params: params; ret: f.return_type; };
+              tail: rev;
+            });
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  // reverse by folding
+  let acc: List<S1FnSig> = Nil;
+  let cur2: List<S1FnSig> = rev;
+  let done2: Bool = false;
+  while done2 == false {
+    match cur2 {
+      Nil => {
+        done2 = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1FnSig> { head: cell.head; tail: acc; });
+        cur2 = cell.tail;
+        0
+      };
+    }
+  };
+  acc
+};
+
+fn s1_tc_lookup_fn(fns: List<S1FnSig>, name: Text) -> Option<S1FnSig> {
+  let out: Option<S1FnSig> = None;
+  let cur: List<S1FnSig> = fns;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head.name == name {
+          out = Some(cell.head);
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_lookup_enum(items: List<S1Item>, name: Text) -> Option<S1Enum> {
+  let out: Option<S1Enum> = None;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Enum(e) => {
+            if e.name == name {
+              out = Some(e);
+              done = true;
+              0
+            } else { 0 };
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_lookup_record(items: List<S1Item>, name: Text) -> Option<S1Record> {
+  let out: Option<S1Record> = None;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Record(r) => {
+            if r.name == name {
+              out = Some(r);
+              done = true;
+              0
+            } else { 0 };
+            0
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_lookup_enum_variant(e: S1Enum, vname: Text) -> Option<S1EnumVariant> {
+  let out: Option<S1EnumVariant> = None;
+  let cur: List<S1EnumVariant> = e.variants;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head.name == vname {
+          out = Some(cell.head);
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_subst_lookup(subst: List<S1Subst>, name: Text) -> Option<S1Type> {
+  let out: Option<S1Type> = None;
+  let cur: List<S1Subst> = subst;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if cell.head.name == name {
+          out = Some(cell.head.ty);
+          done = true;
+          0
+        } else {
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_tc_subst_add(subst: List<S1Subst>, name: Text, ty: S1Type) -> List<S1Subst> {
+  Cons(ListCons<S1Subst> { head: S1Subst { name: name; ty: ty; }; tail: subst; })
+};
+
+fn s1_tc_apply_subst(ty: S1Type, gen_names: List<Text>, subst: List<S1Subst>) -> S1Type {
+  // Only substitute simple generic name (no args).
+  let out: S1Type = ty;
+  let name_opt: Option<Text> = s1_tc_path_singleton(ty.path);
+  match name_opt {
+    None => 0;
+    Some(n) => {
+      if s1_tc_list_contains_text(gen_names, n) == true {
+        match s1_tc_subst_lookup(subst, n) {
+          None => 0;
+          Some(t2) => {
+            out = t2;
+            0
+          };
+        };
+        0
+      } else { 0 };
+      0
+    };
+  };
+
+  // Recurse into args if not replaced.
+  if s1_tc_types_eq(out, ty) == true {
+    let args_rev: List<S1Type> = Nil;
+    let cur: List<S1Type> = ty.args;
+    let done: Bool = false;
+    while done == false {
+      match cur {
+        Nil => {
+          done = true;
+          0
+        };
+        Cons(cell) => {
+          let a2: S1Type = s1_tc_apply_subst(cell.head, gen_names, subst);
+          args_rev = Cons(ListCons<S1Type> { head: a2; tail: args_rev; });
+          cur = cell.tail;
+          0
+        };
+      }
+    };
+    out = S1Type { path: ty.path; args: s1_tc_reverse_types(args_rev); };
+    0
+  } else { 0 };
+
+  out
+};
+
+fn s1_tc_unify(
+  pattern: S1Type,
+  actual: S1Type,
+  gen_names: List<Text>,
+  subst_in: List<S1Subst>
+) -> Result<List<S1Subst>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: cannot unify types");
+  let subst: List<S1Subst> = subst_in;
+
+  let patt_name_opt: Option<Text> = s1_tc_path_singleton(pattern.path);
+  match patt_name_opt {
+    Some(pn) => {
+      let patt_args_empty: Bool = false;
+      match pattern.args {
+        Nil => {
+          patt_args_empty = true;
+          0
+        };
+        _ => 0;
+      };
+
+      if s1_tc_list_contains_text(gen_names, pn) == true {
+        if patt_args_empty == true {
+        match s1_tc_subst_lookup(subst, pn) {
+          None => {
+            subst = s1_tc_subst_add(subst, pn, actual);
+            0
+          };
+          Some(bound) => {
+            if s1_tc_types_eq(bound, actual) == true {
+              0
+            } else {
+              ok = false;
+              0
+            };
+            0
+          };
+        };
+        0
+        } else { 0 };
+        0
+      } else { 0 };
+      0
+    };
+    _ => 0;
+  };
+
+  if ok == true {
+    // If it's not a generic var, require structural equality.
+    let is_generic: Bool = false;
+    match patt_name_opt {
+      None => 0;
+      Some(pn2) => {
+        let patt_args_empty2: Bool = false;
+        match pattern.args {
+          Nil => {
+            patt_args_empty2 = true;
+            0
+          };
+          _ => 0;
+        };
+
+        if s1_tc_list_contains_text(gen_names, pn2) == true {
+          if patt_args_empty2 == true {
+            is_generic = true;
+            0
+          } else { 0 };
+          0
+        } else { 0 };
+        0
+      };
+    };
+
+    if is_generic == false {
+      if s1_tc_texts_eq(pattern.path.segments, actual.path.segments) == false {
+        ok = false;
+        0
+      } else { 0 };
+
+      if ok == true {
+        // unify args
+        let pa: List<S1Type> = pattern.args;
+        let aa: List<S1Type> = actual.args;
+        let cpa: List<S1Type> = pa;
+        let caa: List<S1Type> = aa;
+        let done: Bool = false;
+        while done == false {
+          match cpa {
+            Nil => {
+              match caa {
+                Nil => {
+                  done = true;
+                  0
+                };
+                _ => {
+                  ok = false;
+                  done = true;
+                  0
+                };
+              };
+              0
+            };
+            Cons(pc) => {
+              match caa {
+                Nil => {
+                  ok = false;
+                  done = true;
+                  0
+                };
+                Cons(ac) => {
+                  let r: Result<List<S1Subst>, S1Diagnostic> =
+                    s1_tc_unify(pc.head, ac.head, gen_names, subst);
+                  match r {
+                    Err(e) => {
+                      ok = false;
+                      diag = e;
+                      done = true;
+                      0
+                    };
+                    Ok(s2) => {
+                      subst = s2;
+                      cpa = pc.tail;
+                      caa = ac.tail;
+                      0
+                    };
+                  };
+                  0
+                };
+              };
+              0
+            };
+          }
+        };
+        0
+      } else { 0 };
+      0
+    } else { 0 };
+    0
+  } else { 0 };
+
+  let out: Result<List<S1Subst>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(subst);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_tc_block_type(
+  items: List<S1Item>,
+  fns: List<S1FnSig>,
+  env_in: List<S1VarBind>,
+  ret_ty: S1Type,
+  expected: Option<S1Type>,
+  block: S1Block
+) -> Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: expected block");
+
+  let env: List<S1VarBind> = env_in;
+  let cur: List<S1Stmt> = block.stmts;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        let st: S1Stmt = cell.head;
+        match st {
+          Let(l) => {
+            let r: Result<S1Type, S1Diagnostic> =
+              s1_tc_expr_type(items, fns, env, Some(l.ty), l.value);
+            match r {
+              Err(e) => {
+                ok = false;
+                diag = e;
+                done = true;
+                0
+              };
+              Ok(vty) => {
+                if s1_tc_types_eq(vty, l.ty) == true {
+                  env = s1_tc_env_add(env, l.name, l.ty);
+                  cur = cell.tail;
+                  0
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: let type mismatch");
+                  done = true;
+                  0
+                };
+                0
+              };
+            };
+            0
+          };
+          Assign(a) => {
+            match s1_tc_lookup_var(env, a.name) {
+              None => {
+                ok = false;
+                diag = s1_diag(Error, 0, 0, "typecheck: assignment to unknown variable");
+                done = true;
+                0
+              };
+              Some(vty) => {
+                let r: Result<S1Type, S1Diagnostic> =
+                  s1_tc_expr_type(items, fns, env, Some(vty), a.value);
+                match r {
+                  Err(e) => {
+                    ok = false;
+                    diag = e;
+                    done = true;
+                    0
+                  };
+                  Ok(et) => {
+                    if s1_tc_types_eq(et, vty) == true {
+                      cur = cell.tail;
+                      0
+                    } else {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: assignment type mismatch");
+                      done = true;
+                      0
+                    };
+                    0
+                  };
+                };
+                0
+              };
+            };
+            0
+          };
+          Return(rst) => {
+            let r: Result<S1Type, S1Diagnostic> =
+              s1_tc_expr_type(items, fns, env, Some(ret_ty), rst.value);
+            match r {
+              Err(e) => {
+                ok = false;
+                diag = e;
+                done = true;
+                0
+              };
+              Ok(vty) => {
+                if s1_tc_types_eq(vty, ret_ty) == true {
+                  cur = cell.tail;
+                  0
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: return type mismatch");
+                  done = true;
+                  0
+                };
+                0
+              };
+            };
+            0
+          };
+          While(w) => {
+            let cond_r: Result<S1Type, S1Diagnostic> =
+              s1_tc_expr_type(items, fns, env, Some(s1_tc_bool_type()), w.cond);
+            match cond_r {
+              Err(e) => {
+                ok = false;
+                diag = e;
+                done = true;
+                0
+              };
+              Ok(ct) => {
+                if s1_tc_types_eq(ct, s1_tc_bool_type()) == true {
+                  let body_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+                    s1_tc_block_type(items, fns, env, ret_ty, None, w.body);
+                  match body_r {
+                    Err(e2) => {
+                      ok = false;
+                      diag = e2;
+                      done = true;
+                      0
+                    };
+                    Ok(_pair) => {
+                      cur = cell.tail;
+                      0
+                    };
+                  };
+                  0
+                } else {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: while condition must be Bool");
+                  done = true;
+                  0
+                };
+                0
+              };
+            };
+            0
+          };
+          ExprStmt(e) => {
+            let r: Result<S1Type, S1Diagnostic> =
+              s1_tc_expr_type(items, fns, env, None, e);
+            match r {
+              Err(e2) => {
+                ok = false;
+                diag = e2;
+                done = true;
+                0
+              };
+              Ok(_t) => {
+                cur = cell.tail;
+                0
+              };
+            };
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+
+  let tail_ty: S1Type = s1_tc_unit_type();
+  if ok == true {
+    match block.result {
+      None => {
+        tail_ty = s1_tc_unit_type();
+        0
+      };
+      Some(e) => {
+        let r: Result<S1Type, S1Diagnostic> =
+          s1_tc_expr_type(items, fns, env, expected, e);
+        match r {
+          Err(e3) => {
+            ok = false;
+            diag = e3;
+            0
+          };
+          Ok(t) => {
+            tail_ty = t;
+            0
+          };
+        };
+        0
+      };
+    };
+    0
+  } else { 0 };
+
+  let out: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(Pair<S1Type, List<S1VarBind>> { a: tail_ty; b: env; });
+  };
+  out
+};
+
+fn s1_tc_record_field_type(items: List<S1Item>, base_ty: S1Type, field: Text) -> Result<S1Type, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: member access requires record type");
+  let out_ty: S1Type = s1_tc_unit_type();
+
+  let head_opt: Option<Text> = s1_tc_path_singleton(base_ty.path);
+  match head_opt {
+    None => {
+      ok = false;
+      0
+    };
+    Some(name) => {
+      let rec_opt: Option<S1Record> = s1_tc_lookup_record(items, name);
+      match rec_opt {
+        None => {
+          ok = false;
+          0
+        };
+        Some(rec) => {
+          let gen_names: List<Text> = s1_tc_collect_generic_names(rec.generics);
+          let subst: List<S1Subst> = Nil;
+
+          // Bind generics from base_ty.args by position.
+          let gcur: List<Text> = gen_names;
+          let acur: List<S1Type> = base_ty.args;
+          let done: Bool = false;
+          let subst2: List<S1Subst> = subst;
+          while done == false {
+            match gcur {
+              Nil => {
+                done = true;
+                0
+              };
+              Cons(gcell) => {
+                match acur {
+                  Nil => {
+                    done = true;
+                    0
+                  };
+                  Cons(acell) => {
+                    subst2 = s1_tc_subst_add(subst2, gcell.head, acell.head);
+                    gcur = gcell.tail;
+                    acur = acell.tail;
+                    0
+                  };
+                };
+                0
+              };
+            }
+          };
+
+          let fcur: List<S1RecordField> = rec.fields;
+          let fdone: Bool = false;
+          while fdone == false {
+            match fcur {
+              Nil => {
+                ok = false;
+                diag = s1_diag(Error, 0, 0, "typecheck: unknown record field");
+                fdone = true;
+                0
+              };
+              Cons(fcell) => {
+                if fcell.head.name == field {
+                  out_ty = s1_tc_apply_subst(fcell.head.ty, gen_names, subst2);
+                  fdone = true;
+                  0
+                } else {
+                  fcur = fcell.tail;
+                  0
+                };
+                0
+              };
+            }
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+
+  let out: Result<S1Type, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(out_ty);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_tc_expr_type(
+  items: List<S1Item>,
+  fns: List<S1FnSig>,
+  env: List<S1VarBind>,
+  expected: Option<S1Type>,
+  expr: S1Expr
+) -> Result<S1Type, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: expected expression");
+  let ty: S1Type = s1_tc_unit_type();
+
+  match expr {
+    IntLit(_) => {
+      ty = s1_tc_int_type();
+      0
+    };
+    StringLit(_) => {
+      ty = s1_tc_text_type();
+      0
+    };
+    Path(p) => {
+      let name_opt: Option<Text> = s1_tc_path_singleton(p);
+      match name_opt {
+        None => {
+          ok = false;
+          diag = s1_diag(Error, 0, 0, "typecheck: unsupported qualified value path");
+          0
+        };
+        Some(n) => {
+          match s1_tc_lookup_var(env, n) {
+            None => {
+              ok = false;
+              diag = s1_diag(Error, 0, 0, "typecheck: unknown variable");
+              0
+            };
+            Some(vty) => {
+              ty = vty;
+              0
+            };
+          };
+          0
+        };
+      };
+      0
+    };
+    Binary(b) => {
+      // type left/right without expected; operations constrain them.
+      let l_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, None, b.left);
+      match l_r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(lt) => {
+          let r_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, Some(lt), b.right);
+          match r_r {
+            Err(e2) => {
+              ok = false;
+              diag = e2;
+              0
+            };
+            Ok(rt) => {
+              match b.op {
+                Add => {
+                  if s1_tc_types_eq(lt, s1_tc_int_type()) == true {
+                    if s1_tc_types_eq(rt, s1_tc_int_type()) == true {
+                      ty = s1_tc_int_type();
+                      0
+                    } else {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: '+' requires Int + Int");
+                      0
+                    };
+                    0
+                  } else {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: '+' requires Int + Int");
+                    0
+                  };
+                  0
+                };
+                Equals => {
+                  if s1_tc_types_eq(lt, rt) == true {
+                    ty = s1_tc_bool_type();
+                    0
+                  } else {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: '==' requires same types");
+                    0
+                  };
+                  0
+                };
+                NotEquals => {
+                  if s1_tc_types_eq(lt, rt) == true {
+                    ty = s1_tc_bool_type();
+                    0
+                  } else {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: '!=' requires same types");
+                    0
+                  };
+                  0
+                };
+              };
+              0
+            };
+          };
+          0
+        };
+      };
+      0
+    };
+    Member(m) => {
+      let base_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, fns, env, None, m.base);
+      match base_r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(bt) => {
+          let fr: Result<S1Type, S1Diagnostic> = s1_tc_record_field_type(items, bt, m.name);
+          match fr {
+            Err(e2) => {
+              ok = false;
+              diag = e2;
+              0
+            };
+            Ok(ft) => {
+              ty = ft;
+              0
+            };
+          };
+          0
+        };
+      };
+      0
+    };
+    Block(b) => {
+      let r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+        s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, b);
+      match r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(pair) => {
+          ty = pair.a;
+          0
+        };
+      };
+      0
+    };
+    If(i) => {
+      let cond_r: Result<S1Type, S1Diagnostic> =
+        s1_tc_expr_type(items, fns, env, Some(s1_tc_bool_type()), i.cond);
+      match cond_r {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(ct) => {
+          if s1_tc_types_eq(ct, s1_tc_bool_type()) == false {
+            ok = false;
+            diag = s1_diag(Error, 0, 0, "typecheck: if condition must be Bool");
+            0
+          } else { 0 };
+          0
+        };
+      };
+
+      if ok == true {
+        let then_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+          s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, i.then_block);
+        match then_r {
+          Err(e2) => {
+            ok = false;
+            diag = e2;
+            0
+          };
+          Ok(tp) => {
+            let then_ty: S1Type = tp.a;
+            match i.else_block {
+              None => {
+                ty = s1_tc_unit_type();
+                0
+              };
+              Some(eb) => {
+                let else_r: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+                  s1_tc_block_type(items, fns, env, s1_tc_unit_type(), expected, eb);
+                match else_r {
+                  Err(e3) => {
+                    ok = false;
+                    diag = e3;
+                    0
+                  };
+                  Ok(ep) => {
+                    if s1_tc_types_eq(then_ty, ep.a) == true {
+                      ty = then_ty;
+                      0
+                    } else {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: if branches must have same type");
+                      0
+                    };
+                    0
+                  };
+                };
+                0
+              };
+            };
+            0
+          };
+        };
+        0
+      } else { 0 };
+      0
+    };
+    Match(m) => {
+      let _scrut: Result<S1Type, S1Diagnostic> =
+        s1_tc_expr_type(items, fns, env, None, m.scrutinee);
+      match _scrut {
+        Err(e) => {
+          ok = false;
+          diag = e;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let arm_ty_opt: Option<S1Type> = None;
+        let cur: List<S1MatchArm> = m.arms;
+        let done: Bool = false;
+        while done == false {
+          match cur {
+            Nil => {
+              done = true;
+              0
+            };
+            Cons(cell) => {
+              let vr: Result<S1Type, S1Diagnostic> =
+                s1_tc_expr_type(items, fns, env, expected, cell.head.value);
+              match vr {
+                Err(e2) => {
+                  ok = false;
+                  diag = e2;
+                  done = true;
+                  0
+                };
+                Ok(vt) => {
+                  match arm_ty_opt {
+                    None => {
+                      arm_ty_opt = Some(vt);
+                      cur = cell.tail;
+                      0
+                    };
+                    Some(prev) => {
+                      if s1_tc_types_eq(prev, vt) == true {
+                        cur = cell.tail;
+                        0
+                      } else {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: match arms must have same type");
+                        done = true;
+                        0
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+              };
+              0
+            };
+          }
+        };
+
+        match arm_ty_opt {
+          None => {
+            ok = false;
+            diag = s1_diag(Error, 0, 0, "typecheck: match must have at least one arm");
+            0
+          };
+          Some(t0) => {
+            ty = t0;
+            0
+          };
+        };
+        0
+      } else { 0 };
+      0
+    };
+    Call(c) => {
+      // Only support calls where callee is Path for Stage1.
+      match c.callee {
+        Path(cp) => {
+          let fn_name_opt: Option<Text> = s1_tc_path_singleton(cp);
+          match fn_name_opt {
+            Some(fname) => {
+              match s1_tc_lookup_fn(fns, fname) {
+                None => {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: unknown function");
+                  0
+                };
+                Some(sig) => {
+                  // check args
+                  let pcur: List<S1Type> = sig.params;
+                  let acur: List<S1Expr> = c.args;
+                  let pc: List<S1Type> = pcur;
+                  let ac: List<S1Expr> = acur;
+                  let done: Bool = false;
+                  while done == false {
+                    match pc {
+                      Nil => {
+                        match ac {
+                          Nil => {
+                            done = true;
+                            0
+                          };
+                          _ => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: too many call arguments");
+                            done = true;
+                            0
+                          };
+                        };
+                        0
+                      };
+                      Cons(pcell) => {
+                        match ac {
+                          Nil => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: missing call arguments");
+                            done = true;
+                            0
+                          };
+                          Cons(acell) => {
+                            let ar: Result<S1Type, S1Diagnostic> =
+                              s1_tc_expr_type(items, fns, env, Some(pcell.head), acell.head);
+                            match ar {
+                              Err(e2) => {
+                                ok = false;
+                                diag = e2;
+                                done = true;
+                                0
+                              };
+                              Ok(at) => {
+                                if s1_tc_types_eq(at, pcell.head) == true {
+                                  pc = pcell.tail;
+                                  ac = acell.tail;
+                                  0
+                                } else {
+                                  ok = false;
+                                  diag = s1_diag(Error, 0, 0, "typecheck: call argument type mismatch");
+                                  done = true;
+                                  0
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+
+                  if ok == true {
+                    ty = sig.ret;
+                    0
+                  } else { 0 };
+                  0
+                };
+              };
+              0
+            };
+            None => {
+              // Try enum constructor: Enum::Variant(...)
+              let two_opt: Option<Pair<Text, Text>> = s1_tc_path_two(cp);
+              match two_opt {
+                None => {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: unsupported call callee path");
+                  0
+                };
+                Some(pair) => {
+                  let enum_opt: Option<S1Enum> = s1_tc_lookup_enum(items, pair.a);
+                  match enum_opt {
+                    None => {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                      0
+                    };
+                    Some(ed) => {
+                      let var_opt: Option<S1EnumVariant> = s1_tc_lookup_enum_variant(ed, pair.b);
+                      match var_opt {
+                        None => {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: unknown enum variant in constructor call");
+                          0
+                        };
+                        Some(vd) => {
+                          let enum_path: S1Path = s1_tc_simple_path(ed.name);
+                          let gen_names: List<Text> = s1_tc_collect_generic_names(ed.generics);
+                          let subst: List<S1Subst> = Nil;
+
+                          match vd.payload_ty {
+                            None => {
+                              // unit variant: need expected to fix generics (or no generics).
+                              match expected {
+                                Some(et) => {
+                                  // expected must be EnumName<...>
+                                  let head_ok: Bool = s1_tc_texts_eq(et.path.segments, enum_path.segments);
+                                  if head_ok == false {
+                                    ok = false;
+                                    diag = s1_diag(Error, 0, 0, "typecheck: constructor expected type mismatch");
+                                    0
+                                  } else {
+                                    ty = et;
+                                    0
+                                  };
+                                  0
+                                };
+                                None => {
+                                  match gen_names {
+                                    Nil => {
+                                      let empty_args: List<S1Type> = Nil;
+                                      ty = S1Type { path: s1_tc_simple_path(ed.name); args: empty_args; };
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic enum constructor without expected type");
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                              };
+                              0
+                            };
+                            Some(pat_ty) => {
+                              // payload variant: exactly 1 arg
+                              match c.args {
+                                Cons(arg0) => {
+                                  match arg0.tail {
+                                    Nil => {
+                                      let at_r: Result<S1Type, S1Diagnostic> =
+                                        s1_tc_expr_type(items, fns, env, Some(pat_ty), arg0.head);
+                                      match at_r {
+                                        Err(e4) => {
+                                          ok = false;
+                                          diag = e4;
+                                          0
+                                        };
+                                        Ok(at) => {
+                                          let uni: Result<List<S1Subst>, S1Diagnostic> =
+                                            s1_tc_unify(pat_ty, at, gen_names, subst);
+                                          match uni {
+                                            Err(e5) => {
+                                              ok = false;
+                                              diag = e5;
+                                              0
+                                            };
+                                            Ok(s2) => {
+                                              // build Enum<...> args in generic order
+                                              let args_rev: List<S1Type> = Nil;
+                                              let gcur: List<Text> = gen_names;
+                                              let has_expected: Bool = false;
+                                              let ecur: List<S1Type> = Nil;
+
+                                              match expected {
+                                                None => 0;
+                                                Some(et2) => {
+                                                  if s1_tc_texts_eq(et2.path.segments, enum_path.segments) == true {
+                                                    has_expected = true;
+                                                    ecur = et2.args;
+                                                    0
+                                                  } else { 0 };
+                                                  0
+                                                };
+                                              };
+
+                                              let done2: Bool = false;
+                                              while done2 == false {
+                                                match gcur {
+                                                  Nil => {
+                                                    done2 = true;
+                                                    0
+                                                  };
+                                                  Cons(gcell) => {
+                                                    let bound_opt: Option<S1Type> =
+                                                      s1_tc_subst_lookup(s2, gcell.head);
+                                                    match bound_opt {
+                                                      None => {
+                                                        if has_expected == true {
+                                                          match ecur {
+                                                            Nil => {
+                                                              ok = false;
+                                                              diag = s1_diag(Error, 0, 0, "typecheck: constructor expected type missing args");
+                                                              done2 = true;
+                                                              0
+                                                            };
+                                                            Cons(ecell) => {
+                                                              args_rev = Cons(ListCons<S1Type> { head: ecell.head; tail: args_rev; });
+                                                              ecur = ecell.tail;
+                                                              gcur = gcell.tail;
+                                                              0
+                                                            };
+                                                          };
+                                                          0
+                                                        } else {
+                                                          ok = false;
+                                                          diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic enum constructor");
+                                                          done2 = true;
+                                                          0
+                                                        };
+                                                        0
+                                                      };
+                                                      Some(t0) => {
+                                                        args_rev = Cons(ListCons<S1Type> { head: t0; tail: args_rev; });
+                                                        if has_expected == true {
+                                                          match ecur {
+                                                            Nil => 0;
+                                                            Cons(ecell) => {
+                                                              ecur = ecell.tail;
+                                                              0
+                                                            };
+                                                          };
+                                                          0
+                                                        } else { 0 };
+                                                        gcur = gcell.tail;
+                                                        0
+                                                      };
+                                                    };
+                                                    0
+                                                  };
+                                                }
+                                              };
+
+                                              if ok == true {
+                                                let args: List<S1Type> = s1_tc_reverse_types(args_rev);
+                                                ty = S1Type { path: s1_tc_simple_path(ed.name); args: args; };
+                                                0
+                                              } else { 0 };
+                                              0
+                                            };
+                                          };
+                                          0
+                                        };
+                                      };
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                                _ => {
+                                  ok = false;
+                                  diag = s1_diag(Error, 0, 0, "typecheck: constructor expects single argument");
+                                  0
+                                };
+                              };
+                              0
+                            };
+                          };
+                          0
+                        };
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+              };
+              0
+            };
+          };
+          0
+        };
+        _ => {
+          ok = false;
+          diag = s1_diag(Error, 0, 0, "typecheck: only Path callees are supported in Stage1");
+          0
+        };
+      };
+      0
+    };
+  };
+
+  let out: Result<S1Type, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(ty);
+    0
+  } else { 0 };
+  out
+};
+
+fn s1_typecheck_program(p: S1Program) -> Result<S1Program, S1Diagnostic>
+intent "Stage1 typecheck (pure): validate S1Block let/assign/return/call + minimal expressions"
+evidence {
+  trace "stage1.typecheck.v0";
+  metrics [stage1_typecheck_calls];
+}
+{
+  let fns: List<S1FnSig> = s1_tc_collect_fn_sigs(p.items);
+
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: error");
+
+  let cur: List<S1Item> = p.items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Function(f) => {
+            match f.body {
+              None => 0;
+              Some(b) => {
+                // initial env = params
+                let env: List<S1VarBind> = Nil;
+                let env2: List<S1VarBind> = env;
+                let pcur: List<S1Param> = f.params;
+                let pdone: Bool = false;
+                while pdone == false {
+                  match pcur {
+                    Nil => {
+                      pdone = true;
+                      0
+                    };
+                    Cons(pcell) => {
+                      env2 = s1_tc_env_add(env2, pcell.head.name, pcell.head.ty);
+                      pcur = pcell.tail;
+                      0
+                    };
+                  }
+                };
+
+                let br: Result<Pair<S1Type, List<S1VarBind>>, S1Diagnostic> =
+                  s1_tc_block_type(p.items, fns, env2, f.return_type, Some(f.return_type), b);
+                match br {
+                  Err(e) => {
+                    ok = false;
+                    diag = e;
+                    done = true;
+                    0
+                  };
+                  Ok(pair) => {
+                    if s1_tc_types_eq(pair.a, f.return_type) == true {
+                      0
+                    } else {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: function body type mismatch");
+                      done = true;
+                      0
+                    };
+                    0
+                  };
+                };
+                0
+              };
+            };
+            0
+          };
+          _ => 0;
+        };
+
+        if ok == true {
+          cur = cell.tail;
+          0
+        } else {
+          done = true;
+          0
+        };
+        0
+      };
+    }
+  };
+
+  let out: Result<S1Program, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(p);
+  };
+  out
+};

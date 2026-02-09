@@ -4,6 +4,7 @@ import "token";
 import "lexer";
 import "parser";
 import "resolver";
+import "typecheck";
 
 fn s1_compile(source: Text) -> Result<Int, S1Diagnostic>
 intent "Stage1 compiler (pure): source -> (future) diagnostics + artifacts"
@@ -20,7 +21,13 @@ evidence {
         Ok(p) => {
           let resolved: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
           match resolved {
-            Ok(_p2) => Ok(0);
+            Ok(p2) => {
+              let checked: Result<S1Program, S1Diagnostic> = s1_typecheck_program(p2);
+              match checked {
+                Ok(_p3) => Ok(0);
+                Err(e4) => Err(e4);
+              }
+            };
             Err(e3) => Err(e3);
           }
         };
