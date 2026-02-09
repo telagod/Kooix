@@ -6,6 +6,7 @@ import "modules";
 record S1VarBind { name: Text; ty: S1Type; };
 record S1FnSig { name: Text; params: List<S1Type>; ret: S1Type; };
 record S1Subst { name: Text; ty: S1Type; };
+record S1EnumCtx { def: S1Enum; ty_path: S1Path; gen_names: List<Text>; subst: List<S1Subst>; };
 
 fn s1_tc_empty_path() -> S1Path {
   let segs: List<Text> = Nil;
@@ -302,6 +303,184 @@ fn s1_tc_ns_path2(ns: Text, name: Text) -> S1Path {
   let tail: List<Text> = Cons(ListCons<Text> { head: name; tail: empty; });
   let segs: List<Text> = Cons(ListCons<Text> { head: ns; tail: tail; });
   S1Path { segments: segs; }
+};
+
+fn s1_tc_list_len_types(xs: List<S1Type>) -> Int {
+  let n: Int = 0;
+  let cur: List<S1Type> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        n = n + 1;
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  n
+};
+
+fn s1_tc_list_len_text(xs: List<Text>) -> Int {
+  let n: Int = 0;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        n = n + 1;
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  n
+};
+
+fn s1_tc_enum_ctx_from_type(
+  items: List<S1Item>,
+  mods: List<S1Module>,
+  scrut_ty: S1Type
+) -> Result<S1EnumCtx, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "typecheck: match scrutinee must be an enum");
+  let empty_generics: List<S1GenericParam> = Nil;
+  let empty_variants: List<S1EnumVariant> = Nil;
+  let def: S1Enum = S1Enum { name: ""; generics: empty_generics; variants: empty_variants; };
+  let ty_path_out: S1Path = s1_tc_empty_path();
+  let gen_names: List<Text> = Nil;
+  let subst_out: List<S1Subst> = Nil;
+
+  // Lookup enum def from type path (local or imported stub).
+  let enum_opt: Option<S1Enum> = None;
+  let ty_path: S1Path = scrut_ty.path;
+
+  match s1_tc_path_singleton(ty_path) {
+    None => 0;
+    Some(local_name) => {
+      enum_opt = s1_tc_lookup_enum(items, local_name);
+      ty_path_out = s1_tc_simple_path(local_name);
+      match enum_opt {
+        None => {
+          ok = false;
+          diag =
+            s1_diag(Error, 0, 0, "typecheck: match scrutinee type is not a known local enum");
+          0
+        };
+        Some(_) => 0;
+      };
+      0
+    };
+  };
+
+  match enum_opt {
+    Some(_) => 0;
+    None => {
+      match s1_tc_path_two(ty_path) {
+        None => 0;
+        Some(pair) => {
+          match s1_mod_lookup(mods, pair.a) {
+            None => {
+              ok = false;
+              diag = s1_diag(Error, 0, 0, "typecheck: match scrutinee uses unknown imported module");
+              0
+            };
+            Some(m) => {
+              enum_opt = s1_mod_lookup_enum(m, pair.b);
+              ty_path_out = s1_tc_ns_path2(pair.a, pair.b);
+              match enum_opt {
+                None => {
+                  ok = false;
+                  diag =
+                    s1_diag(Error, 0, 0, "typecheck: match scrutinee type is not a known imported enum");
+                  0
+                };
+                Some(_) => 0;
+              };
+              0
+            };
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+
+  if ok == true {
+    match enum_opt {
+      None => {
+        ok = false;
+        0
+      };
+      Some(ed) => {
+        def = ed;
+        gen_names = s1_tc_collect_generic_names(ed.generics);
+
+        // Arity check: provided args must match enum generics count.
+        let want: Int = s1_tc_list_len_text(gen_names);
+        let got: Int = s1_tc_list_len_types(scrut_ty.args);
+        if want == got {
+          0
+        } else {
+          ok = false;
+          diag = s1_diag(Error, 0, 0, "typecheck: enum type argument arity mismatch in match scrutinee");
+          0
+        };
+
+        if ok == true {
+          // Build generic substitution from scrutinee args by position.
+          let subst: List<S1Subst> = Nil;
+          let subst2: List<S1Subst> = subst;
+          let gcur: List<Text> = gen_names;
+          let acur: List<S1Type> = scrut_ty.args;
+          let done: Bool = false;
+          while done == false {
+            match gcur {
+              Nil => {
+                done = true;
+                0
+              };
+              Cons(gcell) => {
+                match acur {
+                  Nil => {
+                    done = true;
+                    0
+                  };
+                  Cons(acell) => {
+                    subst2 = s1_tc_subst_add(subst2, gcell.head, acell.head);
+                    gcur = gcell.tail;
+                    acur = acell.tail;
+                    0
+                  };
+                };
+                0
+              };
+            }
+          };
+          subst_out = subst2;
+          0
+        } else { 0 };
+        0
+      };
+    };
+    0
+  } else { 0 };
+
+  let out: Result<S1EnumCtx, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(S1EnumCtx { def: def; ty_path: ty_path_out; gen_names: gen_names; subst: subst_out; });
+    0
+  } else { 0 };
+  out
 };
 
 fn s1_tc_list_contains_text(xs: List<Text>, needle: Text) -> Bool {
@@ -1328,16 +1507,47 @@ fn s1_tc_expr_type(
       0
     };
     Match(m) => {
-      let _scrut: Result<S1Type, S1Diagnostic> =
+      let scrut_ty: S1Type = s1_tc_unit_type();
+      let scrut_r: Result<S1Type, S1Diagnostic> =
         s1_tc_expr_type(items, mods, fns, env, None, m.scrutinee);
-      match _scrut {
+      match scrut_r {
         Err(e) => {
           ok = false;
           diag = e;
           0
         };
-        Ok(_) => 0;
+        Ok(t0) => {
+          scrut_ty = t0;
+          0
+        };
       };
+
+      let empty_generics: List<S1GenericParam> = Nil;
+      let empty_variants: List<S1EnumVariant> = Nil;
+      let empty_texts: List<Text> = Nil;
+      let empty_subst: List<S1Subst> = Nil;
+      let ctx: S1EnumCtx = S1EnumCtx {
+        def: S1Enum { name: ""; generics: empty_generics; variants: empty_variants; };
+        ty_path: s1_tc_empty_path();
+        gen_names: empty_texts;
+        subst: empty_subst;
+      };
+      if ok == true {
+        let ctx_r: Result<S1EnumCtx, S1Diagnostic> =
+          s1_tc_enum_ctx_from_type(items, mods, scrut_ty);
+        match ctx_r {
+          Err(e2) => {
+            ok = false;
+            diag = e2;
+            0
+          };
+          Ok(c0) => {
+            ctx = c0;
+            0
+          };
+        };
+        0
+      } else { 0 };
 
       if ok == true {
         let arm_ty_opt: Option<S1Type> = None;
@@ -1350,37 +1560,286 @@ fn s1_tc_expr_type(
               0
             };
             Cons(cell) => {
-              let vr: Result<S1Type, S1Diagnostic> =
-                s1_tc_expr_type(items, mods, fns, env, expected, cell.head.value);
-              match vr {
-                Err(e2) => {
-                  ok = false;
-                  diag = e2;
-                  done = true;
-                  0
-                };
-                Ok(vt) => {
-                  match arm_ty_opt {
-                    None => {
-                      arm_ty_opt = Some(vt);
-                      cur = cell.tail;
-                      0
+              // Validate pattern and extend env with payload binder if needed.
+              let arm_env: List<S1VarBind> = env;
+              match cell.head.pat {
+                Wildcard => 0;
+                Path(pat_path) => {
+                  let vn: Text = "";
+                  let plen: Int = s1_tc_path_len(pat_path);
+                  if plen == 1 {
+                    match s1_tc_path_singleton(pat_path) {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: invalid match pattern path");
+                        0
+                      };
+                      Some(n0) => {
+                        vn = n0;
+                        0
+                      };
                     };
-                    Some(prev) => {
-                      if s1_tc_types_eq(prev, vt) == true {
-                        cur = cell.tail;
+                    0
+                  } else {
+                    if plen == 2 {
+                      match s1_tc_path_two(pat_path) {
+                        None => {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: invalid match pattern path");
+                          0
+                        };
+                        Some(pair) => {
+                          let expect: S1Path = s1_tc_simple_path(pair.a);
+                          if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
+                            vn = pair.b;
+                            0
+                          } else {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                            0
+                          };
+                          0
+                        };
+                      };
+                      0
+                    } else {
+                      if plen == 3 {
+                        let ns: Text = "";
+                        let en: Text = "";
+                        let vv: Text = "";
+                        match pat_path.segments {
+                          Cons(c0) => {
+                            ns = c0.head;
+                            match c0.tail {
+                              Cons(c1) => {
+                                en = c1.head;
+                                match c1.tail {
+                                  Cons(c2) => {
+                                    vv = c2.head;
+                                    0
+                                  };
+                                  _ => 0;
+                                };
+                                0
+                              };
+                              _ => 0;
+                            };
+                            0
+                          };
+                          _ => 0;
+                        };
+
+                        let expect: S1Path = s1_tc_ns_path2(ns, en);
+                        if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
+                          vn = vv;
+                          0
+                        } else {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                          0
+                        };
                         0
                       } else {
                         ok = false;
-                        diag = s1_diag(Error, 0, 0, "typecheck: match arms must have same type");
-                        done = true;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unsupported match pattern path");
                         0
                       };
                       0
                     };
+                    0
                   };
+
+                  if ok == true {
+                    match s1_tc_lookup_enum_variant(ctx.def, vn) {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unknown enum variant in match pattern");
+                        0
+                      };
+                      Some(vd) => {
+                        match vd.payload_ty {
+                          None => 0;
+                          Some(_) => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: unit match pattern used for payload variant");
+                            0
+                          };
+                        };
+                        0
+                      };
+                    };
+                    0
+                  } else { 0 };
                   0
                 };
+                Variant(vp) => {
+                  let vn: Text = "";
+                  let plen: Int = s1_tc_path_len(vp.path);
+                  if plen == 1 {
+                    match s1_tc_path_singleton(vp.path) {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: invalid match pattern path");
+                        0
+                      };
+                      Some(n0) => {
+                        vn = n0;
+                        0
+                      };
+                    };
+                    0
+                  } else {
+                    if plen == 2 {
+                      match s1_tc_path_two(vp.path) {
+                        None => {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: invalid match pattern path");
+                          0
+                        };
+                        Some(pair) => {
+                          let expect: S1Path = s1_tc_simple_path(pair.a);
+                          if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
+                            vn = pair.b;
+                            0
+                          } else {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                            0
+                          };
+                          0
+                        };
+                      };
+                      0
+                    } else {
+                      if plen == 3 {
+                        let ns: Text = "";
+                        let en: Text = "";
+                        let vv: Text = "";
+                        match vp.path.segments {
+                          Cons(c0) => {
+                            ns = c0.head;
+                            match c0.tail {
+                              Cons(c1) => {
+                                en = c1.head;
+                                match c1.tail {
+                                  Cons(c2) => {
+                                    vv = c2.head;
+                                    0
+                                  };
+                                  _ => 0;
+                                };
+                                0
+                              };
+                              _ => 0;
+                            };
+                            0
+                          };
+                          _ => 0;
+                        };
+
+                        let expect: S1Path = s1_tc_ns_path2(ns, en);
+                        if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
+                          vn = vv;
+                          0
+                        } else {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                          0
+                        };
+                        0
+                      } else {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unsupported match pattern path");
+                        0
+                      };
+                      0
+                    };
+                    0
+                  };
+
+                  if ok == true {
+                    match s1_tc_lookup_enum_variant(ctx.def, vn) {
+                      None => {
+                        ok = false;
+                        diag = s1_diag(Error, 0, 0, "typecheck: unknown enum variant in match pattern");
+                        0
+                      };
+                      Some(vd) => {
+                        match vd.payload_ty {
+                          None => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: payload match pattern used for unit variant");
+                            0
+                          };
+                          Some(pt) => {
+                            let payload_ty: S1Type =
+                              s1_tc_apply_subst(pt, ctx.gen_names, ctx.subst);
+                            match vp.payload {
+                              None => {
+                                ok = false;
+                                diag = s1_diag(Error, 0, 0, "typecheck: payload match pattern missing binder");
+                                0
+                              };
+                              Some(pl) => {
+                                match pl {
+                                  Wildcard => 0;
+                                  Bind(name) => {
+                                    arm_env = s1_tc_env_add(arm_env, name, payload_ty);
+                                    0
+                                  };
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                    };
+                    0
+                  } else { 0 };
+                  0
+                };
+              };
+
+              if ok == true {
+                let vr: Result<S1Type, S1Diagnostic> =
+                  s1_tc_expr_type(items, mods, fns, arm_env, expected, cell.head.value);
+                match vr {
+                  Err(e2) => {
+                    ok = false;
+                    diag = e2;
+                    done = true;
+                    0
+                  };
+                  Ok(vt) => {
+                    match arm_ty_opt {
+                      None => {
+                        arm_ty_opt = Some(vt);
+                        cur = cell.tail;
+                        0
+                      };
+                      Some(prev) => {
+                        if s1_tc_types_eq(prev, vt) == true {
+                          cur = cell.tail;
+                          0
+                        } else {
+                          ok = false;
+                          diag = s1_diag(Error, 0, 0, "typecheck: match arms must have same type");
+                          done = true;
+                          0
+                        };
+                        0
+                      };
+                    };
+                    0
+                  };
+                };
+                0
+              } else {
+                done = true;
+                0
               };
               0
             };

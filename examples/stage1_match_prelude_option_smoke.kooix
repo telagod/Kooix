@@ -1,0 +1,13 @@
+import "../stdlib/prelude";
+import "../stage1/compiler";
+
+fn main() -> Int {
+  let src: Text =
+    "import \"../stdlib/prelude\" as prelude; fn get_or_zero(x: prelude::Option<Int>) -> Int { match x { None => 0; Some(v) => v; } }; fn main() -> Int { get_or_zero(prelude::Option::Some(1)) };";
+  let r: Result<Int, S1Diagnostic> = s1_compile(src);
+  match r {
+    Ok(_c) => 0;
+    Err(_e) => 1;
+  }
+};
+
