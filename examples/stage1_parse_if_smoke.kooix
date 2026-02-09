@@ -27,9 +27,11 @@ fn main() -> Int {
                             If(i) => {
                               match i.cond {
                                 Path(p) => {
-                                  if p.name == "cond" {
-                                    match p.ns {
-                                      None => {
+                                  match p.segments {
+                                    Cons(s0) => {
+                                      if s0.head == "cond" {
+                                        match s0.tail {
+                                          Nil => {
                                         match i.then_block.result {
                                           Some(te) => {
                                             match te {
@@ -58,10 +60,13 @@ fn main() -> Int {
                                           };
                                           _ => 17;
                                         }
-                                      };
-                                      _ => 24;
-                                    }
-                                  } else { 16 }
+                                          };
+                                          _ => 24;
+                                        }
+                                      } else { 16 }
+                                    };
+                                    _ => 15;
+                                  }
                                 };
                                 _ => 15;
                               }

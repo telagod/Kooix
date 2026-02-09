@@ -28,7 +28,11 @@ fn main() -> Int {
                                   // Foo => { 1 };
                                   match a0.head.pat {
                                     Path(pat0) => {
-                                      if pat0.name == "Foo" {
+                                      match pat0.segments {
+                                        Cons(s0) => {
+                                          if s0.head == "Foo" {
+                                            match s0.tail {
+                                              Nil => {
                                         match a0.head.value {
                                           Block(bl0) => {
                                             match bl0.result {
@@ -78,7 +82,13 @@ fn main() -> Int {
                                           };
                                           _ => 30;
                                         }
-                                      } else { 29 }
+                                              };
+                                              _ => 29;
+                                            }
+                                          } else { 29 }
+                                        };
+                                        _ => 28;
+                                      }
                                     };
                                     _ => 28;
                                   }
@@ -105,4 +115,3 @@ fn main() -> Int {
     };
   }
 };
-

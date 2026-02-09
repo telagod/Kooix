@@ -1,0 +1,128 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { a::b::c(); match x { a::b::Foo => 0; _ => 1 }; 2 };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          match p.items {
+            Cons(i0) => {
+              match i0.head {
+                Function(f) => {
+                  match f.body {
+                    Some(b) => {
+                      match b.stmts {
+                        Cons(s0) => {
+                          match s0.head {
+                            ExprStmt(e0) => {
+                              match e0 {
+                                Call(c0) => {
+                                  match c0.callee.segments {
+                                    Cons(p0) => {
+                                      if p0.head == "a" {
+                                        match p0.tail {
+                                          Cons(p1) => {
+                                            if p1.head == "b" {
+                                              match p1.tail {
+                                                Cons(p2) => {
+                                                  if p2.head == "c" {
+                                                    match p2.tail {
+                                                      Nil => {
+                                                        // second stmt: match
+                                                        match s0.tail {
+                                                          Cons(s1) => {
+                                                            match s1.head {
+                                                              ExprStmt(e1) => {
+                                                                match e1 {
+                                                                  Match(m) => {
+                                                                    match m.arms {
+                                                                      Cons(a0) => {
+                                                                        match a0.head.pat {
+                                                                          Path(pp) => {
+                                                                            match pp.segments {
+                                                                              Cons(q0) => {
+                                                                                if q0.head == "a" {
+                                                                                  match q0.tail {
+                                                                                    Cons(q1) => {
+                                                                                      if q1.head == "b" {
+                                                                                        match q1.tail {
+                                                                                          Cons(q2) => {
+                                                                                            if q2.head == "Foo" {
+                                                                                              match q2.tail {
+                                                                                                Nil => 0;
+                                                                                                _ => 40;
+                                                                                              }
+                                                                                            } else { 39 }
+                                                                                          };
+                                                                                          _ => 38;
+                                                                                        }
+                                                                                      } else { 37 }
+                                                                                    };
+                                                                                    _ => 36;
+                                                                                  }
+                                                                                } else { 35 }
+                                                                              };
+                                                                              _ => 34;
+                                                                            }
+                                                                          };
+                                                                          _ => 33;
+                                                                        }
+                                                                      };
+                                                                      _ => 32;
+                                                                    }
+                                                                  };
+                                                                  _ => 31;
+                                                                }
+                                                              };
+                                                              _ => 30;
+                                                            }
+                                                          };
+                                                          _ => 29;
+                                                        }
+                                                      };
+                                                      _ => 28;
+                                                    }
+                                                  } else { 27 }
+                                                };
+                                                _ => 26;
+                                              }
+                                            } else { 25 }
+                                          };
+                                          _ => 24;
+                                        }
+                                      } else { 23 }
+                                    };
+                                    _ => 22;
+                                  }
+                                };
+                                _ => 21;
+                              }
+                            };
+                            _ => 20;
+                          }
+                        };
+                        _ => 19;
+                      }
+                    };
+                    _ => 18;
+                  }
+                };
+                _ => 3;
+              }
+            };
+            _ => 4;
+          }
+        };
+      }
+    };
+  }
+};
+

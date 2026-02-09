@@ -23,53 +23,63 @@ fn main() -> Int {
                         match r.fields {
                           Cons(f0) => {
                             if f0.head.name == "a" {
-                              if f0.head.ty.path.name == "Int" {
-                                match f0.head.ty.path.ns {
-                                  None => {
-                                    match f0.head.ty.args {
+                              match f0.head.ty.path.segments {
+                                Cons(s0) => {
+                                  if s0.head == "Int" {
+                                    match s0.tail {
                                       Nil => {
-                                        match f0.tail {
-                                          Cons(f1) => {
-                                            if f1.head.name == "b" {
-                                              if f1.head.ty.path.name == "Bool" {
-                                                match f1.head.ty.path.ns {
-                                                  None => {
-                                                    match f1.head.ty.args {
-                                                      Nil => {
-                                                        match f1.tail {
+                                        match f0.head.ty.args {
+                                          Nil => {
+                                            match f0.tail {
+                                              Cons(f1) => {
+                                                if f1.head.name == "b" {
+                                                  match f1.head.ty.path.segments {
+                                                    Cons(s1) => {
+                                                      if s1.head == "Bool" {
+                                                        match s1.tail {
                                                           Nil => {
-                                                            match i0.tail {
-                                                              Cons(i1) => {
-                                                                match i1.head {
-                                                                  Function(fun) => {
-                                                                    if fun.name == "main" { 0 } else { 20 }
+                                                            match f1.head.ty.args {
+                                                              Nil => {
+                                                                match f1.tail {
+                                                                  Nil => {
+                                                                    match i0.tail {
+                                                                      Cons(i1) => {
+                                                                        match i1.head {
+                                                                          Function(fun) => {
+                                                                            if fun.name == "main" { 0 } else { 20 }
+                                                                          };
+                                                                          _ => 21;
+                                                                        }
+                                                                      };
+                                                                      _ => 22;
+                                                                    }
                                                                   };
-                                                                  _ => 21;
+                                                                  _ => 19;
                                                                 }
                                                               };
-                                                              _ => 22;
+                                                              _ => 118;
                                                             }
                                                           };
-                                                          _ => 19;
+                                                          _ => 119;
                                                         }
-                                                      };
-                                                      _ => 118;
-                                                    }
-                                                  };
-                                                  _ => 119;
-                                                }
-                                              } else { 18 }
-                                            } else { 17 }
+                                                      } else { 18 }
+                                                    };
+                                                    _ => 17;
+                                                  }
+                                                } else { 17 }
+                                              };
+                                              _ => 16;
+                                            }
                                           };
-                                          _ => 16;
+                                          _ => 115;
                                         }
                                       };
-                                      _ => 115;
+                                      _ => 120;
                                     }
-                                  };
-                                  _ => 120;
-                                }
-                              } else { 15 }
+                                  } else { 15 }
+                                };
+                                _ => 15;
+                              }
                             } else { 14 }
                           };
                           _ => 13;

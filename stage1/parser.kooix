@@ -4,52 +4,111 @@ import "token";
 import "ast";
 
 fn s1_empty_path() -> S1Path {
-  let ns: Option<Text> = None;
-  S1Path { ns: ns; name: ""; }
+  let segs: List<Text> = Nil;
+  S1Path { segments: segs; }
 };
 
 fn s1_simple_path(name: Text) -> S1Path {
-  let ns: Option<Text> = None;
-  S1Path { ns: ns; name: name; }
+  let empty: List<Text> = Nil;
+  let segs: List<Text> = Cons(ListCons<Text> { head: name; tail: empty; });
+  S1Path { segments: segs; }
 };
 
-fn s1_ns_path(ns_name: Text, name: Text) -> S1Path {
-  let ns: Option<Text> = Some(ns_name);
-  S1Path { ns: ns; name: name; }
+fn s1_reverse_texts(xs: List<Text>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<Text> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+  acc
 };
 
 fn s1_parse_path_tail(first: Text, rest: List<S1Token>) -> Pair<S1Path, List<S1Token>> {
-  let path: S1Path = s1_simple_path(first);
+  let empty: List<Text> = Nil;
+  let segs_rev: List<Text> = Cons(ListCons<Text> { head: first; tail: empty; });
   let cur: List<S1Token> = rest;
 
-  match rest {
-    Cons(c0) => {
-      match c0.head.kind {
-        Colon => {
-          match c0.tail {
-            Cons(c1) => {
-              match c1.head.kind {
-                Colon => {
-                  match c1.tail {
-                    Cons(c2) => {
-                      match c2.head.kind {
-                        Ident(name) => {
-                          path = s1_ns_path(first, name);
-                          cur = c2.tail;
-                          0
-                        };
-                        _ => 0;
-                      }
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Cons(c0) => {
+        match c0.head.kind {
+          Colon => {
+            match c0.tail {
+              Cons(c1) => {
+                match c1.head.kind {
+                  Colon => {
+                    match c1.tail {
+                      Cons(c2) => {
+                        match c2.head.kind {
+                          Ident(seg) => {
+                            segs_rev =
+                              Cons(ListCons<Text> { head: seg; tail: segs_rev; });
+                            cur = c2.tail;
+                            0
+                          };
+                          _ => {
+                            done = true;
+                            0
+                          };
+                        }
+                      };
+                      _ => {
+                        done = true;
+                        0
+                      };
                     };
-                    _ => 0;
+                    0
                   };
-                  0
-                };
-                _ => 0;
-              }
+                  _ => {
+                    done = true;
+                    0
+                  };
+                }
+              };
+              _ => {
+                done = true;
+                0
+              };
             };
-            _ => 0;
+            0
           };
+          _ => {
+            done = true;
+            0
+          };
+        }
+      };
+      _ => {
+        done = true;
+        0
+      };
+    }
+  };
+
+  let segs: List<Text> = s1_reverse_texts(segs_rev);
+  let path: S1Path = S1Path { segments: segs; };
+  Pair<S1Path, List<S1Token>> { a: path; b: cur; }
+};
+
+fn s1_path_singleton_name(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Cons(c0) => {
+      match c0.tail {
+        Nil => {
+          out = Some(c0.head);
           0
         };
         _ => 0;
@@ -57,8 +116,7 @@ fn s1_parse_path_tail(first: Text, rest: List<S1Token>) -> Pair<S1Path, List<S1T
     };
     _ => 0;
   };
-
-  Pair<S1Path, List<S1Token>> { a: path; b: cur; }
+  out
 };
 
 fn s1_reverse_items(xs: List<S1Item>) -> List<S1Item> {
@@ -1738,9 +1796,9 @@ fn s1_parse_block(tokens: List<S1Token>) -> Result<Pair<S1Block, List<S1Token>>,
             if ok == true {
               match expr {
                 Path(p) => {
-                  match p.ns {
-                    None => {
-                      let name: Text = p.name;
+                  let name_opt: Option<Text> = s1_path_singleton_name(p);
+                  match name_opt {
+                    Some(name) => {
                       match rest {
                         Cons(cell1) => {
                           match cell1.head.kind {

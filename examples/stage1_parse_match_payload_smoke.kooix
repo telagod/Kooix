@@ -25,13 +25,21 @@ fn main() -> Int {
                             Match(m) => {
                               match m.scrutinee {
                                 Path(sp) => {
-                                  if sp.name == "x" {
+                                  match sp.segments {
+                                    Cons(s0) => {
+                                      if s0.head == "x" {
+                                        match s0.tail {
+                                          Nil => {
                                     match m.arms {
                                       Cons(a0) => {
                                         // Foo(a) => 1;
                                         match a0.head.pat {
                                           Variant(vp0) => {
-                                            if vp0.path.name == "Foo" {
+                                            match vp0.path.segments {
+                                              Cons(v0) => {
+                                                if v0.head == "Foo" {
+                                                  match v0.tail {
+                                                    Nil => {
                                               match vp0.payload {
                                                 Some(pl0) => {
                                                   match pl0 {
@@ -45,7 +53,11 @@ fn main() -> Int {
                                                                   // Foo(_) => 2;
                                                                   match a1.head.pat {
                                                                     Variant(vp1) => {
-                                                                      if vp1.path.name == "Foo" {
+                                                                      match vp1.path.segments {
+                                                                        Cons(v1) => {
+                                                                          if v1.head == "Foo" {
+                                                                            match v1.tail {
+                                                                              Nil => {
                                                                         match vp1.payload {
                                                                           Some(pl1) => {
                                                                             match pl1 {
@@ -85,7 +97,13 @@ fn main() -> Int {
                                                                           };
                                                                           _ => 52;
                                                                         }
-                                                                      } else { 51 }
+                                                                              };
+                                                                              _ => 51;
+                                                                            }
+                                                                          } else { 51 }
+                                                                        };
+                                                                        _ => 50;
+                                                                      }
                                                                     };
                                                                     _ => 50;
                                                                   }
@@ -103,14 +121,26 @@ fn main() -> Int {
                                                 };
                                                 _ => 44;
                                               }
-                                            } else { 43 }
+                                                    };
+                                                    _ => 43;
+                                                  }
+                                                } else { 43 }
+                                              };
+                                              _ => 42;
+                                            }
                                           };
                                           _ => 42;
                                         }
                                       };
                                       _ => 41;
                                     }
-                                  } else { 40 }
+                                          };
+                                          _ => 40;
+                                        }
+                                      } else { 40 }
+                                    };
+                                    _ => 39;
+                                  }
                                 };
                                 _ => 39;
                               }
@@ -134,4 +164,3 @@ fn main() -> Int {
     };
   }
 };
-

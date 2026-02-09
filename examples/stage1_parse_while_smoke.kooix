@@ -25,21 +25,28 @@ fn main() -> Int {
                             While(w) => {
                               match w.cond {
                                 Path(p0) => {
-                                  if p0.name == "cond" {
-                                    match p0.ns {
-                                      None => {
+                                  match p0.segments {
+                                    Cons(s0) => {
+                                      if s0.head == "cond" {
+                                        match s0.tail {
+                                          Nil => {
                                     match w.body.stmts {
                                       Cons(ws0) => {
                                         match ws0.head {
                                           ExprStmt(e) => {
                                             match e {
                                               Call(c) => {
-                                                if c.callee.name == "tick" {
-                                                  match c.callee.ns {
-                                                    None => 0;
-                                                    _ => 22;
-                                                  }
-                                                } else { 21 }
+                                                match c.callee.segments {
+                                                  Cons(c0) => {
+                                                    if c0.head == "tick" {
+                                                      match c0.tail {
+                                                        Nil => 0;
+                                                        _ => 22;
+                                                      }
+                                                    } else { 21 }
+                                                  };
+                                                  _ => 22;
+                                                }
                                               };
                                               _ => 20;
                                             }
@@ -49,10 +56,13 @@ fn main() -> Int {
                                       };
                                       _ => 18;
                                     }
-                                      };
-                                      _ => 23;
-                                    }
-                                  } else { 17 }
+                                          };
+                                          _ => 23;
+                                        }
+                                      } else { 17 }
+                                    };
+                                    _ => 16;
+                                  }
                                 };
                                 _ => 16;
                               }

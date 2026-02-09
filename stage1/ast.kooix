@@ -3,8 +3,7 @@ import "../stdlib/prelude";
 record S1Program { items: List<S1Item>; };
 
 record S1Path {
-  ns: Option<Text>;
-  name: Text;
+  segments: List<Text>;
 };
 
 record S1Type { path: S1Path; args: List<S1Type>; };

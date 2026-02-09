@@ -24,17 +24,22 @@ fn main() -> Int {
                           Nil => {
                             match f.body {
                               None => {
-                                if f.return_type.path.name == "Int" {
-                                  match f.return_type.path.ns {
-                                    None => {
-                                      match f.return_type.args {
-                                        Nil => 0;
-                                        _ => 9;
+                                match f.return_type.path.segments {
+                                  Cons(s0) => {
+                                    if s0.head == "Int" {
+                                      match s0.tail {
+                                        Nil => {
+                                          match f.return_type.args {
+                                            Nil => 0;
+                                            _ => 9;
+                                          }
+                                        };
+                                        _ => 10;
                                       }
-                                    };
-                                    _ => 10;
-                                  }
-                                } else { 5 }
+                                    } else { 5 }
+                                  };
+                                  _ => 11;
+                                }
                               };
                               _ => 8;
                             }

@@ -29,23 +29,29 @@ fn main() -> Int {
                                     Equals => {
                                       match beq.left {
                                         Path(p0) => {
-                                          if p0.name == "x" {
-                                            match p0.ns {
-                                              None => {
+                                          match p0.segments {
+                                            Cons(s0) => {
+                                              if s0.head == "x" {
+                                                match s0.tail {
+                                                  Nil => {
                                             match beq.right {
                                               Binary(badd) => {
                                                 match badd.op {
                                                   Add => {
                                                     match badd.left {
                                                       Path(p1) => {
-                                                        if p1.name == "y" {
-                                                          match p1.ns {
-                                                            None => {
+                                                        match p1.segments {
+                                                          Cons(s1) => {
+                                                            if s1.head == "y" {
+                                                              match s1.tail {
+                                                                Nil => {
                                                           match badd.right {
                                                             Path(p2) => {
-                                                              if p2.name == "z" {
-                                                                match p2.ns {
-                                                                  None => {
+                                                              match p2.segments {
+                                                                Cons(s2) => {
+                                                                  if s2.head == "z" {
+                                                                    match s2.tail {
+                                                                      Nil => {
                                                                 match b.result {
                                                                   Some(re) => {
                                                                     match re {
@@ -57,17 +63,23 @@ fn main() -> Int {
                                                                   };
                                                                   _ => 28;
                                                                 }
-                                                                  };
-                                                                  _ => 31;
-                                                                }
-                                                              } else { 27 }
+                                                                      };
+                                                                      _ => 31;
+                                                                    }
+                                                                  } else { 27 }
+                                                                };
+                                                                _ => 26;
+                                                              }
                                                             };
                                                             _ => 26;
                                                           }
-                                                            };
-                                                            _ => 32;
-                                                          }
-                                                        } else { 25 }
+                                                                };
+                                                                _ => 32;
+                                                              }
+                                                            } else { 25 }
+                                                          };
+                                                          _ => 24;
+                                                        }
                                                       };
                                                       _ => 24;
                                                     }
@@ -77,10 +89,13 @@ fn main() -> Int {
                                               };
                                               _ => 22;
                                             }
-                                              };
-                                              _ => 33;
-                                            }
-                                          } else { 21 }
+                                                  };
+                                                  _ => 33;
+                                                }
+                                              } else { 21 }
+                                            };
+                                            _ => 20;
+                                          }
                                         };
                                         _ => 20;
                                       }
