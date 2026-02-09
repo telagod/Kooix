@@ -98,6 +98,7 @@ enum S1Expr {
   IntLit(Text);
   StringLit(Text);
   Call(S1Call);
+  Member(S1Member);
   Block(S1Block);
   If(S1If);
   Match(S1Match);
@@ -107,6 +108,11 @@ enum S1Expr {
 record S1Call {
   callee: S1Path;
   args: List<S1Expr>;
+};
+
+record S1Member {
+  base: S1Expr;
+  name: Text;
 };
 
 record S1If {

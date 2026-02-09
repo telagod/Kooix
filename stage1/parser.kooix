@@ -1437,6 +1437,55 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
     };
   };
 
+  // Postfix: member access chain (`.<ident>`) after any primary expression.
+  if ok == true {
+    let done: Bool = false;
+    while done == false {
+      match rest {
+        Cons(d0) => {
+          match d0.head.kind {
+            Dot => {
+              match d0.tail {
+                Cons(d1) => {
+                  match d1.head.kind {
+                    Ident(field) => {
+                      let base: S1Expr = expr;
+                      expr = Member(S1Member { base: base; name: field; });
+                      rest = d1.tail;
+                      0
+                    };
+                    _ => {
+                      ok = false;
+                      diag = s1_diag(Error, d1.head.span.start, d1.head.span.end, "parser: expected member name after '.'");
+                      done = true;
+                      0
+                    };
+                  }
+                };
+                _ => {
+                  ok = false;
+                  diag = s1_diag(Error, d0.head.span.start, d0.head.span.end, "parser: expected member name after '.'");
+                  done = true;
+                  0
+                };
+              };
+              0
+            };
+            _ => {
+              done = true;
+              0
+            };
+          }
+        };
+        _ => {
+          done = true;
+          0
+        };
+      }
+    };
+    0
+  } else { 0 };
+
   let out: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> = Err(diag);
   if ok == true {
     out = Ok(Pair<S1Expr, List<S1Token>> { a: expr; b: rest; });

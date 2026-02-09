@@ -2709,6 +2709,25 @@ fn stage1_parser_multi_path_smoke() {
 }
 
 #[test]
+fn stage1_parser_member_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_parse_member_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 parser member smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 parser member smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined)
+        .expect("stage1 parser member smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn emits_llvm_ir_for_simple_functions() {
     let source = r#"
 fn answer() -> Int;
