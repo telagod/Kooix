@@ -1,0 +1,27 @@
+import "../stdlib/prelude";
+import "../stage1/lexer";
+import "../stage1/parser";
+import "../stage1/resolver";
+import "../stage1/ast";
+
+fn main() -> Int {
+  let src: Text = "enum E { A; }; fn main() -> Int { match x { E::B => 0; _ => 0; } };";
+  let tr: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match tr {
+    Err(_e) => 1;
+    Ok(ts) => {
+      let pr: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match pr {
+        Err(_e2) => 2;
+        Ok(p) => {
+          let rr: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
+          match rr {
+            Ok(_p2) => 3;
+            Err(_e3) => 0;
+          }
+        };
+      }
+    };
+  }
+};
+

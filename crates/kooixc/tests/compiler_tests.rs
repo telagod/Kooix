@@ -2767,6 +2767,45 @@ fn stage1_resolver_missing_namespace_smoke() {
 }
 
 #[test]
+fn stage1_resolver_bad_variant_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_resolve_bad_variant_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 resolver bad variant smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 resolver bad variant smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 resolver bad variant smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+fn stage1_resolver_namespace_conflict_smoke() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_resolve_ns_conflict_smoke.kooix");
+    let source_map =
+        load_source_map(&entry).expect("stage1 resolver namespace conflict smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 resolver namespace conflict smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined)
+        .expect("stage1 resolver namespace conflict smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn stage1_typecheck_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_typecheck_smoke.kooix");
