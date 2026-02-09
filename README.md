@@ -16,7 +16,7 @@ Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标�
 - Evidence-first：对关键链路提供 `evidence` 声明，便于 trace/metrics 与审计闭环。
 - Workflow/Agent 一等公民：把编排（`workflow`）与 agent loop（`agent`）做成可类型检查的结构，而不是散落在脚本里。
 
-## 当前状态（截至 2026-02-08）
+## 当前状态（截至 2026-02-09）
 
 Kooix 已完成一条可运行的最小编译链路：
 
@@ -53,7 +53,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`146 passed, 0 failed`
+- 结果：`170 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 

@@ -17,7 +17,7 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 - Evidence-first: critical flows declare `evidence` (trace/metrics) to support auditability.
 - Workflow/Agent as first-class: orchestration (`workflow`) and agent loops (`agent`) are type-checkable structures, not ad-hoc scripts.
 
-## Current Status (as of 2026-02-08)
+## Current Status (as of 2026-02-09)
 
 Kooix already has a runnable minimal compiler pipeline:
 
@@ -55,7 +55,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `146 passed, 0 failed`
+- Result: `170 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
