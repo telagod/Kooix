@@ -1306,104 +1306,11 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
           0
         };
         Ident(name) => {
-          // Path or Call
+          // Path
           let parsed_path: Pair<S1Path, List<S1Token>> = s1_parse_path_tail(name, cell0.tail);
           let path: S1Path = parsed_path.a;
           rest = parsed_path.b;
           expr = S1Expr.Path(path);
-
-          match rest {
-            Cons(cell1) => {
-              match cell1.head.kind {
-                LParen => {
-                  rest = cell1.tail;
-                  let args_rev: List<S1Expr> = Nil;
-                  let done: Bool = false;
-
-                  while done == false {
-                    match rest {
-                      Nil => {
-                        ok = false;
-                        diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ')' to close call");
-                        done = true;
-                        0
-                      };
-                      Cons(cell2) => {
-                        match cell2.head.kind {
-                          RParen => {
-                            rest = cell2.tail;
-                            done = true;
-                            0
-                          };
-                          _ => {
-                            let parsed: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
-                              s1_parse_expr(rest);
-                            match parsed {
-                              Err(e) => {
-                                ok = false;
-                                diag = e;
-                                done = true;
-                                0
-                              };
-                              Ok(pair) => {
-                                args_rev =
-                                  Cons(ListCons<S1Expr> { head: pair.a; tail: args_rev; });
-                                rest = pair.b;
-                                0
-                              };
-                            };
-
-                            if ok == true {
-                              match rest {
-                                Nil => {
-                                  ok = false;
-                                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected ',' or ')' after call argument");
-                                  done = true;
-                                  0
-                                };
-                                Cons(cell3) => {
-                                  match cell3.head.kind {
-                                    Comma => {
-                                      rest = cell3.tail;
-                                      0
-                                    };
-                                    RParen => {
-                                      rest = cell3.tail;
-                                      done = true;
-                                      0
-                                    };
-                                    _ => {
-                                      ok = false;
-                                      diag = s1_diag(Error, cell3.head.span.start, cell3.head.span.end, "parser: expected ',' or ')' after call argument");
-                                      done = true;
-                                      0
-                                    };
-                                  }
-                                };
-                              }
-                            } else {
-                              done = true;
-                              0
-                            }
-                          };
-                        }
-                      };
-                    }
-                  };
-
-                  if ok == true {
-                    let args: List<S1Expr> = s1_reverse_exprs(args_rev);
-                    expr = Call(S1Call { callee: path; args: args; });
-                    0
-                  } else {
-                    0
-                  }
-                };
-                _ => 0;
-              }
-            };
-            _ => 0;
-          };
           0
         };
         LBrace => {
@@ -1437,13 +1344,103 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
     };
   };
 
-  // Postfix: member access chain (`.<ident>`) after any primary expression.
+  // Postfix: member access (`.<ident>`) and calls (`(<args>)`) after any primary expression.
   if ok == true {
     let done: Bool = false;
     while done == false {
       match rest {
         Cons(d0) => {
           match d0.head.kind {
+            LParen => {
+              rest = d0.tail;
+              let args_rev: List<S1Expr> = Nil;
+              let call_done: Bool = false;
+
+              while call_done == false {
+                match rest {
+                  Nil => {
+                    ok = false;
+                    diag = s1_diag(Error, d0.head.span.start, d0.head.span.end, "parser: expected ')' to close call");
+                    call_done = true;
+                    done = true;
+                    0
+                  };
+                  Cons(c1) => {
+                    match c1.head.kind {
+                      RParen => {
+                        rest = c1.tail;
+                        call_done = true;
+                        0
+                      };
+                      _ => {
+                        let parsed_arg: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                          s1_parse_expr(rest);
+                        match parsed_arg {
+                          Err(e) => {
+                            ok = false;
+                            diag = e;
+                            call_done = true;
+                            done = true;
+                            0
+                          };
+                          Ok(pair) => {
+                            args_rev =
+                              Cons(ListCons<S1Expr> { head: pair.a; tail: args_rev; });
+                            rest = pair.b;
+                            0
+                          };
+                        };
+
+                        if ok == true {
+                          match rest {
+                            Nil => {
+                              ok = false;
+                              diag = s1_diag(Error, d0.head.span.start, d0.head.span.end, "parser: expected ',' or ')' after call argument");
+                              call_done = true;
+                              done = true;
+                              0
+                            };
+                            Cons(c2) => {
+                              match c2.head.kind {
+                                Comma => {
+                                  rest = c2.tail;
+                                  0
+                                };
+                                RParen => {
+                                  rest = c2.tail;
+                                  call_done = true;
+                                  0
+                                };
+                                _ => {
+                                  ok = false;
+                                  diag = s1_diag(Error, c2.head.span.start, c2.head.span.end, "parser: expected ',' or ')' after call argument");
+                                  call_done = true;
+                                  done = true;
+                                  0
+                                };
+                              }
+                            };
+                          }
+                        } else {
+                          call_done = true;
+                          done = true;
+                          0
+                        }
+                      };
+                    }
+                  };
+                }
+              };
+
+              if ok == true {
+                let args: List<S1Expr> = s1_reverse_exprs(args_rev);
+                let callee: S1Expr = expr;
+                expr = Call(S1Call { callee: callee; args: args; });
+                0
+              } else {
+                0
+              }
+            };
             Dot => {
               match d0.tail {
                 Cons(d1) => {

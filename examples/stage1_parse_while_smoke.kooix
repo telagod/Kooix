@@ -36,14 +36,19 @@ fn main() -> Int {
                                           ExprStmt(e) => {
                                             match e {
                                               Call(c) => {
-                                                match c.callee.segments {
-                                                  Cons(c0) => {
-                                                    if c0.head == "tick" {
-                                                      match c0.tail {
-                                                        Nil => 0;
-                                                        _ => 22;
-                                                      }
-                                                    } else { 21 }
+                                                match c.callee {
+                                                  Path(cp) => {
+                                                    match cp.segments {
+                                                      Cons(c0) => {
+                                                        if c0.head == "tick" {
+                                                          match c0.tail {
+                                                            Nil => 0;
+                                                            _ => 22;
+                                                          }
+                                                        } else { 21 }
+                                                      };
+                                                      _ => 22;
+                                                    }
                                                   };
                                                   _ => 22;
                                                 }

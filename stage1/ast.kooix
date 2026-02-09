@@ -106,7 +106,7 @@ enum S1Expr {
 };
 
 record S1Call {
-  callee: S1Path;
+  callee: S1Expr;
   args: List<S1Expr>;
 };
 

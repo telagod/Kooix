@@ -31,83 +31,88 @@ fn main() -> Int {
                                       ExprStmt(e0) => {
                                         match e0 {
                                           Call(c0) => {
-                                            match c0.callee.segments {
-                                              Cons(seg0) => {
-                                                if seg0.head == "prelude" {
-                                                  match seg0.tail {
-                                                    Cons(seg1) => {
-                                                      if seg1.head == "id" {
-                                                        match seg1.tail {
-                                                          Nil => {
-                                                            match c0.args {
-                                                              Cons(a0) => {
-                                                                match a0.head {
-                                                                  IntLit(n) => {
-                                                                    if n == "1" {
-                                                                      match a0.tail {
-                                                                        Nil => {
-                                                                          // second stmt: match
-                                                                          match s0.tail {
-                                                                            Cons(s1) => {
-                                                                              match s1.head {
-                                                                                ExprStmt(e1) => {
-                                                                                  match e1 {
-                                                                                    Match(m) => {
-                                                                                      match m.arms {
-                                                                                        Cons(arm0) => {
-                                                                                          match arm0.head.pat {
-                                                                                            Path(pat0) => {
-                                                                                              match pat0.segments {
-                                                                                                Cons(p0) => {
-                                                                                                  if p0.head == "prelude" {
-                                                                                                    match p0.tail {
-                                                                                                      Cons(p1) => {
-                                                                                                        if p1.head == "Foo" {
-                                                                                                          match p1.tail {
-                                                                                                            Nil => 0;
-                                                                                                            _ => 42;
-                                                                                                          }
-                                                                                                        } else { 41 }
-                                                                                                      };
-                                                                                                      _ => 40;
-                                                                                                    }
-                                                                                                  } else { 39 }
+                                            match c0.callee {
+                                              Path(cp) => {
+                                                match cp.segments {
+                                                  Cons(seg0) => {
+                                                    if seg0.head == "prelude" {
+                                                      match seg0.tail {
+                                                        Cons(seg1) => {
+                                                          if seg1.head == "id" {
+                                                            match seg1.tail {
+                                                              Nil => {
+                                                                match c0.args {
+                                                                  Cons(a0) => {
+                                                                    match a0.head {
+                                                                      IntLit(n) => {
+                                                                        if n == "1" {
+                                                                          match a0.tail {
+                                                                            Nil => {
+                                                                              // second stmt: match
+                                                                              match s0.tail {
+                                                                                Cons(s1) => {
+                                                                                  match s1.head {
+                                                                                    ExprStmt(e1) => {
+                                                                                      match e1 {
+                                                                                        Match(m) => {
+                                                                                          match m.arms {
+                                                                                            Cons(arm0) => {
+                                                                                              match arm0.head.pat {
+                                                                                                Path(pat0) => {
+                                                                                                  match pat0.segments {
+                                                                                                    Cons(p0) => {
+                                                                                                      if p0.head == "prelude" {
+                                                                                                        match p0.tail {
+                                                                                                          Cons(p1) => {
+                                                                                                            if p1.head == "Foo" {
+                                                                                                              match p1.tail {
+                                                                                                                Nil => 0;
+                                                                                                                _ => 42;
+                                                                                                              }
+                                                                                                            } else { 41 }
+                                                                                                          };
+                                                                                                          _ => 40;
+                                                                                                        }
+                                                                                                      } else { 39 }
+                                                                                                    };
+                                                                                                    _ => 38;
+                                                                                                  }
                                                                                                 };
                                                                                                 _ => 38;
                                                                                               }
                                                                                             };
-                                                                                            _ => 38;
+                                                                                            _ => 37;
                                                                                           }
                                                                                         };
-                                                                                        _ => 37;
+                                                                                        _ => 36;
                                                                                       }
                                                                                     };
-                                                                                    _ => 36;
+                                                                                    _ => 35;
                                                                                   }
                                                                                 };
-                                                                                _ => 35;
+                                                                                _ => 34;
                                                                               }
                                                                             };
-                                                                            _ => 34;
+                                                                            _ => 33;
                                                                           }
-                                                                        };
-                                                                        _ => 33;
-                                                                      }
-                                                                    } else { 32 }
+                                                                        } else { 32 }
+                                                                      };
+                                                                      _ => 31;
+                                                                    }
                                                                   };
-                                                                  _ => 31;
+                                                                  _ => 30;
                                                                 }
                                                               };
-                                                              _ => 30;
+                                                              _ => 29;
                                                             }
-                                                          };
-                                                          _ => 29;
-                                                        }
-                                                      } else { 28 }
-                                                    };
-                                                    _ => 27;
-                                                  }
-                                                } else { 26 }
+                                                          } else { 28 }
+                                                        };
+                                                        _ => 27;
+                                                      }
+                                                    } else { 26 }
+                                                  };
+                                                  _ => 25;
+                                                }
                                               };
                                               _ => 25;
                                             }
