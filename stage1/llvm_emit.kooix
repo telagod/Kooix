@@ -882,6 +882,103 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                           s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_starts_with expects (Text, Text)"))
                         }
                       } else {
+                        if fname == "text_byte_at" {
+                          // Returns Option<Int>
+                          if argc == 2 {
+                            if a_ty == "i8*" {
+                              if b_ty == "i64" {
+                                let idx_neg_id: Text = int_to_text(nt);
+                                let idx_neg: Text = text_concat("%t", idx_neg_id);
+                                let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", idx_neg), " = icmp slt i64 "), b_val), ", 0"));
+                                let len_id: Text = int_to_text(nt + 1);
+                                let len: Text = text_concat("%t", len_id);
+                                let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", len), " = call i64 @strlen(i8* "), text_concat(a_val, ")")));
+                                let idx_uge_id: Text = int_to_text(nt + 2);
+                                let idx_uge: Text = text_concat("%t", idx_uge_id);
+                                let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", idx_uge), " = icmp uge i64 "), b_val), text_concat(", ", len)));
+                                let oob_id: Text = int_to_text(nt + 3);
+                                let oob: Text = text_concat("%t", oob_id);
+                                let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", oob), " = or i1 "), idx_neg), text_concat(", ", idx_uge)));
+
+                                let ok_lbl: Text = text_concat("tba_ok", int_to_text(nt + 5));
+                                let none_lbl: Text = text_concat("tba_none", int_to_text(nt + 6));
+                                let join_lbl: Text = text_concat("tba_join", int_to_text(nt + 7));
+
+                                let slot_id: Text = int_to_text(nt + 4);
+                                let slot: Text = text_concat("%t", slot_id);
+                                let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", slot), " = alloca "), "%Option*"));
+
+                                let br0: Text = text_concat(
+                                  text_concat(text_concat("  br i1 ", oob), text_concat(", label %", none_lbl)),
+                                  text_concat(", label %", ok_lbl)
+                                );
+                                let out6: Text = s1_cg_line(out5, br0);
+
+                                // ok: Some(byte)
+                                let out_ok_lbl: Text = s1_cg_line(out6, text_concat(ok_lbl, ":"));
+                                let gep_id: Text = int_to_text(nt + 5);
+                                let gep: Text = text_concat("%t", gep_id);
+                                let inst_gep: Text = text_concat(text_concat(text_concat("  ", gep), " = getelementptr inbounds i8, i8* "), text_concat(a_val, text_concat(", i64 ", b_val)));
+                                let out7: Text = s1_cg_line(out_ok_lbl, inst_gep);
+                                let b_id: Text = int_to_text(nt + 6);
+                                let b: Text = text_concat("%t", b_id);
+                                let out8: Text = s1_cg_line(out7, text_concat(text_concat(text_concat("  ", b), " = load i8, i8* "), gep));
+                                let bz_id: Text = int_to_text(nt + 7);
+                                let bz: Text = text_concat("%t", bz_id);
+                                let out9: Text = s1_cg_line(out8, text_concat(text_concat(text_concat("  ", bz), " = zext i8 "), text_concat(b, " to i64")));
+
+                                let raw_id: Text = int_to_text(nt + 8);
+                                let raw: Text = text_concat("%t", raw_id);
+                                let out10: Text = s1_cg_line(out9, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                let ptr_id: Text = int_to_text(nt + 9);
+                                let ptr: Text = text_concat("%t", ptr_id);
+                                let out11: Text = s1_cg_line(out10, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                let tagp_id: Text = int_to_text(nt + 10);
+                                let tagp: Text = text_concat("%t", tagp_id);
+                                let out12: Text = s1_cg_line(out11, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                let out13: Text = s1_cg_line(out12, text_concat("  store i8 0, i8* ", tagp));
+                                let payp_id: Text = int_to_text(nt + 11);
+                                let payp: Text = text_concat("%t", payp_id);
+                                let out14: Text = s1_cg_line(out13, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                let out15: Text = s1_cg_line(out14, text_concat(text_concat("  store i64 ", bz), text_concat(", i64* ", payp)));
+                                let out16: Text = s1_cg_line(out15, text_concat("  store %Option* ", text_concat(ptr, text_concat(", %Option** ", slot))));
+                                let out17: Text = s1_cg_line(out16, text_concat("  br label %", join_lbl));
+
+                                // none: None
+                                let out_none_lbl: Text = s1_cg_line(out17, text_concat(none_lbl, ":"));
+                                let raw2_id: Text = int_to_text(nt + 12);
+                                let raw2: Text = text_concat("%t", raw2_id);
+                                let out18: Text = s1_cg_line(out_none_lbl, text_concat(text_concat("  ", raw2), " = call i8* @malloc(i64 16)"));
+                                let ptr2_id: Text = int_to_text(nt + 13);
+                                let ptr2: Text = text_concat("%t", ptr2_id);
+                                let out19: Text = s1_cg_line(out18, text_concat(text_concat(text_concat("  ", ptr2), " = bitcast i8* "), text_concat(raw2, " to %Option*")));
+                                let tagp2_id: Text = int_to_text(nt + 14);
+                                let tagp2: Text = text_concat("%t", tagp2_id);
+                                let out20: Text = s1_cg_line(out19, text_concat(text_concat(text_concat("  ", tagp2), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr2, ", i32 0, i32 0")));
+                                let out21: Text = s1_cg_line(out20, text_concat("  store i8 1, i8* ", tagp2));
+                                let payp2_id: Text = int_to_text(nt + 15);
+                                let payp2: Text = text_concat("%t", payp2_id);
+                                let out22: Text = s1_cg_line(out21, text_concat(text_concat(text_concat("  ", payp2), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr2, ", i32 0, i32 1")));
+                                let out23: Text = s1_cg_line(out22, text_concat("  store i64 0, i64* ", payp2));
+                                let out24: Text = s1_cg_line(out23, text_concat("  store %Option* ", text_concat(ptr2, text_concat(", %Option** ", slot))));
+                                let out25: Text = s1_cg_line(out24, text_concat("  br label %", join_lbl));
+
+                                // join
+                                let out_join_lbl: Text = s1_cg_line(out25, text_concat(join_lbl, ":"));
+                                let outv_id: Text = int_to_text(nt + 16);
+                                let outv: Text = text_concat("%t", outv_id);
+                                let out26: Text = s1_cg_line(out_join_lbl, text_concat(text_concat(text_concat("  ", outv), " = load %Option*, %Option** "), slot));
+                                s1_cg_expr_ok(S1CgExprOut { text: out26; value: outv; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_int()); bb: join_lbl; next_tmp: nt + 17; })
+                              } else {
+                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_byte_at expects (Text, Int)"))
+                              }
+                            } else {
+                              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_byte_at expects (Text, Int)"))
+                            }
+                          } else {
+                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_byte_at expects (Text, Int)"))
+                          }
+                        } else {
                         if fname == "host_load_source_map" {
                           if argc == 1 {
                             if a_ty == "i8*" {
@@ -949,6 +1046,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               }
                             }
                           }
+                        }
                         }
                       }
                     }

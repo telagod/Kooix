@@ -1,0 +1,9 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  match text_byte_at("abc", 0) {
+    Some(b) => { if b == 97 { 0 } else { 2 } };
+    None => 1;
+  }
+};
+
