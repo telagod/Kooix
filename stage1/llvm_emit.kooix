@@ -1,0 +1,19 @@
+import "../stdlib/prelude";
+import "diag";
+
+fn s1_emit_llvm_ir(_source: Text) -> Result<Text, S1Diagnostic>
+intent "Stage1 LLVM IR emitter (v0 stub): source -> LLVM IR text"
+evidence {
+  trace "stage1.emit_llvm.v0";
+  metrics [stage1_emit_llvm_calls];
+}
+{
+  // v0: stub to validate the Stage1 -> Stage0 native-llvm handoff.
+  // Next: real lowering from Stage1 AST/HIR into a compatible LLVM IR subset.
+  Ok("define i32 @main() {
+entry:
+  ret i32 0
+}
+")
+};
+

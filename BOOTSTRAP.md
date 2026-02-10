@@ -114,11 +114,23 @@ cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
 
 目标：`kooixc(stage1)` 编译 `kooixc(stage1)` 自己，产出 stage2。
 
+当前进展（v0）：已打通 “Stage1 写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。
+
 验收口径（推荐先松后紧）：
 
 - stage1 能编译 stage1：✓
 - stage2 能再次编译 stage1：✓
 - stage1 与 stage2 对同一输入的 diagnostics 语义一致：✓
+
+验收（v0 stub，先验证链路）：
+
+```bash
+# 1) 让 Stage1 产出 stage2 LLVM IR（写入 /tmp/kooixc_stage2.ll）
+cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
+
+# 2) 用 Stage0 链接 stage2
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
+```
 
 ## 余劫（主要风险）
 

@@ -139,6 +139,9 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Build from LLVM IR file (used for Stage1 -> Stage2 self-host)
 cargo run -p kooixc -- native-llvm /tmp/kooixc-stage2.ll /tmp/kooixc-stage2 --run
 
+# Stage1 self-host v0: emit stage2 LLVM IR to disk (/tmp/kooixc_stage2.ll)
+cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
+
 # Tests
 cargo test -p kooixc
 ```
