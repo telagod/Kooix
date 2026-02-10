@@ -175,6 +175,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_canary.ll /tmp/kooix
 cargo run -p kooixc -- native stage1/self_host_lexer_ident_main.kooix /tmp/kx-selfhost-lid --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_ident.ll /tmp/kooixc-stage2-lid --run
 
+# Stage1 self-host v0.9（typed direct call）：非 Int-only 的函数签名/调用（Text/Bool 参数与返回）
+cargo run -p kooixc -- native stage1/self_host_fn_text_call_main.kooix /tmp/kx-selfhost-ftc --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_fn_text_call.ll /tmp/kooixc-stage2-ftc --run
+
 # 测试
 cargo test -p kooixc
 ```
