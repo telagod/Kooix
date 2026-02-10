@@ -167,6 +167,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_byte_at.ll /tmp/kooix
 cargo run -p kooixc -- native stage1/self_host_text_slice_main.kooix /tmp/kx-selfhost-ts --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_slice.ll /tmp/kooixc-stage2-ts --run
 
+# Stage1 self-host v0.7（lexer canary）：byte_is_ascii_* intrinsics smoke（依赖 text_byte_at）
+cargo run -p kooixc -- native stage1/self_host_lexer_canary_main.kooix /tmp/kx-selfhost-lex --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_canary.ll /tmp/kooixc-stage2-lex --run
+
 # 测试
 cargo test -p kooixc
 ```
