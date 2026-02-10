@@ -3712,8 +3712,12 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     let _ = std::fs::remove_file(&stage2);
     compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
 
-    let args: Vec<String> = vec![];
-    let stage2_out = run_executable_with_args_and_stdin_and_timeout(&stage2, &args, None, Some(120_000))
+    let args: Vec<String> = vec![
+        "stage1/compiler_main.kooix".to_string(),
+        "/tmp/kooixc_stage3_stage1_compiler.ll".to_string(),
+    ];
+    let stage2_out =
+        run_executable_with_args_and_stdin_and_timeout(&stage2, &args, None, Some(120_000))
         .expect("stage2 compiler binary should run");
     assert_eq!(stage2_out.status_code, Some(0));
 

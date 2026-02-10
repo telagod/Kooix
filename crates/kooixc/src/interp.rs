@@ -506,8 +506,9 @@ fn eval_intrinsic_function(
                     function.span,
                 )));
             }
-            // Interpreter runs don't currently accept argv; keep this deterministic.
-            Ok(Value::Int(0))
+            // Interpreter runs don't currently accept argv; keep this deterministic but align with
+            // C argv semantics (argc includes argv[0]).
+            Ok(Value::Int(1))
         }
         "host_argv" => {
             let [_index] = args else {
