@@ -1,0 +1,13 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let r: Result<Int, Text> = host_write_file("/tmp/kooixc_stage2_host_write_file_out.txt", "hello");
+  match r {
+    Ok(_) => 0;
+    Err(msg) => {
+      host_eprintln(msg);
+      1
+    };
+  }
+};
+

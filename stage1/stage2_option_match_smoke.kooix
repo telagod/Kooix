@@ -1,0 +1,10 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let o: Option<Int> = Option::Some(42);
+  match o {
+    Option::Some(v) => { if v == 42 { 0 } else { 2 } };
+    Option::None => 1;
+  }
+};
+

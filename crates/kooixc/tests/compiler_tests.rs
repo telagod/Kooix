@@ -3444,6 +3444,88 @@ fn stage1_self_host_v0_3_emits_and_runs_stage2_host_eprintln_smoke() {
 }
 
 #[test]
+fn stage1_self_host_v0_4_emits_and_runs_stage2_option_match_smoke() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_option_match.ll.
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/self_host_option_match_main.kooix");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_option_match_main should load via include-style imports");
+
+    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-4-option-match");
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_option_match.ll");
+
+    let run_output = compile_and_run_native_source(&source_map.combined, &output)
+        .expect("stage1 self-host option-match driver should run");
+    assert_eq!(run_output.status_code, Some(0));
+
+    // Link+run the emitted LLVM IR as a standalone Stage2 native binary.
+    let ir = std::fs::read_to_string("/tmp/kooixc_stage2_option_match.ll")
+        .expect("stage1 self-host driver should write /tmp/kooixc_stage2_option_match.ll");
+
+    let stage2 = std::env::temp_dir().join("kooixc-stage2-from-stage1-ll-option-match");
+    let _ = std::fs::remove_file(&stage2);
+    compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
+
+    let args: Vec<String> = vec![];
+    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
+        .expect("stage2 option-match binary should run");
+    assert_eq!(stage2_out.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&stage2);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_option_match.ll");
+}
+
+#[test]
+fn stage1_self_host_v0_4_emits_and_runs_stage2_host_write_file_smoke() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_host_write_file.ll.
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/self_host_host_write_file_main.kooix");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_host_write_file_main should load via include-style imports");
+
+    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-4-host-write-file");
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_write_file.ll");
+
+    let run_output = compile_and_run_native_source(&source_map.combined, &output)
+        .expect("stage1 self-host host_write_file driver should run");
+    assert_eq!(run_output.status_code, Some(0));
+
+    // Link+run the emitted LLVM IR as a standalone Stage2 native binary.
+    let ir = std::fs::read_to_string("/tmp/kooixc_stage2_host_write_file.ll")
+        .expect("stage1 self-host driver should write /tmp/kooixc_stage2_host_write_file.ll");
+
+    let stage2 = std::env::temp_dir().join("kooixc-stage2-from-stage1-ll-host-write-file");
+    let _ = std::fs::remove_file(&stage2);
+    compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
+
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_write_file_out.txt");
+    let args: Vec<String> = vec![];
+    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
+        .expect("stage2 host_write_file binary should run");
+    assert_eq!(stage2_out.status_code, Some(0));
+
+    let written = std::fs::read_to_string("/tmp/kooixc_stage2_host_write_file_out.txt")
+        .expect("stage2 host_write_file smoke should write output file");
+    assert_eq!(written, "hello");
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&stage2);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_write_file.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_write_file_out.txt");
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_while_loop() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;
