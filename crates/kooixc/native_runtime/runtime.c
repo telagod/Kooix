@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
+
 typedef struct KxEnum {
   uint8_t tag;
   uint64_t payload;
@@ -19,6 +23,33 @@ typedef struct KxStrNode {
   char* value;
   struct KxStrNode* next;
 } KxStrNode;
+
+// Best-effort: increase stack limit for deeply recursive Stage1 tooling when running as a native
+// executable. No-op if unsupported or if raising the limit fails.
+void kx_runtime_init(void) {
+#if defined(__unix__) || defined(__APPLE__)
+  struct rlimit lim;
+  if (getrlimit(RLIMIT_STACK, &lim) != 0) {
+    return;
+  }
+
+  const rlim_t target = (rlim_t)(64ULL * 1024ULL * 1024ULL);
+  if (lim.rlim_cur >= target) {
+    return;
+  }
+
+  rlim_t new_cur = target;
+  if (lim.rlim_max != RLIM_INFINITY && new_cur > lim.rlim_max) {
+    new_cur = lim.rlim_max;
+  }
+  if (new_cur <= lim.rlim_cur) {
+    return;
+  }
+
+  lim.rlim_cur = new_cur;
+  (void)setrlimit(RLIMIT_STACK, &lim);
+#endif
+}
 
 static char* kx_strdup(const char* s) {
   if (!s) {

@@ -1,20 +1,40 @@
 import "../stdlib/prelude";
 import "diag";
-import "compiler";
+import "llvm_emit";
 
 fn main() -> Int
-intent "Run Stage1 compiler skeleton (pure, no I/O) to prove bootstrap wiring"
+intent "Stage1 compiler bootstrap: emit LLVM IR for stage1/compiler_main.kooix and write to disk"
 evidence {
-  trace "stage1.main.v0";
+  trace "stage1.main.v0_13";
   metrics [stage1_main_calls];
 }
 {
-  // No CLI args yet for `run`; keep this deterministic and pure.
-  let boot_src: Text =
-    "enum Option<T> { Some(T); None; }; record Pair<A, B> { a: A; b: B; }; fn id<T>(x: T) -> T { x }; fn mk(x: Int) -> Option<Int> { Option::Some(x) }; fn mkp(x: Int) -> Pair<Int, Int> { Pair<Int, Int> { a: x; b: x; } }; fn main() -> Int { let p: Pair<Int, Int> = mkp(1); if p.a == 1 { 0 } else { 1 } };";
-  let result: Result<Int, S1Diagnostic> = s1_compile(boot_src);
-  match result {
-    Ok(code) => code;
-    Err(_e) => 2;
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/compiler_main.kooix");
+  match src_r {
+    Err(m) => {
+      host_eprintln(m);
+      2
+    };
+    Ok(src) => {
+      let ir_r: Result<Text, S1Diagnostic> = s1_emit_llvm_ir(src);
+      match ir_r {
+        Err(e) => {
+          host_eprintln(e.message);
+          3
+        };
+        Ok(ir) => {
+          let w: Result<Int, Text> =
+            host_write_file("/tmp/kooixc_stage3_stage1_compiler.ll", ir);
+          match w {
+            Ok(_n) => 0;
+            Err(msg) => {
+              host_eprintln(msg);
+              4
+            };
+          }
+        };
+      }
+    };
   }
 };
+

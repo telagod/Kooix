@@ -2316,7 +2316,7 @@ fn main() -> Int {
 #[test]
 fn stage1_compiler_skeleton_typechecks_and_runs() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let entry = repo_root.join("stage1/compiler_main.kooix");
+    let entry = repo_root.join("stage1/compiler_pure_main.kooix");
     let source_map = load_source_map(&entry).expect("stage1 compiler skeleton should load");
 
     let diagnostics = check_source(&source_map.combined);
@@ -3640,7 +3640,7 @@ fn stage1_self_host_v0_11_emits_and_runs_stage2_import_smoke() {
 }
 
 #[test]
-fn stage1_self_host_v0_12_emits_stage1_compiler_main_ir() {
+fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;
     }
@@ -3651,9 +3651,10 @@ fn stage1_self_host_v0_12_emits_stage1_compiler_main_ir() {
     let source_map = load_source_map(&entry)
         .expect("stage1 self_host_stage1_compiler_main should load via include-style imports");
 
-    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-12-stage1-compiler-main");
+    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-13-stage1-compiler-main");
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
 
     let run_output = compile_and_run_native_source(&source_map.combined, &output)
         .expect("stage1 self-host stage1-compiler driver should run");
@@ -3664,8 +3665,31 @@ fn stage1_self_host_v0_12_emits_stage1_compiler_main_ir() {
     assert!(ir.contains("define i64 @main"), "emitted LLVM IR should contain main()");
     assert!(ir.len() > 100_000, "emitted LLVM IR should be non-trivial");
 
+    // Link+run the emitted LLVM IR as a standalone Stage2 compiler binary.
+    let stage2 = std::env::temp_dir().join("kooixc-stage2-from-stage1-ll-stage1-compiler-main");
+    let _ = std::fs::remove_file(&stage2);
+    compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
+
+    let args: Vec<String> = vec![];
+    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
+        .expect("stage2 compiler binary should run");
+    assert_eq!(stage2_out.status_code, Some(0));
+
+    let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
+        .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler.ll");
+    assert!(
+        ir2.contains("define i64 @main"),
+        "stage3-emitted LLVM IR should contain main()"
+    );
+    assert!(
+        ir2.len() > 100_000,
+        "stage3-emitted LLVM IR should be non-trivial"
+    );
+
     let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&stage2);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
 }
 
 #[test]

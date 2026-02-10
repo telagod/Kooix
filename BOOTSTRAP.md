@@ -96,7 +96,7 @@ cargo run -p kooixc -- native examples/run.kooix /tmp/kooix-run --run
 
 ```bash
 # stage0 解释执行 stage1 编译器骨架（纯函数；当前不读取文件/参数）
-cargo run -p kooixc -- run stage1/compiler_main.kooix
+cargo run -p kooixc -- run stage1/compiler_pure_main.kooix
 ```
 
 ### M4：Stage0 native 编译 Stage1（性能闭环）
@@ -107,14 +107,29 @@ cargo run -p kooixc -- run stage1/compiler_main.kooix
 
 ```bash
 out=$(mktemp -u /tmp/kx-stage1c-XXXXXX)
-cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
+cargo run -p kooixc -- native stage1/compiler_pure_main.kooix "$out" --run
 ```
 
 ### M5：Stage1 自编译（进入真正自举）
 
 目标：`kooixc(stage1)` 编译 `kooixc(stage1)` 自己，产出 stage2。
 
-当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。同时新增 Text/Host 线：v0.1 Text smoke（StringLit 常量、`text_concat/int_to_text/text_len/text_starts_with`；`stage1/self_host_text_main.kooix` → `/tmp/kooixc_stage2_text.ll`，目标 `stage1/stage2_text_smoke.kooix`），v0.2 Text eq（`==/!=` via `strcmp`；`stage1/self_host_text_eq_main.kooix` → `/tmp/kooixc_stage2_text_eq.ll`，目标 `stage1/stage2_text_eq_smoke.kooix`），v0.3 host_eprintln smoke（Text -> stderr；`stage1/self_host_host_eprintln_main.kooix` → `/tmp/kooixc_stage2_host_eprintln.ll`，目标 `stage1/stage2_host_eprintln_smoke.kooix`），v0.4 enum/match/IO smoke（Stage2 侧新增 `%Option/%Result` enum layout、`Option<Int>` ctor + 2-arm `match`、`host_write_file/host_load_source_map` lowering；`stage1/self_host_option_match_main.kooix` → `/tmp/kooixc_stage2_option_match.ll`，目标 `stage1/stage2_option_match_smoke.kooix`；`stage1/self_host_host_write_file_main.kooix` → `/tmp/kooixc_stage2_host_write_file.ll`，目标 `stage1/stage2_host_write_file_smoke.kooix`），v0.5 `text_byte_at` smoke（Stage2 侧新增 `text_byte_at(Text, Int) -> Option<Int>` lowering；`stage1/self_host_text_byte_at_main.kooix` → `/tmp/kooixc_stage2_text_byte_at.ll`，目标 `stage1/stage2_text_byte_at_smoke.kooix`），v0.6 `text_slice` smoke（Stage2 侧新增 `text_slice(Text, Int, Int) -> Option<Text>` lowering；`stage1/self_host_text_slice_main.kooix` → `/tmp/kooixc_stage2_text_slice.ll`，目标 `stage1/stage2_text_slice_smoke.kooix`），v0.7 lexer canary（Stage2 侧新增 `byte_is_ascii_*` lowering；`stage1/self_host_lexer_canary_main.kooix` → `/tmp/kooixc_stage2_lexer_canary.ll`，目标 `stage1/stage2_lexer_canary_smoke.kooix`），v0.8 lexer ident smoke（Stage2 侧新增一个真实 while-scan 小片段：`text_len/text_byte_at/byte_is_ascii_ident_continue/text_slice` 组合；`stage1/self_host_lexer_ident_main.kooix` → `/tmp/kooixc_stage2_lexer_ident.ll`，目标 `stage1/stage2_lexer_ident_smoke.kooix`），v0.9 typed direct call smoke（Stage2 侧扩展“非 Int-only 的函数签名/调用”能力：`Text/Bool` 参数与返回；`stage1/self_host_fn_text_call_main.kooix` → `/tmp/kooixc_stage2_fn_text_call.ll`，目标 `stage1/stage2_fn_text_call_smoke.kooix`），v0.10 List smoke（Stage2 侧新增 List<T> lowering：`%List` enum layout、`Nil/Cons` ctor、`match List`、`ListCons<T>` record literal + member access；`stage1/self_host_list_main.kooix` → `/tmp/kooixc_stage2_list.ll`，目标 `stage1/stage2_list_smoke.kooix`），v0.11 import loader smoke（Stage2 侧验证 include 风格 `import "path";` 的 source-map 展开与链接：`stage1/self_host_import_main.kooix` → `/tmp/kooixc_stage2_import.ll`，目标 `stage1/stage2_import_smoke.kooix` + `stage1/stage2_import_lib.kooix`），以及 v0.12 stage1 compiler IR emit（Stage1 直接对 `stage1/compiler_main.kooix` 生成 LLVM IR：`stage1/self_host_stage1_compiler_main.kooix` → `/tmp/kooixc_stage2_stage1_compiler.ll`；为避免 `text_concat` 二次方内存爆炸，LLVM emitter 改为“按 function 分 chunk 收集 + round-based join”）。
+当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。
+
+- v0.1 Text smoke：`stage1/self_host_text_main.kooix` → `/tmp/kooixc_stage2_text.ll`（目标：`stage1/stage2_text_smoke.kooix`）
+- v0.2 Text eq：`stage1/self_host_text_eq_main.kooix` → `/tmp/kooixc_stage2_text_eq.ll`（目标：`stage1/stage2_text_eq_smoke.kooix`）
+- v0.3 host_eprintln smoke：`stage1/self_host_host_eprintln_main.kooix` → `/tmp/kooixc_stage2_host_eprintln.ll`
+- v0.4 enum/match/IO smoke：`stage1/self_host_option_match_main.kooix` → `/tmp/kooixc_stage2_option_match.ll`；`stage1/self_host_host_write_file_main.kooix` → `/tmp/kooixc_stage2_host_write_file.ll`
+- v0.5 text_byte_at smoke：`stage1/self_host_text_byte_at_main.kooix` → `/tmp/kooixc_stage2_text_byte_at.ll`
+- v0.6 text_slice smoke：`stage1/self_host_text_slice_main.kooix` → `/tmp/kooixc_stage2_text_slice.ll`
+- v0.7 lexer canary：`stage1/self_host_lexer_canary_main.kooix` → `/tmp/kooixc_stage2_lexer_canary.ll`
+- v0.8 lexer ident smoke：`stage1/self_host_lexer_ident_main.kooix` → `/tmp/kooixc_stage2_lexer_ident.ll`
+- v0.9 typed direct call smoke：`stage1/self_host_fn_text_call_main.kooix` → `/tmp/kooixc_stage2_fn_text_call.ll`
+- v0.10 List smoke：`stage1/self_host_list_main.kooix` → `/tmp/kooixc_stage2_list.ll`
+- v0.11 import loader smoke（include 风格 `import "path";`）：`stage1/self_host_import_main.kooix` → `/tmp/kooixc_stage2_import.ll`（目标：`stage1/stage2_import_smoke.kooix` + `stage1/stage2_import_lib.kooix`）
+- v0.12 stage1 compiler IR emit：`stage1/self_host_stage1_compiler_main.kooix` → `/tmp/kooixc_stage2_stage1_compiler.ll`（LLVM emitter 改为 chunk join，避免 `text_concat` 二次方内存爆炸）
+- v0.13 stage2 self-emit：运行 v0.12 产出的 stage2 compiler，再次对 `stage1/compiler_main.kooix` 生成 IR → `/tmp/kooixc_stage3_stage1_compiler.ll`
+补充：native runtime 增加 `kx_runtime_init`（best-effort 提升 stack limit）；Stage0/Stage1 的 LLVM emitter 会在 `main` 开头调用，避免自举链路深递归时栈溢出。
 补充：`kooixc(stage0)` 已可对 `stage1/self_host_main.kooix` 做 `check` 并通过（L1 Self-Check 局部闭环）。
 
 验收口径（推荐先松后紧）：

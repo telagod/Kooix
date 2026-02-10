@@ -32,6 +32,7 @@ pub fn emit_program(program: &MirProgram) -> String {
     output.push_str("declare i8* @memcpy(i8*, i8*, i64)\n");
     output.push_str("declare i32 @strcmp(i8*, i8*)\n\n");
     // Native host intrinsics (provided by crates/kooixc/native_runtime/runtime.c).
+    output.push_str("declare void @kx_runtime_init()\n");
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
     output.push_str("declare i8* @kx_host_write_file(i8*, i8*)\n\n");
@@ -132,6 +133,9 @@ fn emit_function(
 
     if function.blocks.is_empty() {
         let _ = writeln!(output, "entry:");
+        if function.name == "main" {
+            let _ = writeln!(output, "  call void @kx_runtime_init()");
+        }
         let _ = writeln!(
             output,
             "  {}",
@@ -186,6 +190,9 @@ impl<'a> FunctionEmitter<'a> {
         let _ = writeln!(output, "{}:", sanitize_label(&block.label));
 
         if is_entry {
+            if self.function.name == "main" {
+                let _ = writeln!(output, "  call void @kx_runtime_init()");
+            }
             self.emit_allocas(output);
             if !self.function.effects.is_empty() {
                 let _ = writeln!(output, "  ; effects: {}", self.function.effects.join(", "));

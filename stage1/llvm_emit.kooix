@@ -1697,6 +1697,35 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         match ar {
                           Err(e1) => s1_cg_expr_err(e1);
                           Ok(av) => {
+                            let out_s1: Option<S1Type> = s1_cg_s1_ty_none();
+                            let have_out_s1: Bool = false;
+                            match av.s1_ty {
+                              None => 0;
+                              Some(st0) => {
+                                out_s1 = s1_cg_s1_ty_some(s1_cg_s1_type_option(st0));
+                                have_out_s1 = true;
+                                0
+                              };
+                            };
+                            if have_out_s1 == false {
+                              if av.ty == "i64" {
+                                out_s1 = s1_cg_s1_ty_some(s1_cg_s1_type_option_int());
+                                0
+                              } else {
+                                if av.ty == "i1" {
+                                  out_s1 = s1_cg_s1_ty_some(s1_cg_s1_type_option(s1_cg_s1_type_prim("Bool")));
+                                  0
+                                } else {
+                                  if av.ty == "i8*" {
+                                    out_s1 = s1_cg_s1_ty_some(s1_cg_s1_type_option_text());
+                                    0
+                                  } else { 0 };
+                                  0
+                                }
+                              };
+                              0
+                            } else { 0 };
+
                             if av.ty == "i64" {
                               let raw_id: Text = int_to_text(av.next_tmp);
                               let raw: Text = text_concat("%t", raw_id);
@@ -1712,12 +1741,12 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               let payp: Text = text_concat("%t", payp_id);
                               let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
                               let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", av.value), text_concat(", i64* ", payp)));
-                              s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_int()); bb: bb; next_tmp: av.next_tmp + 4; })
+                              s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 4; })
                             } else {
-                              if av.ty == "i8*" {
-                                let cast_id: Text = int_to_text(av.next_tmp);
-                                let cast: Text = text_concat("%t", cast_id);
-                                let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint i8* "), av.value), " to i64"));
+                              if av.ty == "i1" {
+                                let z_id: Text = int_to_text(av.next_tmp);
+                                let z: Text = text_concat("%t", z_id);
+                                let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", z), " = zext i1 "), av.value), " to i64"));
 
                                 let raw_id: Text = int_to_text(av.next_tmp + 1);
                                 let raw: Text = text_concat("%t", raw_id);
@@ -1732,10 +1761,98 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 let payp_id: Text = int_to_text(av.next_tmp + 4);
                                 let payp: Text = text_concat("%t", payp_id);
                                 let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
-                                let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
-                                s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_text()); bb: bb; next_tmp: av.next_tmp + 5; })
+                                let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", z), text_concat(", i64* ", payp)));
+                                s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 5; })
                               } else {
-                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: Option::Some payload type not supported in v0.4"))
+                                if av.ty == "i8*" {
+                                  let cast_id: Text = int_to_text(av.next_tmp);
+                                  let cast: Text = text_concat("%t", cast_id);
+                                  let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint i8* "), av.value), " to i64"));
+
+                                  let raw_id: Text = int_to_text(av.next_tmp + 1);
+                                  let raw: Text = text_concat("%t", raw_id);
+                                  let out1: Text = s1_cg_line(out0, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                  let ptr_id: Text = int_to_text(av.next_tmp + 2);
+                                  let ptr: Text = text_concat("%t", ptr_id);
+                                  let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                  let tagp_id: Text = int_to_text(av.next_tmp + 3);
+                                  let tagp: Text = text_concat("%t", tagp_id);
+                                  let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                  let out4: Text = s1_cg_line(out3, text_concat("  store i8 0, i8* ", tagp));
+                                  let payp_id: Text = int_to_text(av.next_tmp + 4);
+                                  let payp: Text = text_concat("%t", payp_id);
+                                  let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                  let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
+                                  s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 5; })
+                                } else {
+                                  if av.ty == "%Option*" {
+                                    let cast_id: Text = int_to_text(av.next_tmp);
+                                    let cast: Text = text_concat("%t", cast_id);
+                                    let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint %Option* "), av.value), " to i64"));
+
+                                    let raw_id: Text = int_to_text(av.next_tmp + 1);
+                                    let raw: Text = text_concat("%t", raw_id);
+                                    let out1: Text = s1_cg_line(out0, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                    let ptr_id: Text = int_to_text(av.next_tmp + 2);
+                                    let ptr: Text = text_concat("%t", ptr_id);
+                                    let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                    let tagp_id: Text = int_to_text(av.next_tmp + 3);
+                                    let tagp: Text = text_concat("%t", tagp_id);
+                                    let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                    let out4: Text = s1_cg_line(out3, text_concat("  store i8 0, i8* ", tagp));
+                                    let payp_id: Text = int_to_text(av.next_tmp + 4);
+                                    let payp: Text = text_concat("%t", payp_id);
+                                    let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                    let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
+                                    s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 5; })
+                                  } else {
+                                    if av.ty == "%Result*" {
+                                      let cast_id: Text = int_to_text(av.next_tmp);
+                                      let cast: Text = text_concat("%t", cast_id);
+                                      let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint %Result* "), av.value), " to i64"));
+
+                                      let raw_id: Text = int_to_text(av.next_tmp + 1);
+                                      let raw: Text = text_concat("%t", raw_id);
+                                      let out1: Text = s1_cg_line(out0, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                      let ptr_id: Text = int_to_text(av.next_tmp + 2);
+                                      let ptr: Text = text_concat("%t", ptr_id);
+                                      let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                      let tagp_id: Text = int_to_text(av.next_tmp + 3);
+                                      let tagp: Text = text_concat("%t", tagp_id);
+                                      let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                      let out4: Text = s1_cg_line(out3, text_concat("  store i8 0, i8* ", tagp));
+                                      let payp_id: Text = int_to_text(av.next_tmp + 4);
+                                      let payp: Text = text_concat("%t", payp_id);
+                                      let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                      let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
+                                      s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 5; })
+                                    } else {
+                                      if av.ty == "%List*" {
+                                        let cast_id: Text = int_to_text(av.next_tmp);
+                                        let cast: Text = text_concat("%t", cast_id);
+                                        let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint %List* "), av.value), " to i64"));
+
+                                        let raw_id: Text = int_to_text(av.next_tmp + 1);
+                                        let raw: Text = text_concat("%t", raw_id);
+                                        let out1: Text = s1_cg_line(out0, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                        let ptr_id: Text = int_to_text(av.next_tmp + 2);
+                                        let ptr: Text = text_concat("%t", ptr_id);
+                                        let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                        let tagp_id: Text = int_to_text(av.next_tmp + 3);
+                                        let tagp: Text = text_concat("%t", tagp_id);
+                                        let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                        let out4: Text = s1_cg_line(out3, text_concat("  store i8 0, i8* ", tagp));
+                                        let payp_id: Text = int_to_text(av.next_tmp + 4);
+                                        let payp: Text = text_concat("%t", payp_id);
+                                        let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                        let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
+                                        s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: out_s1; bb: bb; next_tmp: av.next_tmp + 5; })
+                                      } else {
+                                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: Option::Some payload type not supported in v0.4"))
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           };
@@ -4042,10 +4159,15 @@ fn s1_cg_emit_function_min(out: Text, items: List<S1Item>, strs: List<S1CgStrCon
       let head: Text = text_concat(text_concat("define ", ret_llvm), text_concat(" @", f.name));
       let out1: Text = s1_cg_line(out, text_concat(head, text_concat("(", text_concat(ps, ") {"))));
       let out2: Text = s1_cg_line(out1, "entry:");
+      let entry_out: Text = out2;
+      if f.name == "main" {
+        entry_out = s1_cg_line(entry_out, "  call void @kx_runtime_init()");
+        0
+      } else { 0 };
 
       // Parameters become stack slots so assignment works without SSA/phi complexity.
       let env: List<S1CgEnvBind> = Nil;
-      let ot: Text = out2;
+      let ot: Text = entry_out;
       let nt: Int = 0;
       let pcur: List<S1Param> = f.params;
       let pdone: Bool = false;
@@ -4450,7 +4572,6 @@ fn s1_cg_emit_prelude(strs: List<S1CgStrConst>) -> Text {
   let ot: Text = out;
 
   ot = s1_cg_line(ot, "; ModuleID = 'kooix_stage1_v0'");
-  ot = s1_cg_line(ot, "source_filename = \"kooix\"");
   ot = s1_cg_line(ot, "");
 
   // Enum layout (Stage0 compatible): heap pointer to `{ i8 tag, i64 payload_word }`.
@@ -4468,6 +4589,7 @@ fn s1_cg_emit_prelude(strs: List<S1CgStrConst>) -> Text {
   ot = s1_cg_line(ot, "");
 
   // Native host intrinsics (provided by crates/kooixc/native_runtime/runtime.c).
+  ot = s1_cg_line(ot, "declare void @kx_runtime_init()");
   ot = s1_cg_line(ot, "declare i8* @kx_host_load_source_map(i8*)");
   ot = s1_cg_line(ot, "declare void @kx_host_eprintln(i8*)");
   ot = s1_cg_line(ot, "declare i8* @kx_host_write_file(i8*, i8*)");

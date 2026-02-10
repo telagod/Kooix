@@ -1,0 +1,27 @@
+import "../stdlib/prelude";
+import "diag";
+import "lexer";
+
+fn main() -> Int {
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/compiler_main.kooix");
+  match src_r {
+    Err(m) => { host_eprintln(m); 2 };
+    Ok(src) => {
+      let r: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+      match r {
+        Ok(_ts) => 0;
+        Err(e) => {
+          host_eprintln(e.message);
+          host_eprintln(text_concat("span.start=", int_to_text(e.span.start)));
+          host_eprintln(text_concat("span.end=", int_to_text(e.span.end)));
+          match text_byte_at(src, e.span.start) {
+            None => { host_eprintln("byte_at_start=None"); 0 };
+            Some(b) => { host_eprintln(text_concat("byte_at_start=", int_to_text(b))); 0 };
+          };
+          1
+        };
+      }
+    };
+  }
+};
+
