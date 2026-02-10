@@ -484,6 +484,21 @@ fn eval_intrinsic_function(
             eprintln!("{s}");
             Ok(Value::Unit)
         }
+        "host_write_file" => {
+            let [Value::Text(path), Value::Text(content)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_write_file expects (Text, Text)",
+                    function.span,
+                )));
+            };
+
+            match std::fs::write(path, content) {
+                Ok(()) => Ok(result_ok(Value::Int(0))),
+                Err(error) => Ok(result_err(Value::Text(format!(
+                    "failed to write file '{path}': {error}"
+                )))),
+            }
+        }
         _ => return None,
     })
 }

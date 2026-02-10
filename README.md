@@ -46,6 +46,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper）。
+- host intrinsics：`host_load_source_map/host_write_file/host_eprintln`（bootstrap 使用；native runtime 已实现）。
 - enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。

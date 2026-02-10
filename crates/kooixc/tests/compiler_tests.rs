@@ -3242,6 +3242,56 @@ fn main() -> Int {
 }
 
 #[test]
+#[cfg(unix)]
+fn compiles_and_runs_native_binary_with_host_write_file() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let file_path = std::env::temp_dir().join(format!(
+        "kooixc-host-write-{}-{}.txt",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let file_str = file_path.to_string_lossy().to_string();
+
+    let source = format!(
+        r#"
+enum Result<T, E> {{ Ok(T); Err(E); }};
+
+fn host_write_file(path: Text, content: Text) -> Result<Int, Text>;
+fn host_eprintln(s: Text) -> Unit;
+
+fn main() -> Int {{
+  let p: Text = "{file_str}";
+  let r: Result<Int, Text> = host_write_file(p, "hello");
+  match r {{
+    Ok(_n) => 0;
+    Err(m) => {{ host_eprintln(m); 1 }};
+  }}
+}};
+"#
+    );
+
+    let output = std::env::temp_dir().join("kooixc-native-run-host-write-smoke");
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&file_path);
+
+    let run_output =
+        compile_and_run_native_source(&source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let written = std::fs::read_to_string(&file_path).expect("file should be written");
+    assert_eq!(written, "hello");
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&file_path);
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_while_loop() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

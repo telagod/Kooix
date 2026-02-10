@@ -27,3 +27,7 @@ fn host_load_source_map(entry_path: Text) -> Result<Text, Text>;
 // Host-only debug output (Stage0 interpreter).
 // - Native: prints to host stderr.
 fn host_eprintln(s: Text) -> Unit;
+
+// Host-only file write (Stage0 interpreter / native runtime).
+// Returns Ok(0) on success, Err(message) on failure.
+fn host_write_file(path: Text, content: Text) -> Result<Int, Text>;

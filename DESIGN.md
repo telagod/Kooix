@@ -468,3 +468,9 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：Stage1 编译器保持 pure（无 I/O），但 bootstrap 需要从磁盘读取源文件并展开 imports；host intrinsics 是最小闭环。
 - **影响范围**：`crates/kooixc/src/native.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/native_runtime/runtime.c`、`crates/kooixc/tests/compiler_tests.rs` 与文档。
 - **决策依据**：避免为 Stage0 crate 引入额外 Rust 依赖，runtime 仅用 libc 并与现有 `llc + clang` 链路复用。
+
+### 2026-02-10 - Phase 9.4：native runtime 补齐 `host_write_file`（Stage1 IR 落盘）
+
+- **变更内容**：新增 host intrinsic `host_write_file(path: Text, content: Text) -> Result<Int, Text>`；interpreter 使用 `std::fs::write` 实现；native runtime 通过 libc `fopen/fwrite/fclose` 实现，并由 LLVM emitter lowering 到 `@kx_host_write_file`。
+- **变更理由**：Stage1 自编译需要将生成的 LLVM IR 文本写入磁盘，再交给 Stage0 的 `native-llvm` 链路链接生成 stage2 二进制。
+- **影响范围**：`stdlib/intrinsics.kooix`、`crates/kooixc/src/interp.rs`、`crates/kooixc/native_runtime/runtime.c`、`crates/kooixc/src/llvm.rs` 与回归测试。

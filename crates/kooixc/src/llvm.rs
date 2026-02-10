@@ -34,6 +34,7 @@ pub fn emit_program(program: &MirProgram) -> String {
     // Native host intrinsics (provided by crates/kooixc/native_runtime/runtime.c).
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
+    output.push_str("declare i8* @kx_host_write_file(i8*, i8*)\n\n");
     output.push_str("declare i8* @kx_text_concat(i8*, i8*)\n");
     output.push_str("declare i8* @kx_int_to_text(i64)\n\n");
 
@@ -743,6 +744,42 @@ impl<'a> FunctionEmitter<'a> {
                 let _ = writeln!(output, "  call void @kx_host_eprintln(i8* {sv})");
                 Some("0".to_string())
             }
+            "host_write_file" => {
+                // Runtime file write, returns Result<Int, Text>.
+                let [path, content] = args else { return Some("null".to_string()) };
+                let pv = self.emit_operand_value(
+                    path,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let cv = self.emit_operand_value(
+                    content,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let raw = self.fresh_tmp();
+                let _ = writeln!(
+                    output,
+                    "  {raw} = call i8* @kx_host_write_file(i8* {pv}, i8* {cv})"
+                );
+                let res_ty = llvm_type(
+                    &TypeRef {
+                        name: "Result".to_string(),
+                        args: Vec::new(),
+                    },
+                    self.records,
+                    self.enums,
+                );
+                let cast = self.fresh_tmp();
+                let _ = writeln!(output, "  {cast} = bitcast i8* {raw} to {res_ty}");
+                Some(cast)
+            }
             "text_concat" => {
                 let [a, b] = args else { return Some("null".to_string()) };
                 let av = self.emit_operand_value(
@@ -1246,7 +1283,7 @@ fn collect_text_constants(program: &MirProgram) -> BTreeMap<String, Vec<u8>> {
     }
 
     // Native backend internal messages (ensure they're always available).
-    for msg in ["native: host_load_source_map requires string literal path"] {
+    for msg in ["native: host_load_source_map requires string literal path", "host_write_file: path is null"] {
         let mut bytes = msg.as_bytes().to_vec();
         bytes.push(0);
         let key = bytes_to_key(&bytes);

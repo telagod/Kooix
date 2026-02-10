@@ -430,6 +430,45 @@ void kx_host_eprintln(const char* s) {
   fputc('\n', stderr);
 }
 
+KxEnum* kx_host_write_file(const char* path, const char* content) {
+  KxEnum* out = (KxEnum*)malloc(sizeof(KxEnum));
+  if (!out) {
+    return NULL;
+  }
+
+  if (!path) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_write_file: path is null");
+    return out;
+  }
+
+  FILE* f = fopen(path, "wb");
+  if (!f) {
+    out->tag = 1; // Err
+    out->payload =
+        (uint64_t)(uintptr_t)kx_strcat3("failed to open for write: ", path, "");
+    return out;
+  }
+
+  size_t n = content ? strlen(content) : 0;
+  size_t w = 0;
+  if (n) {
+    w = fwrite(content, 1, n, f);
+  }
+  int close_ok = (fclose(f) == 0);
+
+  if (!close_ok || w != n) {
+    out->tag = 1; // Err
+    out->payload =
+        (uint64_t)(uintptr_t)kx_strcat3("failed to write file: ", path, "");
+    return out;
+  }
+
+  out->tag = 0; // Ok
+  out->payload = 0; // Int(0)
+  return out;
+}
+
 char* kx_text_concat(const char* a, const char* b) {
   return kx_strcat2(a ? a : "", b ? b : "");
 }
