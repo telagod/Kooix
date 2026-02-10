@@ -49,7 +49,7 @@ fn s1_cg_function_supported(f: S1Function) -> Bool {
   // v0 subset: no generics, Int-only params/ret.
   // Body supports:
   // - zero or more: `let` and expression statements
-  // - either: trailing `result` expression, OR a single trailing `return` statement.
+  // - trailing `result` expression (no `return` in v0 subset)
   let ok: Bool = true;
 
   match f.generics {
@@ -84,7 +84,6 @@ fn s1_cg_function_supported(f: S1Function) -> Bool {
       Some(b) => {
         let cur: List<S1Stmt> = b.stmts;
         let done: Bool = false;
-        let saw_return: Bool = false;
         while done == false {
           match cur {
             Nil => { done = true; 0 };
@@ -92,14 +91,7 @@ fn s1_cg_function_supported(f: S1Function) -> Bool {
               match c0.head {
                 Let(_l) => { cur = c0.tail; 0 };
                 ExprStmt(_e) => { cur = c0.tail; 0 };
-                Return(_r) => {
-                  // must be last stmt
-                  match c0.tail {
-                    Nil => { saw_return = true; done = true; 0 };
-                    _ => { ok = false; done = true; 0 };
-                  };
-                  0
-                };
+                Return(_r) => { ok = false; done = true; 0 };
                 _ => { ok = false; done = true; 0 };
               };
               0
@@ -108,18 +100,9 @@ fn s1_cg_function_supported(f: S1Function) -> Bool {
         };
 
         if ok == true {
-          if saw_return == true {
-            match b.result {
-              None => 0;
-              _ => { ok = false; 0 };
-            };
-            0
-          } else {
-            match b.result {
-              Some(_e) => 0;
-              _ => { ok = false; 0 };
-            };
-            0
+          match b.result {
+            Some(_e) => 0;
+            _ => { ok = false; 0 };
           };
           0
         } else { 0 };
@@ -614,25 +597,7 @@ fn s1_cg_emit_function_min(out: Text, f: S1Function) -> Result<Text, S1Diagnosti
                     };
                   }
                 };
-                Return(r0) => {
-                  let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, r0.value);
-                  match rr {
-                    Err(e) => { ok = false; diag = e; done = true; 0 };
-                    Ok(r) => {
-                      if r.ty == "i64" {
-                        ot = s1_cg_line(r.text, text_concat("  ret i64 ", r.value));
-                        returned = true;
-                        done = true;
-                        0
-                      } else {
-                        ok = false;
-                        diag = s1_diag(Error, 0, 0, "codegen: return expects Int value");
-                        done = true;
-                        0
-                      }
-                    };
-                  }
-                };
+                Return(_r0) => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: return statement not supported in v0 subset"); done = true; 0 };
                 _ => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: stmt kind not supported in v0"); done = true; 0 };
               };
               0

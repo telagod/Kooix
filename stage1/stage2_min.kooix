@@ -14,7 +14,10 @@ fn add3(x: Int) -> Int {
 
 fn sink(_x: Int) -> Int { 0 };
 
+fn passthrough(x: Int) -> Int { x };
+
 fn main() -> Int {
-  let v: Int = add3(39);
-  if v == 42 { sink(v) } else { 1 }
+  let v: Int = passthrough(add3(39));
+  let ok: Int = if v == 42 { 1 } else { 0 };
+  if ok != 1 { 1 } else { sink(v) }
 };
