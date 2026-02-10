@@ -114,15 +114,15 @@ cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
 
 目标：`kooixc(stage1)` 编译 `kooixc(stage1)` 自己，产出 stage2。
 
-当前进展（v0）：已打通 “Stage1 写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。
+当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only + `+` + direct call 子集），用于验证端到端链路与最小 codegen。
 
 验收口径（推荐先松后紧）：
 
-- stage1 能编译 stage1：✓
-- stage2 能再次编译 stage1：✓
-- stage1 与 stage2 对同一输入的 diagnostics 语义一致：✓
+- v0（链路验证）：Stage1 产出可被 `llc + clang` 接受的 LLVM IR 并可运行：✓
+- v1（真正自举）：stage1 能编译 stage1（产出 stage2）：待完成
+- v2（一致性）：stage1 与 stage2 对同一输入的 diagnostics/IR 语义一致：待完成
 
-验收（v0 stub，先验证链路）：
+验收（v0 minimal subset）：
 
 ```bash
 # 1) 让 Stage1 产出 stage2 LLVM IR（写入 /tmp/kooixc_stage2.ll）

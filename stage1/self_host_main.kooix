@@ -3,13 +3,13 @@ import "diag";
 import "llvm_emit";
 
 fn main() -> Int
-intent "Stage1 self-host bootstrap (v0): emit stage2 LLVM IR and write to disk"
+intent "Stage1 self-host bootstrap (v0): emit stage2 LLVM IR (minimal subset) and write to disk"
 evidence {
   trace "stage1.self_host.v0";
   metrics [stage1_self_host_calls];
 }
 {
-  let src_r: Result<Text, Text> = host_load_source_map("stage1/compiler_main.kooix");
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/stage2_min.kooix");
   match src_r {
     Err(m) => {
       host_eprintln(m);
@@ -36,4 +36,3 @@ evidence {
     };
   }
 };
-

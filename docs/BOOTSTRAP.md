@@ -15,9 +15,10 @@
 3. **L2 Self-Compile (Bootstrap)**：`kooixc0` 编译出 `kooixc1`，且 `kooixc1` 能编译自身得到 `kooixc2`。
 4. **L3 Reproducible Bootstrap**：`kooixc1` 与 `kooixc2` 对同一输入产生可比对输出（语义等价为底线，bit-identical 为进阶）。
 
-## 当前状态（截至 2026-02-08）
+## 当前状态（截至 2026-02-10）
 
 - 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导；已支持函数体/基础表达式的解析与类型检查（Frontend），并提供最小 interpreter（纯函数体子集、禁用 effects，支持 enum/match）。
+- 进展：bootstrap 链路已跑通 v0（Stage1 Kooix 代码生成 LLVM IR 文本并通过 `native-llvm` 链接运行；当前目标程序为 `stage1/stage2_min.kooix`，输出 `/tmp/kooixc_stage2.ll`）。
 - 结论：距离 **L2** 仍差一个可运行的 runtime/stdlib，以及更完整的 `Kooix-Core`（当前已具备 include 风格 `import` 多文件加载，但仍缺 module/namespace/export、集合与错误处理等，才能写编译器本体）。
 
 ## 产物与目录约定（建议）

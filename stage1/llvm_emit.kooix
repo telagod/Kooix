@@ -1,19 +1,459 @@
 import "../stdlib/prelude";
 import "diag";
+import "ast";
+import "lexer";
+import "parser";
+import "resolver";
+import "typecheck";
+
+record S1CgEnvBind { name: Text; llvm: Text; };
+record S1CgExprOut { text: Text; value: Text; next_tmp: Int; };
+
+fn s1_cg_type_is_plain_int(ty: S1Type) -> Bool {
+  let ok: Bool = false;
+  match ty.args {
+    Nil => {
+      match s1_cg_path_single_name(ty.path) {
+        Some(name) => {
+          if name == "Int" { ok = true; 0 } else { 0 };
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+    _ => 0;
+  };
+  ok
+};
+
+fn s1_cg_function_supported(f: S1Function) -> Bool {
+  // v0 subset: no generics, Int-only params/ret, body is a pure expression block (no stmts).
+  let ok: Bool = true;
+
+  match f.generics {
+    Nil => 0;
+    _ => { ok = false; 0 };
+  };
+
+  if ok == true {
+    if s1_cg_type_is_plain_int(f.return_type) { 0 } else { ok = false; 0 };
+    0
+  } else { 0 };
+
+  if ok == true {
+    let curp: List<S1Param> = f.params;
+    let donep: Bool = false;
+    while donep == false {
+      match curp {
+        Nil => { donep = true; 0 };
+        Cons(c0) => {
+          if s1_cg_type_is_plain_int(c0.head.ty) { 0 } else { ok = false; donep = true; 0 };
+          curp = c0.tail;
+          0
+        };
+      }
+    };
+    0
+  } else { 0 };
+
+  if ok == true {
+    match f.body {
+      None => { ok = false; 0 };
+      Some(b) => {
+        match b.stmts {
+          Nil => {
+            match b.result {
+              None => { ok = false; 0 };
+              _ => 0;
+            };
+            0
+          };
+          _ => { ok = false; 0 };
+        };
+        0
+      };
+    };
+    0
+  } else { 0 };
+
+  ok
+};
+
+fn s1_cg_text_err(diag: S1Diagnostic) -> Result<Text, S1Diagnostic> {
+  let r: Result<Text, S1Diagnostic> = Err(diag);
+  r
+};
+
+fn s1_cg_text_ok(value: Text) -> Result<Text, S1Diagnostic> {
+  let r: Result<Text, S1Diagnostic> = Ok(value);
+  r
+};
+
+fn s1_cg_expr_err(diag: S1Diagnostic) -> Result<S1CgExprOut, S1Diagnostic> {
+  let r: Result<S1CgExprOut, S1Diagnostic> = Err(diag);
+  r
+};
+
+fn s1_cg_expr_ok(value: S1CgExprOut) -> Result<S1CgExprOut, S1Diagnostic> {
+  let r: Result<S1CgExprOut, S1Diagnostic> = Ok(value);
+  r
+};
+
+fn s1_cg_err(message: Text) -> Result<Text, S1Diagnostic> {
+  s1_cg_text_err(s1_diag(Error, 0, 0, message))
+};
+
+fn s1_cg_text_append(out: Text, s: Text) -> Text {
+  text_concat(out, s)
+};
+
+fn s1_cg_line(out: Text, s: Text) -> Text {
+  text_concat(text_concat(out, s), "\n")
+};
+
+fn s1_cg_path_single_name(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Nil => 0;
+    Cons(c0) => {
+      match c0.tail {
+        Nil => { out = Some(c0.head); 0 };
+        _ => 0;
+      };
+      0
+    };
+  };
+  out
+};
+
+fn s1_cg_lookup_env(env: List<S1CgEnvBind>, name: Text) -> Option<Text> {
+  let out: Option<Text> = None;
+  let cur: List<S1CgEnvBind> = env;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        if c0.head.name == name {
+          out = Some(c0.head.llvm);
+          done = true;
+          0
+        } else {
+          cur = c0.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_build_env(params: List<S1Param>) -> List<S1CgEnvBind> {
+  let acc: List<S1CgEnvBind> = Nil;
+  let cur: List<S1Param> = params;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        let llvm: Text = text_concat("%", c0.head.name);
+        let bind: S1CgEnvBind = S1CgEnvBind { name: c0.head.name; llvm: llvm; };
+        acc = Cons(ListCons<S1CgEnvBind> { head: bind; tail: acc; });
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+
+  // Reverse to preserve param order (small lists; simple impl).
+  let out: List<S1CgEnvBind> = Nil;
+  let cur2: List<S1CgEnvBind> = acc;
+  let done2: Bool = false;
+  while done2 == false {
+    match cur2 {
+      Nil => { done2 = true; 0 };
+      Cons(c0) => {
+        out = Cons(ListCons<S1CgEnvBind> { head: c0.head; tail: out; });
+        cur2 = c0.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Expr) -> Result<S1CgExprOut, S1Diagnostic> {
+  match e {
+    IntLit(raw) => s1_cg_expr_ok(S1CgExprOut { text: out; value: raw; next_tmp: next_tmp; });
+    Path(p) => {
+      match s1_cg_path_single_name(p) {
+        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: multi-segment path not supported"));
+        Some(name) => {
+          match s1_cg_lookup_env(env, name) {
+            None => s1_cg_expr_err(s1_diag(Error, 0, 0, text_concat("codegen: unknown variable ", name)));
+            Some(v) => s1_cg_expr_ok(S1CgExprOut { text: out; value: v; next_tmp: next_tmp; });
+          }
+        };
+      }
+    };
+    Binary(b) => {
+      match b.op {
+        Add => {
+          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, b.left);
+          match l_r {
+            Err(e1) => s1_cg_expr_err(e1);
+            Ok(l) => {
+              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, b.right);
+              match r_r {
+                Err(e2) => s1_cg_expr_err(e2);
+                Ok(r) => {
+                  let tmp_id: Text = int_to_text(r.next_tmp);
+                  let tmp: Text = text_concat("%t", tmp_id);
+                  let inst: Text = text_concat(text_concat(text_concat(text_concat("  ", tmp), " = add i64 "), l.value), text_concat(", ", r.value));
+                  let out2: Text = s1_cg_line(r.text, inst);
+                  s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; next_tmp: r.next_tmp + 1; })
+                };
+              }
+            };
+          }
+        };
+        _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: only Add is supported in v0"));
+      }
+    };
+    Call(c) => {
+      // Only support `callee` as a single-segment path (direct function call).
+      match c.callee {
+        Path(p) => {
+          match s1_cg_path_single_name(p) {
+            None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: callee path not supported"));
+            Some(fname) => {
+              // Evaluate args left-to-right.
+              let args_text: Text = "";
+              let out_acc: Text = out;
+              let next_acc: Int = next_tmp;
+              let cur: List<S1Expr> = c.args;
+              let done: Bool = false;
+
+              // Mutable accumulators.
+              let at: Text = args_text;
+              let ot: Text = out_acc;
+              let nt: Int = next_acc;
+              let first: Bool = true;
+              let ok: Bool = true;
+              let diag: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: arg eval failed");
+
+              while done == false {
+                match cur {
+                  Nil => { done = true; 0 };
+                  Cons(c0) => {
+                    let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, c0.head);
+                    match rr {
+                      Err(e3) => {
+                        ok = false;
+                        diag = e3;
+                        done = true;
+                        0
+                      };
+                      Ok(r) => {
+                        let piece: Text = text_concat("i64 ", r.value);
+                        if first == true {
+                          at = piece;
+                          first = false;
+                          0
+                        } else {
+                          at = text_concat(text_concat(at, ", "), piece);
+                          0
+                        };
+                        ot = r.text;
+                        nt = r.next_tmp;
+                        cur = c0.tail;
+                        0
+                      };
+                    }
+                    ;
+                    0
+                  };
+                }
+              };
+
+              if ok == false {
+                s1_cg_expr_err(diag)
+              } else {
+              let tmp_id: Text = int_to_text(nt);
+              let tmp: Text = text_concat("%t", tmp_id);
+              let call_head: Text = text_concat(text_concat(text_concat("  ", tmp), " = call i64 @"), fname);
+              let inst: Text = text_concat(text_concat(call_head, "("), text_concat(at, ")"));
+              let out2: Text = s1_cg_line(ot, inst);
+              s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; next_tmp: nt + 1; })
+              }
+            };
+          }
+        };
+        _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: callee must be a path in v0"));
+      }
+    };
+    Block(b) => {
+      match b.stmts {
+        Nil => {
+          match b.result {
+            None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: empty block has no value"));
+            Some(e2) => s1_cg_emit_expr_min(out, env, next_tmp, e2);
+          }
+        };
+        _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: block statements not supported in v0"));
+      }
+    };
+    _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: expr kind not supported in v0"));
+  }
+};
+
+fn s1_cg_emit_function_min(out: Text, f: S1Function) -> Result<Text, S1Diagnostic> {
+  // Caller must ensure `s1_cg_function_supported(f) == true`.
+  let params_str: Text = "";
+  let curp: List<S1Param> = f.params;
+  let donep: Bool = false;
+  let ps: Text = params_str;
+  let first: Bool = true;
+  while donep == false {
+    match curp {
+      Nil => { donep = true; 0 };
+      Cons(c0) => {
+        let seg: Text = text_concat("i64 %", c0.head.name);
+        if first == true {
+          ps = seg;
+          first = false;
+          0
+        } else {
+          ps = text_concat(text_concat(ps, ", "), seg);
+          0
+        };
+        curp = c0.tail;
+        0
+      };
+    }
+  };
+
+  match f.body {
+    None => s1_cg_text_ok(out);
+    Some(body) => {
+      let out1: Text = s1_cg_line(out, text_concat(text_concat("define i64 @", f.name), text_concat("(", text_concat(ps, ") {"))));
+      let out2: Text = s1_cg_line(out1, "entry:");
+
+      let env: List<S1CgEnvBind> = s1_cg_build_env(f.params);
+      match body.result {
+        None => s1_cg_text_err(s1_diag(Error, 0, 0, "codegen: function body has no result"));
+        Some(expr) => {
+          let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out2, env, 0, expr);
+          match rr {
+            Err(e) => s1_cg_text_err(e);
+            Ok(r) => {
+              let out3: Text = s1_cg_line(r.text, text_concat("  ret i64 ", r.value));
+              let out4: Text = s1_cg_line(out3, "}");
+              let out5: Text = s1_cg_line(out4, "");
+              s1_cg_text_ok(out5)
+            };
+          }
+        };
+      }
+    };
+  }
+};
+
+fn s1_emit_llvm_ir_real(source: Text) -> Result<Text, S1Diagnostic>
+intent "Stage1 LLVM IR emitter (v0 real): parse+check then emit minimal LLVM for Int-only functions"
+evidence {
+  trace "stage1.emit_llvm_real.v0";
+  metrics [stage1_emit_llvm_real_calls];
+}
+{
+  let tokens: Result<List<S1Token>, S1Diagnostic> = s1_lex(source);
+  match tokens {
+    Err(e) => s1_cg_text_err(e);
+    Ok(ts) => {
+      let ast_r: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match ast_r {
+        Err(e2) => s1_cg_text_err(e2);
+        Ok(p) => {
+          let res_r: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
+          match res_r {
+            Err(e3) => s1_cg_text_err(e3);
+            Ok(p2) => {
+              let tc_r: Result<S1Program, S1Diagnostic> = s1_typecheck_program(p2);
+              match tc_r {
+                Err(e4) => s1_cg_text_err(e4);
+                Ok(p3) => {
+                  let out: Text = "";
+                  let cur: List<S1Item> = p3.items;
+                  let done: Bool = false;
+                  let ot: Text = out;
+                  let ok_cg: Bool = true;
+                  let diag_cg: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: failed");
+                  let emitted_main: Bool = false;
+
+                  while done == false {
+                    match cur {
+                      Nil => {
+                        done = true;
+                        0
+                      };
+                      Cons(c0) => {
+                        match c0.head {
+                          Function(f) => {
+                            if s1_cg_function_supported(f) == true {
+                              match s1_cg_emit_function_min(ot, f) {
+                                Err(e5) => {
+                                  ok_cg = false;
+                                  diag_cg = e5;
+                                  done = true;
+                                  0
+                                };
+                                Ok(t2) => {
+                                  ot = t2;
+                                  if f.name == "main" { emitted_main = true; 0 } else { 0 };
+                                  0
+                                };
+                              };
+                              0
+                            } else {
+                              0
+                            };
+                            0
+                          };
+                          _ => 0;
+                        };
+                        cur = c0.tail;
+                        0
+                      };
+                    }
+                  };
+
+                  if ok_cg == false {
+                    s1_cg_text_err(diag_cg)
+                  } else {
+                    if emitted_main == false {
+                      s1_cg_text_err(s1_diag(Error, 0, 0, "codegen: no supported main() -> Int function found (v0 Int-only subset)"))
+                    } else {
+                      s1_cg_text_ok(ot)
+                    }
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+  }
+};
 
 fn s1_emit_llvm_ir(_source: Text) -> Result<Text, S1Diagnostic>
-intent "Stage1 LLVM IR emitter (v0 stub): source -> LLVM IR text"
+intent "Stage1 LLVM IR emitter (v0): parse+check then emit minimal LLVM IR subset"
 evidence {
   trace "stage1.emit_llvm.v0";
   metrics [stage1_emit_llvm_calls];
 }
 {
-  // v0: stub to validate the Stage1 -> Stage0 native-llvm handoff.
-  // Next: real lowering from Stage1 AST/HIR into a compatible LLVM IR subset.
-  Ok("define i32 @main() {
-entry:
-  ret i32 0
-}
-")
+  s1_emit_llvm_ir_real(_source)
 };
-

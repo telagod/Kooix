@@ -1,0 +1,15 @@
+import "../stdlib/prelude";
+
+// Minimal Stage2 target (v0):
+// - Int-only functions
+// - `+` and direct function calls
+// - deterministic exit code 0 (so `--run` passes)
+
+fn add2(x: Int, y: Int) -> Int { x + y };
+
+fn add3(x: Int) -> Int { add2(x, 3) };
+
+fn sink(_x: Int) -> Int { 0 };
+
+fn main() -> Int { sink(add3(39)) };
+

@@ -135,9 +135,9 @@ printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/koo
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
 # 从 LLVM IR 文件生成本地可执行文件（供 Stage1 -> Stage2 self-host 使用）
-cargo run -p kooixc -- native-llvm /tmp/kooixc-stage2.ll /tmp/kooixc-stage2 --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
 
-# Stage1 self-host v0：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2.ll）
+# Stage1 self-host v0：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2.ll；当前输入为 stage1/stage2_min.kooix）
 cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
 
 # 测试

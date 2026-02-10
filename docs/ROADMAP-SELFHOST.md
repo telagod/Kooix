@@ -59,12 +59,13 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - `kooixc0` 支持函数体/表达式 AST、类型检查、最小控制流
 - 有固定 fixtures（正反例）与 diagnostics 稳定
 
-当前落地进度（截至 2026-02-08）：
+当前落地进度（截至 2026-02-10）：
 
 - 已实现：`fn ... { ... }`、`let`/assignment/`return`、基础表达式（literal/path/call/record literal/成员投影 `x.y`/`if/else`/`while`/`match`/`+`/`==`/`!=`）与返回类型静态校验。
 - 已实现：`enum` 声明、variant 构造（unit + payload）与 `match`（穷尽性校验 + payload bind）。
 - 已实现（runtime 起步）：最小 interpreter，可 `run` 纯函数体子集（禁用 effects，支持 enum/match）。
 - 已实现（最小闭环）：顶层 `import "path";` 多文件加载（include 风格，CLI loader 拼接 source）。
+- 已实现（bootstrap v0）：Stage1 self-host 链路可产出最小 LLVM IR 子集并经 `native-llvm` 链接运行（`stage1/self_host_main.kooix` + `host_write_file`；目标程序 `stage1/stage2_min.kooix`）。
 - 未实现：真正 module/namespace/export、依赖图/增量编译、可自举所需的 runtime/stdlib，以及更完整的执行语义（VM/bytecode 或真正 lowering）。
 
 ### M2：Kooix-Core Runtime
