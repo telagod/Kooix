@@ -1,23 +1,23 @@
 import "../stdlib/prelude";
 
-// Minimal Stage2 target (v0):
+// Minimal Stage2 target (v0): validates self-host LLVM IR emission.
+// Covered subset:
 // - Int-only functions
-// - `+` and direct function calls
-// - deterministic exit code 0 (so `--run` passes)
+// - `+`, `==`, `!=`
+// - direct calls
+// - `let`, assignment, `while`, `if` expression
 
 fn add2(x: Int, y: Int) -> Int { x + y };
 
-fn add3(x: Int) -> Int {
-  let y: Int = x + 3;
-  add2(y, 0)
+fn loop_to(n: Int) -> Int {
+  let i: Int = 0;
+  while i != n {
+    i = i + 1;
+  };
+  i
 };
 
-fn sink(_x: Int) -> Int { 0 };
-
-fn passthrough(x: Int) -> Int { x };
-
 fn main() -> Int {
-  let v: Int = passthrough(add3(39));
-  let ok: Int = if v == 42 { 1 } else { 0 };
-  if ok != 1 { 1 } else { sink(v) }
+  let v: Int = loop_to(add2(7, 3));
+  if v == 10 { 0 } else { 1 }
 };
