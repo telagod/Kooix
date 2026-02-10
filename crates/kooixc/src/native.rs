@@ -5,7 +5,7 @@ use std::io::Write;
 use std::os::raw::c_int;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -220,6 +220,7 @@ pub fn compile_llvm_ir_to_executable_with_tools(
     let temp_dir = create_temp_workdir()?;
     let ll_path = temp_dir.join("module.ll");
     let obj_path = temp_dir.join("module.o");
+    let runtime_obj_path = temp_dir.join("runtime.o");
 
     fs::write(&ll_path, ir)?;
 
@@ -229,16 +230,43 @@ pub fn compile_llvm_ir_to_executable_with_tools(
         llc_tool,
         &[
             "-filetype=obj",
+            // Many modern toolchains default to linking PIE binaries. Ensure generated objects are
+            // position-independent so linking works without additional flags.
+            "-relocation-model=pic",
             ll_path_string.as_str(),
             "-o",
             obj_path_string.as_str(),
         ],
     )?;
 
+    // Compile native runtime helpers (libc-only C).
+    let runtime_c_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("native_runtime")
+        .join("runtime.c");
+    let runtime_c_string = runtime_c_path.to_string_lossy().to_string();
+    let runtime_obj_string = runtime_obj_path.to_string_lossy().to_string();
+    run_command(
+        clang_tool,
+        &[
+            "-c",
+            runtime_c_string.as_str(),
+            "-o",
+            runtime_obj_string.as_str(),
+            "-std=c99",
+            "-O2",
+            "-fPIC",
+        ],
+    )?;
+
     let output_path_string = output_path.to_string_lossy().to_string();
     run_command(
         clang_tool,
-        &[obj_path_string.as_str(), "-o", output_path_string.as_str()],
+        &[
+            obj_path_string.as_str(),
+            runtime_obj_string.as_str(),
+            "-o",
+            output_path_string.as_str(),
+        ],
     )?;
 
     let _ = fs::remove_dir_all(&temp_dir);

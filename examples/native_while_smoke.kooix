@@ -1,0 +1,16 @@
+fn main() -> Int {
+  let i: Int = 0;
+  let sum: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    if i == 10 {
+      done = true;
+      0
+    } else {
+      sum = sum + i;
+      i = i + 1;
+      0
+    }
+  };
+  if sum == 45 { 0 } else { 1 }
+};

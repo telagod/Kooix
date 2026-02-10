@@ -16,7 +16,7 @@ Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标�
 - Evidence-first：对关键链路提供 `evidence` 声明，便于 trace/metrics 与审计闭环。
 - Workflow/Agent 一等公民：把编排（`workflow`）与 agent loop（`agent`）做成可类型检查的结构，而不是散落在脚本里。
 
-## 当前状态（截至 2026-02-09）
+## 当前状态（截至 2026-02-10）
 
 Kooix 已完成一条可运行的最小编译链路：
 
@@ -28,7 +28,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - Kooix-Core 函数体（Frontend）：`fn ... { ... }`、`let`/`x = ...`/`return`、基础表达式（literal/path/call/record literal/成员投影 `x.y`/`if/else`/`while`/`+`/`==`/`!=`）与返回类型静态校验。
 - Kooix-Core 分支控制：`match`（`_`/`Variant(bind?)` pattern、arm type 收敛、穷尽性校验）。
 - 代数数据类型：`enum` 声明 + variant 构造（unit + payload；泛型 enum 依赖上下文 expected type 做最小推导）。
-- Native lowering v1：支持 `Int/Bool/Unit` 的函数体子集进入 `mir/llvm/native`（`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=`）；支持非泛型 `record`（仅 `Int/Bool` 字段）的 `record literal` + member projection；`Text`/`enum`/`match` 等仍未进入 native lowering。
+- Native lowering v1：native 后端已覆盖编译器自举所需的基础运行时数据结构与控制流：`Text`（C string 指针）+ 字符串常量；`enum`/`match`（tag+payload）；`record`（heap alloc + 字段投影；字段按 word 存储以承载指针/泛型字段）；并支持 `text_len/text_byte_at/text_slice/text_starts_with` 与 ASCII byte predicates 等 intrinsics。
 - AI v1 函数契约子集：`intent`、`ensures`、`failure`、`evidence`。
 - AI v1 编排子集：`workflow`（`steps/on_fail/output/evidence`）。
 - 记录类型：`record` 声明、字段投影与最小泛型替换（如 `Box<Answer>.value`）。
@@ -89,6 +89,8 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.9: 函数泛型语法 + 显式 call type args（最小子集）
 - ✅ Phase 9.0: 函数体 MIR/LLVM lowering（Int/Bool/Unit 子集）+ native 可执行闭环
 - ✅ Phase 9.1: `record` native lowering（非泛型 + Int/Bool 字段子集）
+- ✅ Phase 9.2: `Text/enum/match` native lowering + 预置 intrinsics（支撑 Stage1 运行）
+- ✅ Phase 9.3: native runtime 补齐 `host_load_source_map/host_eprintln`（Stage1 bootstrap 链路可跑）
 
 详见：`DESIGN.md` / `BOOTSTRAP.md`
 

@@ -20,7 +20,7 @@ Kooix 的自举不是“能写 hello world”，而是**编译器可以用自己
 
 ### 硬门槛（没有就无法自举）
 
-1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（已支持 `Int/Bool/Unit`，并支持非泛型 `record`（`Int/Bool` 字段子集）的 record literal + member projection；`enum/Text/match` 仍未进入 native lowering）。
+1. **Backend（关键）**：函数体子集的 MIR/LLVM lowering（已覆盖 `Int/Bool/Unit`、heap-allocated `record`、`enum`/`match`、`Text` 与核心 intrinsics），可支撑 Stage1 编译器在 native 下运行。
 2. **Runtime（关键）**：可支撑编译器数据结构的最小内存模型（至少 `Text` / `List<T>` / `Record` / `Enum`）。
 3. **Module/System**：从 include 风格 `import "path"` 演进到最小 module/namespace/export（编译器本身无法长期容忍全局命名空间）。
 4. **Generics**：generic fn + generic record/enum（编译器会大量复用 AST/Token/Result/Option 等泛型结构）。
@@ -58,8 +58,8 @@ cargo test -p kooixc
 4. ✅ `while`（基础块 + branch）
 5. ✅ `call`（函数调用约定）
 6. ✅ `record`/member（非泛型 + `Int/Bool` 字段子集）
-7. `enum`/`match`（tag + payload + switch）
-8. `Text`（最小 runtime 支持）
+7. ✅ `enum`/`match`（tag + payload）
+8. ✅ `Text`（最小 runtime + intrinsics）
 
 验收（示例）：
 
@@ -78,6 +78,8 @@ cargo run -p kooixc -- native examples/run.kooix /tmp/kooix-run --run
 - `Map<Text, T>`：符号表（可以先用线性表 + 二分/哈希后续再换）
 - 文件 I/O：read_to_text / write_text / list_dir（至少能读源文件）
 - diagnostics：结构化错误（message + span/path）
+
+注：当前已有 host-only intrinsics `host_load_source_map/host_eprintln`（native runtime 已实现），可用于 bootstrap 路线下“读取并展开 include 风格 import”的最小闭环；但这不等价于语言级 stdlib 的通用文件 I/O。
 
 ### M3：Stage1 编译器（先能跑，再求快）
 
@@ -103,8 +105,8 @@ cargo run -p kooixc -- run stage1/compiler_main.kooix
 验收（示例）：
 
 ```bash
-# 需要等 native lowering / runtime 覆盖 `Text`/`List`/`Result` 等基础能力后才能成立
-# cargo run -p kooixc -- native stage1/compiler_main.kooix /tmp/kooixc-stage1 --run -- examples/valid.kooix
+out=$(mktemp -u /tmp/kx-stage1c-XXXXXX)
+cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
 ```
 
 ### M5：Stage1 自编译（进入真正自举）

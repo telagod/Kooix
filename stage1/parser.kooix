@@ -295,6 +295,28 @@ fn s1_reverse_types(xs: List<S1Type>) -> List<S1Type> {
   acc
 };
 
+fn s1_reverse_record_lit_fields(xs: List<S1RecordLitField>) -> List<S1RecordLitField> {
+  let acc: List<S1RecordLitField> = Nil;
+  let cur: List<S1RecordLitField> = xs;
+  let done: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        acc = Cons(ListCons<S1RecordLitField> { head: cell.head; tail: acc; });
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  acc
+};
+
 fn s1_reverse_params(xs: List<S1Param>) -> List<S1Param> {
   let acc: List<S1Param> = Nil;
   let cur: List<S1Param> = xs;
@@ -1306,11 +1328,253 @@ fn s1_parse_primary_expr(tokens: List<S1Token>) -> Result<Pair<S1Expr, List<S1To
           0
         };
         Ident(name) => {
-          // Path
-          let parsed_path: Pair<S1Path, List<S1Token>> = s1_parse_path_tail(name, cell0.tail);
-          let path: S1Path = parsed_path.a;
-          rest = parsed_path.b;
-          expr = S1Expr.Path(path);
+          if name == "true" {
+            expr = BoolLit(true);
+            rest = cell0.tail;
+            0
+          } else {
+            if name == "false" {
+              expr = BoolLit(false);
+              rest = cell0.tail;
+              0
+            } else {
+              // Path or record literal: Type { field: expr; ... }
+              let parsed_ty: Result<Pair<S1Type, List<S1Token>>, S1Diagnostic> =
+                s1_parse_type(tokens);
+              match parsed_ty {
+                Err(e) => {
+                  ok = false;
+                  diag = e;
+                  0
+                };
+                Ok(pair) => {
+                  let ty0: S1Type = pair.a;
+                  rest = pair.b;
+
+                  match rest {
+                    Cons(b0) => {
+                      match b0.head.kind {
+                        LBrace => {
+                          // Disambiguation: treat `Type { ... }` as record literal only when it looks
+                          // like a field list (`Ident :`), otherwise leave `{` to the surrounding
+                          // syntax (e.g. `if cond { ... }`).
+                          let is_record_lit: Bool = false;
+                          match b0.tail {
+                            Cons(f1) => {
+                              match f1.head.kind {
+                                Ident(_n0) => {
+                                  match f1.tail {
+                                    Cons(f2) => {
+                                      match f2.head.kind {
+                                        Colon => {
+                                          // Reject `Ident { ns::...` (starts with `Ident ':' ':'`).
+                                          match f2.tail {
+                                            Cons(f3) => {
+                                              match f3.head.kind {
+                                                Colon => 0;
+                                                _ => {
+                                                  is_record_lit = true;
+                                                  0
+                                                };
+                                              };
+                                              0
+                                            };
+                                            _ => {
+                                              is_record_lit = true;
+                                              0
+                                            };
+                                          };
+                                          0
+                                        };
+                                        _ => 0;
+                                      };
+                                      0
+                                    };
+                                    _ => 0;
+                                  };
+                                  0
+                                };
+                                _ => 0;
+                              };
+                              0
+                            };
+                            _ => 0;
+                          };
+
+                          if is_record_lit == true {
+                            // record literal fields
+                            rest = b0.tail;
+                            let fields_rev: List<S1RecordLitField> = Nil;
+                            let done: Bool = false;
+                            while done == false {
+                              match rest {
+                                Nil => {
+                                  ok = false;
+                                  diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: expected '}' to close record literal");
+                                  done = true;
+                                  0
+                                };
+                                Cons(f0) => {
+                                  match f0.head.kind {
+                                    RBrace => {
+                                      rest = f0.tail;
+                                      done = true;
+                                      0
+                                    };
+                                    Ident(fname) => {
+                                      rest = f0.tail;
+
+                                      // :
+                                      match rest {
+                                        Nil => {
+                                          ok = false;
+                                          diag = s1_diag(Error, f0.head.span.start, f0.head.span.end, "parser: expected ':' after record field name");
+                                          done = true;
+                                          0
+                                        };
+                                        Cons(c0) => {
+                                          match c0.head.kind {
+                                            Colon => {
+                                              rest = c0.tail;
+                                              0
+                                            };
+                                            _ => {
+                                              ok = false;
+                                              diag = s1_diag(Error, c0.head.span.start, c0.head.span.end, "parser: expected ':' after record field name");
+                                              done = true;
+                                              0
+                                            };
+                                          }
+                                        };
+                                      };
+
+                                      // value expr
+                                      if ok == true {
+                                        let parsed_v: Result<Pair<S1Expr, List<S1Token>>, S1Diagnostic> =
+                                          s1_parse_expr(rest);
+                                        match parsed_v {
+                                          Err(e2) => {
+                                            ok = false;
+                                            diag = e2;
+                                            done = true;
+                                            0
+                                          };
+                                          Ok(vp) => {
+                                            let v: S1Expr = vp.a;
+                                            rest = vp.b;
+
+                                            // ; or }
+                                            match rest {
+                                              Nil => {
+                                                ok = false;
+                                                diag = s1_diag(Error, f0.head.span.start, f0.head.span.end, "parser: expected ';' or '}' after record field value");
+                                                done = true;
+                                                0
+                                              };
+                                              Cons(end0) => {
+                                                match end0.head.kind {
+                                                  Semicolon => {
+                                                    rest = end0.tail;
+                                                    fields_rev = Cons(ListCons<S1RecordLitField> { head: S1RecordLitField { name: fname; value: v; }; tail: fields_rev; });
+                                                    0
+                                                  };
+                                                  RBrace => {
+                                                    fields_rev = Cons(ListCons<S1RecordLitField> { head: S1RecordLitField { name: fname; value: v; }; tail: fields_rev; });
+                                                    // do not consume RBrace here; loop will handle it next iteration
+                                                    0
+                                                  };
+                                                  _ => {
+                                                    ok = false;
+                                                    diag = s1_diag(Error, end0.head.span.start, end0.head.span.end, "parser: expected ';' or '}' after record field value");
+                                                    done = true;
+                                                    0
+                                                  };
+                                                }
+                                              };
+                                            };
+                                            0
+                                          };
+                                        };
+                                        0
+                                      } else { 0 };
+                                      0
+                                    };
+                                    _ => {
+                                      ok = false;
+                                      diag = s1_diag(Error, f0.head.span.start, f0.head.span.end, "parser: expected field name or '}' in record literal");
+                                      done = true;
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                              }
+                            };
+
+                            if ok == true {
+                              let fields: List<S1RecordLitField> = s1_reverse_record_lit_fields(fields_rev);
+                              expr = RecordLit(S1RecordLit { ty: ty0; fields: fields; });
+                              0
+                            } else { 0 };
+                            0
+                          } else {
+                            // Not a record literal; let the caller handle `{`.
+                            match ty0.args {
+                              Nil => {
+                                expr = S1Expr.Path(ty0.path);
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: type arguments are only allowed in record literals");
+                                0
+                              };
+                            };
+                            0
+                          };
+                          0
+                        };
+                        _ => {
+                          // Not a record literal.
+                          match ty0.args {
+                            Nil => {
+                              expr = S1Expr.Path(ty0.path);
+                              0
+                            };
+                            _ => {
+                              ok = false;
+                              diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: type arguments are only allowed in record literals");
+                              0
+                            };
+                          };
+                          0
+                        };
+                      };
+                      0
+                    };
+                    _ => {
+                      // Not a record literal.
+                      match ty0.args {
+                        Nil => {
+                          expr = S1Expr.Path(ty0.path);
+                          0
+                        };
+                        _ => {
+                          ok = false;
+                          diag = s1_diag(Error, cell0.head.span.start, cell0.head.span.end, "parser: type arguments are only allowed in record literals");
+                          0
+                        };
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+              };
+              0
+            };
+            0
+          };
           0
         };
         LBrace => {
@@ -2452,6 +2716,121 @@ evidence {
                 };
               };
             };
+
+            // optional metadata sections before body:
+            // - intent "..."
+            // - evidence { ... }
+            // These are parsed and ignored in Stage1 AST v0 (they are kept for Stage0 semantics).
+            if ok == true {
+              let scanning_meta: Bool = true;
+              while scanning_meta == true {
+                match cur {
+                  Nil => {
+                    scanning_meta = false;
+                    0
+                  };
+                  Cons(m0) => {
+                    match m0.head.kind {
+                      Ident(tag) => {
+                        if tag == "intent" {
+                          cur = m0.tail;
+                          match cur {
+                            Nil => {
+                              ok = false;
+                              diag = s1_diag(Error, fn_start, fn_start, "parser: expected string literal after intent");
+                              scanning_meta = false;
+                              done = true;
+                              0
+                            };
+                            Cons(m1) => {
+                              match m1.head.kind {
+                                String(_s) => {
+                                  cur = m1.tail;
+                                  0
+                                };
+                                _ => {
+                                  ok = false;
+                                  diag = s1_diag(Error, m1.head.span.start, m1.head.span.end, "parser: expected string literal after intent");
+                                  scanning_meta = false;
+                                  done = true;
+                                  0
+                                };
+                              }
+                            };
+                          };
+                          0
+                        } else {
+                          if tag == "evidence" {
+                            cur = m0.tail;
+                            match cur {
+                              Nil => {
+                                ok = false;
+                                diag = s1_diag(Error, fn_start, fn_start, "parser: expected '{' after evidence");
+                                scanning_meta = false;
+                                done = true;
+                                0
+                              };
+                              Cons(m1) => {
+                                match m1.head.kind {
+                                  LBrace => {
+                                    cur = m1.tail;
+                                    // Skip evidence block content until the matching '}'.
+                                    let scan_done: Bool = false;
+                                    while scan_done == false {
+                                      match cur {
+                                        Nil => {
+                                          ok = false;
+                                          diag = s1_diag(Error, fn_start, fn_start, "parser: unterminated evidence block");
+                                          scanning_meta = false;
+                                          done = true;
+                                          scan_done = true;
+                                          0
+                                        };
+                                        Cons(m2) => {
+                                          match m2.head.kind {
+                                            RBrace => {
+                                              scan_done = true;
+                                              0
+                                            };
+                                            _ => 0;
+                                          };
+                                          cur = m2.tail;
+                                          0
+                                        };
+                                      }
+                                    };
+                                    0
+                                  };
+                                  _ => {
+                                    ok = false;
+                                    diag = s1_diag(Error, m1.head.span.start, m1.head.span.end, "parser: expected '{' after evidence");
+                                    scanning_meta = false;
+                                    done = true;
+                                    0
+                                  };
+                                }
+                              };
+                            };
+                            0
+                          } else {
+                            scanning_meta = false;
+                            0
+                          };
+                          0
+                        };
+                        0
+                      };
+                      _ => {
+                        scanning_meta = false;
+                        0
+                      };
+                    };
+                    0
+                  };
+                }
+              };
+              0
+            } else { 0 };
 
             // ';' or '{' ... '}' ';'
             if ok == true {

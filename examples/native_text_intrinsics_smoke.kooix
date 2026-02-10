@@ -1,0 +1,32 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  if text_len("abc") != 3 { 10 } else {
+    match text_byte_at("abc", 0) {
+      None => 11;
+      Some(b0) => {
+        if b0 != 97 { 12 } else {
+          match text_byte_at("abc", 2) {
+            Some(b2) => {
+              if b2 != 99 { 13 } else {
+                match text_byte_at("abc", 3) {
+                  Some(_b3) => 14;
+                  None => {
+                    match text_slice("hello", 1, 4) {
+                      None => 15;
+                      Some(s) => {
+                        if s == "ell" { 0 } else { 16 }
+                      };
+                    }
+                  };
+                }
+              }
+            };
+            None => 17;
+          }
+        }
+      };
+    }
+  }
+};
+

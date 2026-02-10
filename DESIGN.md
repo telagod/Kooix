@@ -454,3 +454,17 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：Stage1 编译器需要结构化数据（AST/Token/Span/Diagnostic 的 record 表示）与字段访问；native 后端必须能承载最小 record 才能继续推进 runtime/stdlib。
 - **影响范围**：`crates/kooixc/src/mir.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/tests/compiler_tests.rs` 与 README。
 - **决策依据**：先选“record by-value + insert/extract”的最小可审计实现，避免过早引入 heap/runtime；泛型 record、嵌套 record、Text/enum/match 留到后续阶段。
+
+### 2026-02-10 - Phase 9.2：native lowering 覆盖 `Text/enum/match`（支撑 Stage1）
+
+- **变更内容**：native MIR/LLVM lowering 扩展为 heap-allocated `record/enum` 表示；record 字段以 word（`i64`）存储以承载指针/泛型字段；enum 采用 `{ tag: i8, payload_word: i64 }`；实现 `match` lowering（tag test + block chain）；`Text` 统一表示为 NUL-terminated `i8*` 并支持字符串常量；补齐 `text_len/text_byte_at/text_slice/text_starts_with` 与 ASCII byte predicates 等 intrinsics（libc `strlen/memcmp/memcpy/strcmp`）。
+- **变更理由**：Stage1 编译器（lexer/parser/typecheck 等）依赖 `Text/List/Result/TokenKind` 等泛型结构与 `match` 控制流，必须先在 native 后端具备可运行语义。
+- **影响范围**：`crates/kooixc/src/mir.rs`、`crates/kooixc/src/llvm.rs`、`stdlib/prelude.kooix` 与相关回归用例。
+- **决策依据**：优先语义正确与可调试（alloca + heap runtime），暂不追求 SSA/逃逸分析/GC。
+
+### 2026-02-10 - Phase 9.3：native runtime 补齐 host intrinsics（bootstrap 文件加载）
+
+- **变更内容**：为 `host_load_source_map/host_eprintln` 增加 native runtime 实现（libc-only C runtime 编译并随生成二进制链接）；`host_load_source_map` 在运行期读取并递归展开 include 风格 `import "path";`，输出与 Stage0 loader 兼容的 combined source；同时保留“参数为字面量路径时”的编译期折叠以保证 bootstrap 可重复。
+- **变更理由**：Stage1 编译器保持 pure（无 I/O），但 bootstrap 需要从磁盘读取源文件并展开 imports；host intrinsics 是最小闭环。
+- **影响范围**：`crates/kooixc/src/native.rs`、`crates/kooixc/src/llvm.rs`、`crates/kooixc/native_runtime/runtime.c`、`crates/kooixc/tests/compiler_tests.rs` 与文档。
+- **决策依据**：避免为 Stage0 crate 引入额外 Rust 依赖，runtime 仅用 libc 并与现有 `llc + clang` 链路复用。

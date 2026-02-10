@@ -177,6 +177,77 @@ fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
   };
   let f_sl_i: S1Item = Function(f_sl);
 
+  // fn text_starts_with(s: Text, prefix: Text) -> Bool;
+  let p_prefix: S1Param = S1Param { name: "prefix"; ty: s1_mod_type_simple("Text"); };
+  let tail_sw: List<S1Param> = Cons(ListCons<S1Param> { head: p_prefix; tail: empty_params; });
+  let ps_sw: List<S1Param> = Cons(ListCons<S1Param> { head: p_s; tail: tail_sw; });
+  let f_sw: S1Function = S1Function {
+    name: "text_starts_with";
+    generics: empty_fn_generics;
+    params: ps_sw;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_sw_i: S1Item = Function(f_sw);
+
+  // fn byte_is_ascii_* (b: Int) -> Bool;
+  let p_b: S1Param = S1Param { name: "b"; ty: s1_mod_type_simple("Int"); };
+  let ps_b: List<S1Param> = Cons(ListCons<S1Param> { head: p_b; tail: empty_params; });
+
+  let f_ws: S1Function = S1Function {
+    name: "byte_is_ascii_whitespace";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_ws_i: S1Item = Function(f_ws);
+
+  let f_d: S1Function = S1Function {
+    name: "byte_is_ascii_digit";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_d_i: S1Item = Function(f_d);
+
+  let f_a: S1Function = S1Function {
+    name: "byte_is_ascii_alpha";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_a_i: S1Item = Function(f_a);
+
+  let f_an: S1Function = S1Function {
+    name: "byte_is_ascii_alnum";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_an_i: S1Item = Function(f_an);
+
+  let f_is: S1Function = S1Function {
+    name: "byte_is_ascii_ident_start";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_is_i: S1Item = Function(f_is);
+
+  let f_ic: S1Function = S1Function {
+    name: "byte_is_ascii_ident_continue";
+    generics: empty_fn_generics;
+    params: ps_b;
+    return_type: s1_mod_type_simple("Bool");
+    body: no_body;
+  };
+  let f_ic_i: S1Item = Function(f_ic);
+
   // enum Option<T> { Some(T); None; }
   let gen_t: List<S1GenericParam> = s1_mod_generics1("T");
   let t_ty: S1Type = s1_mod_type_simple("T");
@@ -233,7 +304,14 @@ fn s1_mod_prelude_stub_items(ns: Text) -> List<S1Item> {
   let xs5: List<S1Item> = Cons(ListCons<S1Item> { head: f_len_i; tail: xs4; });
   let xs6: List<S1Item> = Cons(ListCons<S1Item> { head: f_ba_i; tail: xs5; });
   let xs7: List<S1Item> = Cons(ListCons<S1Item> { head: f_sl_i; tail: xs6; });
-  xs7
+  let xs8: List<S1Item> = Cons(ListCons<S1Item> { head: f_sw_i; tail: xs7; });
+  let xs9: List<S1Item> = Cons(ListCons<S1Item> { head: f_ws_i; tail: xs8; });
+  let xs10: List<S1Item> = Cons(ListCons<S1Item> { head: f_d_i; tail: xs9; });
+  let xs11: List<S1Item> = Cons(ListCons<S1Item> { head: f_a_i; tail: xs10; });
+  let xs12: List<S1Item> = Cons(ListCons<S1Item> { head: f_an_i; tail: xs11; });
+  let xs13: List<S1Item> = Cons(ListCons<S1Item> { head: f_is_i; tail: xs12; });
+  let xs14: List<S1Item> = Cons(ListCons<S1Item> { head: f_ic_i; tail: xs13; });
+  xs14
 };
 
 fn s1_mod_infer_basename_no_ext(path: Text) -> Text {

@@ -49,6 +49,48 @@ fn s1_tc_reverse_texts(xs: List<Text>) -> List<Text> {
   acc
 };
 
+fn s1_tc_texts_append_one(xs: List<Text>, x: Text) -> List<Text> {
+  // Append by reverse/cons/reverse (small lists; Stage1 simplicity > speed).
+  let rev: List<Text> = s1_tc_reverse_texts(xs);
+  let rev2: List<Text> = Cons(ListCons<Text> { head: x; tail: rev; });
+  s1_tc_reverse_texts(rev2)
+};
+
+fn s1_tc_path_first(path: S1Path) -> Option<Text> {
+  let out: Option<Text> = None;
+  match path.segments {
+    Nil => 0;
+    Cons(c0) => {
+      out = Some(c0.head);
+      0
+    };
+  };
+  out
+};
+
+fn s1_tc_flatten_member_path(e: S1Expr) -> Option<S1Path> {
+  let out: Option<S1Path> = None;
+  match e {
+    Path(p) => {
+      out = Some(p);
+      0
+    };
+    Member(m) => {
+      match s1_tc_flatten_member_path(m.base) {
+        None => 0;
+        Some(p0) => {
+          let segs2: List<Text> = s1_tc_texts_append_one(p0.segments, m.name);
+          out = Some(S1Path { segments: segs2; });
+          0
+        };
+      };
+      0
+    };
+    _ => 0;
+  };
+  out
+};
+
 fn s1_tc_reverse_types(xs: List<S1Type>) -> List<S1Type> {
   let acc: List<S1Type> = Nil;
   let cur: List<S1Type> = xs;
@@ -1301,8 +1343,148 @@ fn s1_tc_expr_type(
       ty = s1_tc_int_type();
       0
     };
+    BoolLit(_) => {
+      ty = s1_tc_bool_type();
+      0
+    };
     StringLit(_) => {
       ty = s1_tc_text_type();
+      0
+    };
+    RecordLit(rl) => {
+      let rec_opt: Option<S1Record> = None;
+      let head_opt: Option<Text> = s1_tc_path_singleton(rl.ty.path);
+      match head_opt {
+        None => 0;
+        Some(name) => {
+          rec_opt = s1_tc_lookup_record(items, name);
+          0
+        };
+      };
+
+      match rec_opt {
+        Some(_) => 0;
+        None => {
+          // Try imported module record: ns::Name
+          let two_opt: Option<Pair<Text, Text>> = s1_tc_path_two(rl.ty.path);
+          match two_opt {
+            None => 0;
+            Some(pair) => {
+              match s1_mod_lookup(mods, pair.a) {
+                None => 0;
+                Some(m) => {
+                  rec_opt = s1_mod_lookup_record(m, pair.b);
+                  0
+                };
+              };
+              0
+            };
+          };
+          0
+        };
+      };
+
+      match rec_opt {
+        None => {
+          ok = false;
+          diag = s1_diag(Error, 0, 0, "typecheck: unknown record type in record literal");
+          0
+        };
+        Some(rec) => {
+          let seen: List<Text> = Nil;
+          let cur: List<S1RecordLitField> = rl.fields;
+          let done: Bool = false;
+          while done == false {
+            match cur {
+              Nil => {
+                done = true;
+                0
+              };
+              Cons(cell) => {
+                if s1_tc_list_contains_text(seen, cell.head.name) == true {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: duplicate record literal field");
+                  done = true;
+                  0
+                } else {
+                  seen = Cons(ListCons<Text> { head: cell.head.name; tail: seen; });
+
+                  let ft_r: Result<S1Type, S1Diagnostic> =
+                    s1_tc_record_field_type(items, mods, rl.ty, cell.head.name);
+                  match ft_r {
+                    Err(e2) => {
+                      ok = false;
+                      diag = e2;
+                      done = true;
+                      0
+                    };
+                    Ok(ft) => {
+                      let vt_r: Result<S1Type, S1Diagnostic> =
+                        s1_tc_expr_type(items, mods, fns, env, Some(ft), cell.head.value);
+                      match vt_r {
+                        Err(e3) => {
+                          ok = false;
+                          diag = e3;
+                          done = true;
+                          0
+                        };
+                        Ok(vt) => {
+                          if s1_tc_types_eq(vt, ft) == true {
+                            cur = cell.tail;
+                            0
+                          } else {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: record literal field type mismatch");
+                            done = true;
+                            0
+                          };
+                          0
+                        };
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+                0
+              };
+            }
+          };
+
+          // Require all fields present.
+          if ok == true {
+            let rcur: List<S1RecordField> = rec.fields;
+            let rdone: Bool = false;
+            while rdone == false {
+              match rcur {
+                Nil => {
+                  rdone = true;
+                  0
+                };
+                Cons(rcell) => {
+                  if s1_tc_list_contains_text(seen, rcell.head.name) == true {
+                    rcur = rcell.tail;
+                    0
+                  } else {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: missing record literal field");
+                    rdone = true;
+                    0
+                  };
+                  0
+                };
+              }
+            };
+            0
+          } else { 0 };
+
+          if ok == true {
+            ty = rl.ty;
+            0
+          } else { 0 };
+          0
+        };
+      };
       0
     };
     Path(p) => {
@@ -1315,13 +1497,129 @@ fn s1_tc_expr_type(
         };
         Some(n) => {
           match s1_tc_lookup_var(env, n) {
-            None => {
-              ok = false;
-              diag = s1_diag(Error, 0, 0, "typecheck: unknown variable");
-              0
-            };
             Some(vty) => {
               ty = vty;
+              0
+            };
+            None => {
+              // If it's not a variable, try treating it as a unit enum variant (e.g. `Nil`, `None`).
+              let found: Bool = false;
+              let amb: Bool = false;
+              let empty_generics: List<S1GenericParam> = Nil;
+              let empty_variants: List<S1EnumVariant> = Nil;
+              let enum_def: S1Enum = S1Enum { name: ""; generics: empty_generics; variants: empty_variants; };
+              let enum_path: S1Path = s1_tc_empty_path();
+
+              let icur: List<S1Item> = items;
+              let idone: Bool = false;
+              while idone == false {
+                match icur {
+                  Nil => {
+                    idone = true;
+                    0
+                  };
+                  Cons(icell) => {
+                    match icell.head {
+                      Enum(e0) => {
+                        match s1_tc_lookup_enum_variant(e0, n) {
+                          None => {
+                            icur = icell.tail;
+                            0
+                          };
+                          Some(vd) => {
+                            match vd.payload_ty {
+                              Some(_) => {
+                                icur = icell.tail;
+                                0
+                              };
+                              None => {
+                                if found == false {
+                                  found = true;
+                                  enum_def = e0;
+                                  enum_path = s1_tc_simple_path(e0.name);
+                                  icur = icell.tail;
+                                  0
+                                } else {
+                                  amb = true;
+                                  idone = true;
+                                  0
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                      _ => {
+                        icur = icell.tail;
+                        0
+                      };
+                    };
+                    0
+                  };
+                }
+              };
+
+              if amb == true {
+                ok = false;
+                diag = s1_diag(Error, 0, 0, "typecheck: ambiguous unit enum variant (qualify it)");
+                0
+              } else {
+                if found == false {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: unknown variable");
+                  0
+                } else {
+                  match expected {
+                    Some(et) => {
+                      if s1_tc_texts_eq(et.path.segments, enum_path.segments) == true {
+                        ty = et;
+                        0
+                      } else {
+                        // If expected doesn't match, only allow non-generic enums.
+                        match enum_def.generics {
+                          Nil => {
+                            let empty_args: List<S1Type> = Nil;
+                            ty = S1Type { path: enum_path; args: empty_args; };
+                            0
+                          };
+                          _ => {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: unit variant expected type mismatch");
+                            0
+                          };
+                        };
+                        0
+                      };
+                      0
+                    };
+                    None => {
+                      match enum_def.generics {
+                        Nil => {
+                          let empty_args2: List<S1Type> = Nil;
+                          ty = S1Type { path: enum_path; args: empty_args2; };
+                          0
+                        };
+                        _ => {
+                          ok = false;
+                          diag = s1_diag(
+                            Error,
+                            0,
+                            0,
+                            "typecheck: cannot infer generic unit variant without expected type"
+                          );
+                          0
+                        };
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+                0
+              };
               0
             };
           };
@@ -1399,29 +1697,205 @@ fn s1_tc_expr_type(
       0
     };
     Member(m) => {
-      let base_r: Result<S1Type, S1Diagnostic> = s1_tc_expr_type(items, mods, fns, env, None, m.base);
-      match base_r {
-        Err(e) => {
-          ok = false;
-          diag = e;
-          0
-        };
-        Ok(bt) => {
-          let fr: Result<S1Type, S1Diagnostic> = s1_tc_record_field_type(items, mods, bt, m.name);
-          match fr {
-            Err(e2) => {
-              ok = false;
-              diag = e2;
-              0
-            };
-            Ok(ft) => {
-              ty = ft;
+      // First, try treating `Enum.Variant` as a qualified *unit* enum variant value.
+      // If that doesn't apply, fall back to record field access.
+      let handled: Bool = false;
+      let p_opt: Option<S1Path> = s1_tc_flatten_member_path(S1Expr.Member(m));
+      match p_opt {
+        None => 0;
+        Some(p2) => {
+          match s1_tc_path_first(p2) {
+            None => 0;
+            Some(root) => {
+              match s1_tc_lookup_var(env, root) {
+                // If it starts with a variable, this is record field access (e.g. `x.field`).
+                Some(_) => 0;
+                None => {
+                  let plen: Int = s1_tc_path_len(p2);
+                  if plen == 2 {
+                    match s1_tc_path_two(p2) {
+                      None => 0;
+                      Some(pair) => {
+                        match s1_tc_lookup_enum(items, pair.a) {
+                          None => 0;
+                          Some(ed) => {
+                            match s1_tc_lookup_enum_variant(ed, pair.b) {
+                              None => 0;
+                              Some(vd) => {
+                                match vd.payload_ty {
+                                  Some(_) => 0;
+                                  None => {
+                                    let empty: List<S1Type> = Nil;
+                                    let base_ty: S1Type = S1Type { path: s1_tc_simple_path(pair.a); args: empty; };
+                                    match ed.generics {
+                                      Nil => {
+                                        ty = base_ty;
+                                        handled = true;
+                                        0
+                                      };
+                                      _ => {
+                                        match expected {
+                                          None => {
+                                            ok = false;
+                                            diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic unit variant");
+                                            handled = true;
+                                            0
+                                          };
+                                          Some(et) => {
+                                            if s1_tc_texts_eq(et.path.segments, base_ty.path.segments) == true {
+                                              ty = et;
+                                              handled = true;
+                                              0
+                                            } else {
+                                              ok = false;
+                                              diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic unit variant");
+                                              handled = true;
+                                              0
+                                            };
+                                            0
+                                          };
+                                        };
+                                        0
+                                      };
+                                    };
+                                    0
+                                  };
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                    };
+                    0
+                  } else {
+                    if plen == 3 {
+                      let ns: Text = "";
+                      let en: Text = "";
+                      let vn: Text = "";
+                      match p2.segments {
+                        Cons(c0) => {
+                          ns = c0.head;
+                          match c0.tail {
+                            Cons(c1) => {
+                              en = c1.head;
+                              match c1.tail {
+                                Cons(c2) => {
+                                  vn = c2.head;
+                                  0
+                                };
+                                _ => 0;
+                              };
+                              0
+                            };
+                            _ => 0;
+                          };
+                          0
+                        };
+                        _ => 0;
+                      };
+
+                      match s1_mod_lookup(mods, ns) {
+                        None => 0;
+                        Some(mm) => {
+                          match s1_mod_lookup_enum(mm, en) {
+                            None => 0;
+                            Some(ed2) => {
+                              match s1_tc_lookup_enum_variant(ed2, vn) {
+                                None => 0;
+                                Some(vd2) => {
+                                  match vd2.payload_ty {
+                                    Some(_) => 0;
+                                    None => {
+                                      let empty: List<S1Type> = Nil;
+                                      let base_ty: S1Type = S1Type { path: s1_tc_ns_path2(ns, en); args: empty; };
+                                      match ed2.generics {
+                                        Nil => {
+                                          ty = base_ty;
+                                          handled = true;
+                                          0
+                                        };
+                                        _ => {
+                                          match expected {
+                                            None => {
+                                              ok = false;
+                                              diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic unit variant");
+                                              handled = true;
+                                              0
+                                            };
+                                            Some(et) => {
+                                              if s1_tc_texts_eq(et.path.segments, base_ty.path.segments) == true {
+                                                ty = et;
+                                                handled = true;
+                                                0
+                                              } else {
+                                                ok = false;
+                                                diag = s1_diag(Error, 0, 0, "typecheck: cannot infer generic unit variant");
+                                                handled = true;
+                                                0
+                                              };
+                                              0
+                                            };
+                                          };
+                                          0
+                                        };
+                                      };
+                                      0
+                                    };
+                                  };
+                                  0
+                                };
+                              };
+                              0
+                            };
+                          };
+                          0
+                        };
+                      };
+                      0
+                    } else { 0 };
+                    0
+                  };
+                  0
+                };
+              };
               0
             };
           };
           0
         };
       };
+
+      if handled == false {
+        let base_r: Result<S1Type, S1Diagnostic> =
+          s1_tc_expr_type(items, mods, fns, env, None, m.base);
+        match base_r {
+          Err(e) => {
+            ok = false;
+            diag = e;
+            0
+          };
+          Ok(bt) => {
+            let fr: Result<S1Type, S1Diagnostic> = s1_tc_record_field_type(items, mods, bt, m.name);
+            match fr {
+              Err(e2) => {
+                ok = false;
+                diag = e2;
+                0
+              };
+              Ok(ft) => {
+                ty = ft;
+                0
+              };
+            };
+            0
+          };
+        };
+        0
+      } else { 0 };
       0
     };
     Block(b) => {
@@ -1846,23 +2320,27 @@ fn s1_tc_expr_type(
           }
         };
 
-        match arm_ty_opt {
-          None => {
-            ok = false;
-            diag = s1_diag(Error, 0, 0, "typecheck: match must have at least one arm");
-            0
+        if ok == true {
+          match arm_ty_opt {
+            None => {
+              ok = false;
+              diag = s1_diag(Error, 0, 0, "typecheck: match must have at least one arm");
+              0
+            };
+            Some(t0) => {
+              ty = t0;
+              0
+            };
           };
-          Some(t0) => {
-            ty = t0;
-            0
-          };
-        };
+          0
+        } else { 0 };
         0
       } else { 0 };
       0
     };
     Call(c) => {
-      // Only support calls where callee is Path for Stage1.
+      // Stage1: support Path callees, plus `Enum.Variant(...)` sugar as Member chain
+      // (desugared to a Path and re-typechecked).
       match c.callee {
         Path(cp) => {
           let fn_name_opt: Option<Text> = s1_tc_path_singleton(cp);
@@ -1870,8 +2348,217 @@ fn s1_tc_expr_type(
             Some(fname) => {
               match s1_tc_lookup_fn(fns, fname) {
                 None => {
-                  ok = false;
-                  diag = s1_diag(Error, 0, 0, "typecheck: unknown function");
+                  // Fallback: treat imported module functions as implicitly in scope (include-style),
+                  // so Stage1 can typecheck its own sources that call prelude intrinsics unqualified.
+                  let ctor_found: Bool = false;
+                  let ctor_ambiguous: Bool = false;
+                  let ctor_enum_name: Text = "";
+
+                  let icur: List<S1Item> = items;
+                  let idone: Bool = false;
+                  while idone == false {
+                    match icur {
+                      Nil => {
+                        idone = true;
+                        0
+                      };
+                      Cons(icell) => {
+                        match icell.head {
+                          Enum(e0) => {
+                            match s1_tc_lookup_enum_variant(e0, fname) {
+                              None => {
+                                icur = icell.tail;
+                                0
+                              };
+                              Some(_) => {
+                                if ctor_found == false {
+                                  ctor_found = true;
+                                  ctor_enum_name = e0.name;
+                                  icur = icell.tail;
+                                  0
+                                } else {
+                                  ctor_ambiguous = true;
+                                  idone = true;
+                                  0
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                          _ => {
+                            icur = icell.tail;
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+
+                  if ctor_ambiguous == true {
+                    ok = false;
+                    diag =
+                      s1_diag(Error, 0, 0, "typecheck: ambiguous enum constructor (qualify with Enum::Variant)");
+                    0
+                  } else {
+                    if ctor_found == true {
+                      let ctor_path: S1Path = s1_tc_ns_path2(ctor_enum_name, fname);
+                      let ctor_expr: S1Expr =
+                        S1Expr.Call(S1Call { callee: S1Expr.Path(ctor_path); args: c.args; });
+                      let ctor_r: Result<S1Type, S1Diagnostic> =
+                        s1_tc_expr_type(items, mods, fns, env, expected, ctor_expr);
+                      match ctor_r {
+                        Err(e_ctor) => {
+                          ok = false;
+                          diag = e_ctor;
+                          0
+                        };
+                        Ok(t_ctor) => {
+                          ty = t_ctor;
+                          0
+                        };
+                      };
+                      0
+                    } else { 0 };
+                    0
+                  };
+
+                  if ok == true {
+                    if ctor_found == true { 0 } else {
+                  let empty_generics: List<S1GenericParam> = Nil;
+                  let empty_params: List<S1Param> = Nil;
+                  let empty_ty_args: List<S1Type> = Nil;
+                  let empty_ty: S1Type = S1Type { path: s1_tc_empty_path(); args: empty_ty_args; };
+                  let no_body: Option<S1Block> = None;
+                  let imported_fn: S1Function = S1Function {
+                    name: "";
+                    generics: empty_generics;
+                    params: empty_params;
+                    return_type: empty_ty;
+                    body: no_body;
+                  };
+                  let found: Bool = false;
+                  let ambiguous: Bool = false;
+
+                  let mcur: List<S1Module> = mods;
+                  let mdone: Bool = false;
+                  while mdone == false {
+                    match mcur {
+                      Nil => {
+                        mdone = true;
+                        0
+                      };
+                      Cons(mcell) => {
+                        match s1_mod_lookup_fn(mcell.head, fname) {
+                          None => {
+                            mcur = mcell.tail;
+                            0
+                          };
+                          Some(f2) => {
+                            if found == false {
+                              imported_fn = f2;
+                              found = true;
+                              mcur = mcell.tail;
+                              0
+                            } else {
+                              ambiguous = true;
+                              mdone = true;
+                              0
+                            };
+                            0
+                          };
+                        };
+                        0
+                      };
+                    }
+                  };
+
+                  if ambiguous == true {
+                    ok = false;
+                    diag = s1_diag(Error, 0, 0, "typecheck: ambiguous imported function");
+                    0
+                  } else {
+                    if found == false {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: unknown function");
+                      0
+                    } else {
+                      // check args against imported_fn.params
+                      let pcur: List<S1Param> = imported_fn.params;
+                      let acur: List<S1Expr> = c.args;
+                      let pc: List<S1Param> = pcur;
+                      let ac: List<S1Expr> = acur;
+                      let done: Bool = false;
+                      while done == false {
+                        match pc {
+                          Nil => {
+                            match ac {
+                              Nil => {
+                                done = true;
+                                0
+                              };
+                              _ => {
+                                ok = false;
+                                diag = s1_diag(Error, 0, 0, "typecheck: too many call arguments");
+                                done = true;
+                                0
+                              };
+                            };
+                            0
+                          };
+                          Cons(pcell) => {
+                            match ac {
+                              Nil => {
+                                ok = false;
+                                diag = s1_diag(Error, 0, 0, "typecheck: missing call arguments");
+                                done = true;
+                                0
+                              };
+                              Cons(acell) => {
+                                let ar: Result<S1Type, S1Diagnostic> =
+                                  s1_tc_expr_type(items, mods, fns, env, Some(pcell.head.ty), acell.head);
+                                match ar {
+                                  Err(e2) => {
+                                    ok = false;
+                                    diag = e2;
+                                    done = true;
+                                    0
+                                  };
+                                  Ok(at) => {
+                                    if s1_tc_types_eq(at, pcell.head.ty) == true {
+                                      pc = pcell.tail;
+                                      ac = acell.tail;
+                                      0
+                                    } else {
+                                      ok = false;
+                                      diag = s1_diag(Error, 0, 0, "typecheck: call argument type mismatch");
+                                      done = true;
+                                      0
+                                    };
+                                    0
+                                  };
+                                };
+                                0
+                              };
+                            };
+                            0
+                          };
+                        }
+                      };
+
+                      if ok == true {
+                        ty = imported_fn.return_type;
+                        0
+                      } else { 0 };
+                      0
+                    };
+                    0
+                  };
+                  0
+                    };
+                    0
+                  } else { 0 };
                   0
                 };
                 Some(sig) => {
@@ -2354,6 +3041,54 @@ fn s1_tc_expr_type(
                 };
                 0
               } else { 0 };
+              0
+            };
+          };
+          0
+        };
+        Member(_) => {
+          match s1_tc_flatten_member_path(c.callee) {
+            None => {
+              ok = false;
+              diag = s1_diag(Error, 0, 0, "typecheck: only Path callees are supported in Stage1");
+              0
+            };
+            Some(cp2) => {
+              match s1_tc_path_first(cp2) {
+                None => {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: invalid member-path callee");
+                  0
+                };
+                Some(root) => {
+                  match s1_tc_lookup_var(env, root) {
+                    Some(_) => {
+                      ok = false;
+                      diag = s1_diag(Error, 0, 0, "typecheck: only Path callees are supported in Stage1");
+                      0
+                    };
+                    None => {
+                      let expr2: S1Expr =
+                        S1Expr.Call(S1Call { callee: S1Expr.Path(cp2); args: c.args; });
+                      let r2: Result<S1Type, S1Diagnostic> =
+                        s1_tc_expr_type(items, mods, fns, env, expected, expr2);
+                      match r2 {
+                        Err(e2) => {
+                          ok = false;
+                          diag = e2;
+                          0
+                        };
+                        Ok(t2) => {
+                          ty = t2;
+                          0
+                        };
+                      };
+                      0
+                    };
+                  };
+                  0
+                };
+              };
               0
             };
           };

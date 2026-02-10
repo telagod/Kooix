@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{BinaryOp, Block, Expr, Statement, TypeRef};
+use crate::ast::{BinaryOp, Block, Expr, Statement, TypeArg, TypeRef};
 use crate::error::Diagnostic;
 use crate::hir::{HirFunction, HirProgram};
 
@@ -14,6 +14,7 @@ pub struct MirProgram {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirRecord {
     pub name: String,
+    pub generics: Vec<String>,
     pub fields: Vec<MirRecordField>,
 }
 
@@ -26,6 +27,7 @@ pub struct MirRecordField {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirEnum {
     pub name: String,
+    pub generics: Vec<String>,
     pub variants: Vec<MirEnumVariant>,
 }
 
@@ -81,11 +83,16 @@ pub enum MirRvalue {
         right: MirOperand,
     },
     Call { callee: String, args: Vec<MirOperand> },
-    RecordLit { record: String, fields: Vec<MirOperand> },
+    RecordLit {
+        record: String,
+        fields: Vec<MirOperand>,
+        field_tys: Vec<TypeRef>,
+    },
     ProjectField {
         base: MirOperand,
         record: String,
         index: usize,
+        field_ty: TypeRef,
     },
     EnumLit {
         enum_name: String,
@@ -105,6 +112,7 @@ pub enum MirRvalue {
 pub enum MirOperand {
     ConstInt(i64),
     ConstBool(bool),
+    ConstText(String),
     Local(usize),
 }
 
@@ -166,15 +174,13 @@ fn build_native_records(program: &HirProgram) -> Vec<MirRecord> {
     program
         .records
         .iter()
-        .filter(|record| record.generics.is_empty())
-        .filter(|record| {
-            record
-                .fields
-                .iter()
-                .all(|field| is_native_struct_field_type(&field.ty))
-        })
         .map(|record| MirRecord {
             name: record.name.clone(),
+            generics: record
+                .generics
+                .iter()
+                .map(|param| param.name.clone())
+                .collect(),
             fields: record
                 .fields
                 .iter()
@@ -191,16 +197,16 @@ fn build_native_enums(program: &HirProgram) -> Vec<MirEnum> {
     program
         .enums
         .iter()
-        .filter(|enum_decl| enum_decl.generics.is_empty())
         .filter(|enum_decl| {
             enum_decl.variants.len() <= u8::MAX as usize
-                && enum_decl.variants.iter().all(|variant| match &variant.payload {
-                    None => true,
-                    Some(payload) => is_native_enum_payload_type(payload),
-                })
         })
         .map(|enum_decl| MirEnum {
             name: enum_decl.name.clone(),
+            generics: enum_decl
+                .generics
+                .iter()
+                .map(|param| param.name.clone())
+                .collect(),
             variants: enum_decl
                 .variants
                 .iter()
@@ -317,24 +323,62 @@ fn is_native_scalar_type(ty: &TypeRef) -> bool {
     matches!(ty.head(), "Int" | "Bool" | "Unit")
 }
 
-fn is_native_struct_field_type(ty: &TypeRef) -> bool {
-    matches!(ty.head(), "Int" | "Bool")
-}
-
-fn is_native_enum_payload_type(ty: &TypeRef) -> bool {
-    matches!(ty.head(), "Int" | "Bool")
-}
-
 fn is_native_type(
     ty: &TypeRef,
     records: &HashMap<String, MirRecord>,
-    _enums: &HashMap<String, MirEnum>,
+    enums: &HashMap<String, MirEnum>,
 ) -> bool {
     if is_native_scalar_type(ty) {
         return true;
     }
 
-    ty.args.is_empty() && records.contains_key(ty.head())
+    if ty.head() == "Text" {
+        return true;
+    }
+
+    if records.contains_key(ty.head()) {
+        return true;
+    }
+
+    enums.contains_key(ty.head())
+}
+
+fn type_args_as_types(ty: &TypeRef) -> Vec<TypeRef> {
+    ty.args
+        .iter()
+        .filter_map(|arg| match arg {
+            TypeArg::Type(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn build_subst(generic_names: &[String], args: &[TypeRef]) -> HashMap<String, TypeRef> {
+    let mut out = HashMap::new();
+    for (name, arg) in generic_names.iter().zip(args.iter()) {
+        out.insert(name.clone(), arg.clone());
+    }
+    out
+}
+
+fn apply_subst(ty: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
+    if ty.args.is_empty() {
+        if let Some(repl) = subst.get(&ty.name) {
+            return repl.clone();
+        }
+        return ty.clone();
+    }
+
+    let mut out = ty.clone();
+    out.args = ty
+        .args
+        .iter()
+        .map(|arg| match arg {
+            TypeArg::Type(t0) => TypeArg::Type(apply_subst(t0, subst)),
+            other => other.clone(),
+        })
+        .collect();
+    out
 }
 
 struct MirBuilder<'a> {
@@ -521,16 +565,6 @@ impl<'a> MirBuilder<'a> {
                     let inferred_ty = value.ty.clone();
                     let ty = stmt.ty.as_ref().unwrap_or(&inferred_ty);
 
-                    if *ty != inferred_ty {
-                        return Err(Diagnostic::error(
-                            format!(
-                                "function '{}' let '{}' declares type '{}' but value is '{}'",
-                                self.function.name, stmt.name, ty, inferred_ty
-                            ),
-                            self.function.span,
-                        ));
-                    }
-
                     if !is_native_type(ty, self.records, self.enums) {
                         return Err(Diagnostic::error(
                             format!(
@@ -541,7 +575,8 @@ impl<'a> MirBuilder<'a> {
                         ));
                     }
 
-                    let local = self.declare_local(&stmt.name, ty.clone(), false)?;
+                    let allow_shadow = stmt.name == "_";
+                    let local = self.declare_local(&stmt.name, ty.clone(), allow_shadow)?;
                     self.emit_store(local, value);
                 }
                 Statement::Assign(stmt) => {
@@ -621,114 +656,217 @@ impl<'a> MirBuilder<'a> {
                 },
                 operand: Some(MirOperand::ConstBool(*value)),
             }),
-            Expr::String(_) => Err(Diagnostic::error(
-                format!(
-                    "function '{}' uses Text literal but native lowering does not support Text yet",
-                    self.function.name
-                ),
-                self.function.span,
-            )),
+            Expr::String(value) => Ok(ExprValue {
+                ty: TypeRef {
+                    name: "Text".to_string(),
+                    args: Vec::new(),
+                },
+                operand: Some(MirOperand::ConstText(value.clone())),
+            }),
             Expr::Path(segments) => {
-                match segments.as_slice() {
-                    [name] => {
-                        let Some(local) = self.lookup_local(name.as_str()) else {
-                            return Err(Diagnostic::error(
-                                format!(
-                                    "function '{}' uses unknown local '{}' in body",
-                                    self.function.name, name
-                                ),
-                                self.function.span,
-                            ));
-                        };
-                        let ty = self.locals[local].ty.clone();
-                        Ok(ExprValue {
-                            ty,
-                            operand: Some(MirOperand::Local(local)),
-                        })
-                    }
-                    [base, field] => {
-                        let Some(base_local) = self.lookup_local(base.as_str()) else {
-                            return Err(Diagnostic::error(
-                                format!(
-                                    "function '{}' uses unknown local '{}' in body",
-                                    self.function.name, base
-                                ),
-                                self.function.span,
-                            ));
-                        };
-
-                        let base_ty = self.locals[base_local].ty.clone();
-                        if base_ty.args.is_empty() && self.records.contains_key(base_ty.head()) {
-                            let Some(record) = self.records.get(base_ty.head()) else {
-                                return Err(Diagnostic::error(
-                                    format!(
-                                        "function '{}' uses record type '{}' which is not supported by native lowering yet",
-                                        self.function.name, base_ty
-                                    ),
-                                    self.function.span,
-                                ));
-                            };
-
-                            let Some((field_index, field_schema)) = record
-                                .fields
-                                .iter()
-                                .enumerate()
-                                .find(|(_, schema)| schema.name == *field)
-                            else {
-                                return Err(Diagnostic::error(
-                                    format!(
-                                        "function '{}' uses unknown field '{}' on record '{}'",
-                                        self.function.name, field, base_ty
-                                    ),
-                                    self.function.span,
-                                ));
-                            };
-
-                            if !is_native_struct_field_type(&field_schema.ty) {
-                                return Err(Diagnostic::error(
-                                    format!(
-                                        "function '{}' projects field '{}.{}' of unsupported type '{}'",
-                                        self.function.name, base_ty, field, field_schema.ty
-                                    ),
-                                    self.function.span,
-                                ));
-                            }
-
-                            let temp = self.new_temp_local(field_schema.ty.clone());
-                            self.current_block_mut()
-                                .statements
-                                .push(MirStatement::Assign {
-                                    dst: temp,
-                                    rvalue: MirRvalue::ProjectField {
-                                        base: MirOperand::Local(base_local),
-                                        record: record.name.clone(),
-                                        index: field_index,
-                                    },
-                                });
-                            Ok(ExprValue {
-                                ty: field_schema.ty.clone(),
-                                operand: Some(MirOperand::Local(temp)),
-                            })
-                        } else {
-                            Err(Diagnostic::error(
-                                format!(
-                                    "function '{}' uses path '{}' which is not supported by native lowering yet",
-                                    self.function.name,
-                                    segments.join(".")
-                                ),
-                                self.function.span,
-                            ))
-                        }
-                    }
-                    _ => Err(Diagnostic::error(
-                        format!(
-                            "function '{}' uses path '{}' which is not supported by native lowering yet",
-                            self.function.name,
-                            segments.join(".")
-                        ),
+                let Some((first, rest)) = segments.split_first() else {
+                    return Err(Diagnostic::error(
+                        "expected identifier path",
                         self.function.span,
-                    )),
+                    ));
+                };
+
+                // Base: local variable?
+                let mut cur_ty: TypeRef;
+                let mut cur_op: MirOperand;
+
+                if let Some(local) = self.lookup_local(first.as_str()) {
+                    cur_ty = self.locals[local].ty.clone();
+                    cur_op = MirOperand::Local(local);
+                } else {
+                    // Unit enum variant as value:
+                    // - unqualified: `Nil`
+                    // - qualified: `Option::None` (represented as two segments)
+                    if rest.is_empty() {
+                        let mut found: Option<(&MirEnum, &MirEnumVariant)> = None;
+                        let mut ambiguous = false;
+                        for enum_decl in self.enums.values() {
+                            for variant in &enum_decl.variants {
+                                if variant.name == *first {
+                                    if found.is_some() {
+                                        ambiguous = true;
+                                        break;
+                                    }
+                                    found = Some((enum_decl, variant));
+                                }
+                            }
+                            if ambiguous {
+                                break;
+                            }
+                        }
+                        if ambiguous {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses ambiguous enum variant '{}' (qualify it)",
+                                    self.function.name, first
+                                ),
+                                self.function.span,
+                            ));
+                        }
+                        let Some((enum_decl, variant)) = found else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, first
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        if variant.payload.is_some() {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses enum variant '{}' without payload (expected call)",
+                                    self.function.name, first
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        cur_ty = TypeRef {
+                            name: enum_decl.name.clone(),
+                            args: Vec::new(),
+                        };
+                        let temp = self.new_temp_local(cur_ty.clone());
+                        self.current_block_mut()
+                            .statements
+                            .push(MirStatement::Assign {
+                                dst: temp,
+                                rvalue: MirRvalue::EnumLit {
+                                    enum_name: enum_decl.name.clone(),
+                                    tag: variant.tag,
+                                    payload: None,
+                                    payload_ty: None,
+                                },
+                            });
+                        cur_op = MirOperand::Local(temp);
+                    } else if segments.len() == 2 {
+                        // Qualified unit variant: Enum::Variant
+                        let enum_name = first.as_str();
+                        let variant_name = segments[1].as_str();
+                        let Some(enum_decl) = self.enums.get(enum_name) else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown local '{}' in body",
+                                    self.function.name, enum_name
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        let Some(variant) = enum_decl
+                            .variants
+                            .iter()
+                            .find(|variant| variant.name == variant_name)
+                        else {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unknown enum variant '{}::{}'",
+                                    self.function.name, enum_name, variant_name
+                                ),
+                                self.function.span,
+                            ));
+                        };
+                        if variant.payload.is_some() {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses enum variant '{}::{}' without payload (expected call)",
+                                    self.function.name, enum_name, variant_name
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        cur_ty = TypeRef {
+                            name: enum_decl.name.clone(),
+                            args: Vec::new(),
+                        };
+                        let temp = self.new_temp_local(cur_ty.clone());
+                        self.current_block_mut()
+                            .statements
+                            .push(MirStatement::Assign {
+                                dst: temp,
+                                rvalue: MirRvalue::EnumLit {
+                                    enum_name: enum_decl.name.clone(),
+                                    tag: variant.tag,
+                                    payload: None,
+                                    payload_ty: None,
+                                },
+                            });
+                        cur_op = MirOperand::Local(temp);
+
+                        // Fully consumed (do not treat as record projection).
+                        return Ok(ExprValue {
+                            ty: cur_ty,
+                            operand: Some(cur_op),
+                        });
+                    } else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' uses path '{}' which is not supported by native lowering yet",
+                                self.function.name,
+                                segments.join(".")
+                            ),
+                            self.function.span,
+                        ));
+                    }
                 }
+
+                // Record projection chain: x.a.b.c
+                for member in rest {
+                    let Some(record) = self.records.get(cur_ty.head()) else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' uses path '{}' which is not supported by native lowering yet",
+                                self.function.name,
+                                segments.join(".")
+                            ),
+                            self.function.span,
+                        ));
+                    };
+
+                    let args = type_args_as_types(&cur_ty);
+                    let subst = build_subst(&record.generics, &args);
+
+                    let Some((field_index, field_schema)) = record
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .find(|(_, schema)| schema.name == *member)
+                    else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' uses unknown field '{}' on record '{}'",
+                                self.function.name, member, cur_ty
+                            ),
+                            self.function.span,
+                        ));
+                    };
+
+                    let field_ty = apply_subst(&field_schema.ty, &subst);
+                    let temp = self.new_temp_local(field_ty.clone());
+                    self.current_block_mut()
+                        .statements
+                        .push(MirStatement::Assign {
+                            dst: temp,
+                            rvalue: MirRvalue::ProjectField {
+                                base: cur_op,
+                                record: record.name.clone(),
+                                index: field_index,
+                                field_ty: field_ty.clone(),
+                            },
+                        });
+                    cur_ty = field_ty;
+                    cur_op = MirOperand::Local(temp);
+                }
+
+                Ok(ExprValue {
+                    ty: cur_ty,
+                    operand: Some(cur_op),
+                })
             }
             Expr::Binary { op, left, right } => {
                 let left_value = self.lower_expr(left)?;
@@ -745,15 +883,45 @@ impl<'a> MirBuilder<'a> {
                     },
                 };
 
-                if !is_native_scalar_type(&left_value.ty) || !is_native_scalar_type(&right_value.ty)
-                {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' uses binary op on unsupported type(s) '{}' and '{}'",
-                            self.function.name, left_value.ty, right_value.ty
-                        ),
-                        self.function.span,
-                    ));
+                match op {
+                    BinaryOp::Add => {
+                        if left_value.ty.head() != "Int" || right_value.ty.head() != "Int" {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses '+' on non-Int types '{}' and '{}'",
+                                    self.function.name, left_value.ty, right_value.ty
+                                ),
+                                self.function.span,
+                            ));
+                        }
+                    }
+                    BinaryOp::Eq | BinaryOp::NotEq => {
+                        if left_value.ty != right_value.ty
+                            && !(left_value.ty.head() == right_value.ty.head()
+                                && self.enums.contains_key(left_value.ty.head()))
+                        {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses equality op on mismatched types '{}' and '{}'",
+                                    self.function.name, left_value.ty, right_value.ty
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        let head = left_value.ty.head();
+                        let comparable = matches!(head, "Int" | "Bool" | "Text")
+                            || self.enums.contains_key(head);
+                        if !comparable {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses equality op on unsupported type '{}'",
+                                    self.function.name, left_value.ty
+                                ),
+                                self.function.span,
+                            ));
+                        }
+                    }
                 }
 
                 let left_op = left_value.into_operand_or_unit(self.function)?;
@@ -791,10 +959,152 @@ impl<'a> MirBuilder<'a> {
                     ));
                 }
 
-                if target.len() != 1 {
+                // Function call (unqualified only).
+                if target.len() == 1 {
+                    let callee = target[0].clone();
+                    if let Some(signature) = self.signatures.get(&callee) {
+                        if signature.has_generics {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' calls generic function '{}' but native lowering does not support generics yet",
+                                    self.function.name, callee
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        if !signature.effects.is_empty() {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' calls effectful function '{}' which native lowering cannot execute",
+                                    self.function.name, callee
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        let return_ty = signature.return_type.clone();
+                        if !is_native_type(&return_ty, self.records, self.enums) {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' calls '{}' returning '{}' which is not supported by native lowering yet",
+                                    self.function.name, callee, return_ty
+                                ),
+                                self.function.span,
+                            ));
+                        }
+
+                        let mut lowered_args = Vec::new();
+                        for arg in args {
+                            let value = self.lower_expr(arg)?;
+                            lowered_args.push(value.into_operand_or_unit(self.function)?);
+                        }
+
+                        if return_ty.head() == "Unit" {
+                            self.current_block_mut()
+                                .statements
+                                .push(MirStatement::Eval(MirRvalue::Call {
+                                    callee,
+                                    args: lowered_args,
+                                }));
+                            return Ok(ExprValue::unit());
+                        }
+
+                        let temp = self.new_temp_local(return_ty.clone());
+                        self.current_block_mut()
+                            .statements
+                            .push(MirStatement::Assign {
+                                dst: temp,
+                                rvalue: MirRvalue::Call {
+                                    callee,
+                                    args: lowered_args,
+                                },
+                            });
+
+                        return Ok(ExprValue {
+                            ty: return_ty,
+                            operand: Some(MirOperand::Local(temp)),
+                        });
+                    }
+                }
+
+                // Enum constructor call:
+                // - unqualified: `Variant(...)` (must be unambiguous across enums)
+                // - qualified: `Enum::Variant(...)`
+                let (enum_name, variant_name) = match target.as_slice() {
+                    [variant] => (None, variant.as_str()),
+                    [enum_name, variant] => (Some(enum_name.as_str()), variant.as_str()),
+                    _ => {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' calls '{}' which is not supported by native lowering yet",
+                                self.function.name,
+                                target.join(".")
+                            ),
+                            self.function.span,
+                        ));
+                    }
+                };
+
+                let mut found: Option<(&MirEnum, &MirEnumVariant)> = None;
+                let mut ambiguous = false;
+
+                if let Some(en) = enum_name {
+                    let Some(enum_decl) = self.enums.get(en) else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown enum '{}'",
+                                self.function.name, en
+                            ),
+                            self.function.span,
+                        ));
+                    };
+                    let Some(variant) = enum_decl
+                        .variants
+                        .iter()
+                        .find(|variant| variant.name == variant_name)
+                    else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}'",
+                                self.function.name,
+                                target.join(".")
+                            ),
+                            self.function.span,
+                        ));
+                    };
+                    found = Some((enum_decl, variant));
+                } else {
+                    for enum_decl in self.enums.values() {
+                        for variant in &enum_decl.variants {
+                            if variant.name == variant_name {
+                                if found.is_some() {
+                                    ambiguous = true;
+                                    break;
+                                }
+                                found = Some((enum_decl, variant));
+                            }
+                        }
+                        if ambiguous {
+                            break;
+                        }
+                    }
+                }
+
+                let Some((enum_decl, variant)) = found else {
                     return Err(Diagnostic::error(
                         format!(
-                            "function '{}' calls '{}' which is not supported by native lowering yet",
+                            "function '{}' calls unknown target '{}'",
+                            self.function.name,
+                            target.join(".")
+                        ),
+                        self.function.span,
+                    ));
+                };
+                if ambiguous {
+                    return Err(Diagnostic::error(
+                        format!(
+                            "function '{}' calls ambiguous enum constructor '{}' (qualify it)",
                             self.function.name,
                             target.join(".")
                         ),
@@ -802,77 +1112,55 @@ impl<'a> MirBuilder<'a> {
                     ));
                 }
 
-                let callee = target[0].clone();
-                let Some(signature) = self.signatures.get(&callee) else {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' calls unknown function '{}'",
-                            self.function.name, callee
-                        ),
-                        self.function.span,
-                    ));
+                let payload = if let Some(_pty) = &variant.payload {
+                    if args.len() != 1 {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "enum variant '{}::{}' expects 1 argument but got {}",
+                                enum_decl.name,
+                                variant.name,
+                                args.len()
+                            ),
+                            self.function.span,
+                        ));
+                    }
+                    let value = self.lower_expr(&args[0])?;
+                    let ty = value.ty.clone();
+                    let op = value.into_operand_or_unit(self.function)?;
+                    Some((op, ty))
+                } else {
+                    if !args.is_empty() {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "enum variant '{}::{}' expects 0 arguments but got {}",
+                                enum_decl.name,
+                                variant.name,
+                                args.len()
+                            ),
+                            self.function.span,
+                        ));
+                    }
+                    None
                 };
 
-                if signature.has_generics {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' calls generic function '{}' but native lowering does not support generics yet",
-                            self.function.name, callee
-                        ),
-                        self.function.span,
-                    ));
-                }
-
-                if !signature.effects.is_empty() {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' calls effectful function '{}' which native lowering cannot execute",
-                            self.function.name, callee
-                        ),
-                        self.function.span,
-                    ));
-                }
-
-                let return_ty = signature.return_type.clone();
-                if !is_native_type(&return_ty, self.records, self.enums) {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' calls '{}' returning '{}' which is not supported by native lowering yet",
-                            self.function.name, callee, return_ty
-                        ),
-                        self.function.span,
-                    ));
-                }
-
-                let mut lowered_args = Vec::new();
-                for arg in args {
-                    let value = self.lower_expr(arg)?;
-                    lowered_args.push(value.into_operand_or_unit(self.function)?);
-                }
-
-                if return_ty.head() == "Unit" {
-                    self.current_block_mut().statements.push(MirStatement::Eval(
-                        MirRvalue::Call {
-                            callee,
-                            args: lowered_args,
-                        },
-                    ));
-                    return Ok(ExprValue::unit());
-                }
-
-                let temp = self.new_temp_local(return_ty.clone());
+                let enum_ty = TypeRef {
+                    name: enum_decl.name.clone(),
+                    args: Vec::new(),
+                };
+                let temp = self.new_temp_local(enum_ty.clone());
                 self.current_block_mut()
                     .statements
                     .push(MirStatement::Assign {
                         dst: temp,
-                        rvalue: MirRvalue::Call {
-                            callee,
-                            args: lowered_args,
+                        rvalue: MirRvalue::EnumLit {
+                            enum_name: enum_decl.name.clone(),
+                            tag: variant.tag,
+                            payload: payload.as_ref().map(|(op, _)| op.clone()),
+                            payload_ty: payload.as_ref().map(|(_, ty)| ty.clone()),
                         },
                     });
-
                 Ok(ExprValue {
-                    ty: return_ty,
+                    ty: enum_ty,
                     operand: Some(MirOperand::Local(temp)),
                 })
             }
@@ -883,16 +1171,6 @@ impl<'a> MirBuilder<'a> {
             } => self.lower_if_expr(cond, then_block, else_block.as_deref()),
             Expr::While { cond, body } => self.lower_while_expr(cond, body),
             Expr::RecordLit { ty, fields } => {
-                if !ty.args.is_empty() {
-                    return Err(Diagnostic::error(
-                        format!(
-                            "function '{}' uses generic record literal '{}', which native lowering does not support yet",
-                            self.function.name, ty
-                        ),
-                        self.function.span,
-                    ));
-                }
-
                 let Some(record) = self.records.get(ty.head()) else {
                     return Err(Diagnostic::error(
                         format!(
@@ -927,6 +1205,14 @@ impl<'a> MirBuilder<'a> {
                     ordered.push(value.clone());
                 }
 
+                let args = type_args_as_types(ty);
+                let subst = build_subst(&record.generics, &args);
+                let field_tys: Vec<TypeRef> = record
+                    .fields
+                    .iter()
+                    .map(|f| apply_subst(&f.ty, &subst))
+                    .collect();
+
                 let temp = self.new_temp_local(ty.clone());
                 self.current_block_mut()
                     .statements
@@ -935,6 +1221,7 @@ impl<'a> MirBuilder<'a> {
                         rvalue: MirRvalue::RecordLit {
                             record: record.name.clone(),
                             fields: ordered,
+                            field_tys,
                         },
                     });
 
@@ -943,13 +1230,305 @@ impl<'a> MirBuilder<'a> {
                     operand: Some(MirOperand::Local(temp)),
                 })
             }
-            Expr::Match { .. } => Err(Diagnostic::error(
+            Expr::Match { value, arms } => self.lower_match_expr(value, arms),
+        }
+    }
+
+    fn lower_match_expr(&mut self, value: &Expr, arms: &[crate::ast::MatchArm]) -> Result<ExprValue, Diagnostic> {
+        let scrutinee = self.lower_expr(value)?;
+        let scrut_ty = scrutinee.ty.clone();
+        let Some(enum_decl) = self.enums.get(scrut_ty.head()) else {
+            return Err(Diagnostic::error(
                 format!(
-                    "function '{}' uses expression form not supported by native lowering yet",
-                    self.function.name
+                    "function '{}' uses match on unsupported type '{}'",
+                    self.function.name, scrut_ty
                 ),
                 self.function.span,
-            )),
+            ));
+        };
+
+        let scrut_op = scrutinee.into_operand_or_unit(self.function)?;
+
+        // Determine whether this match is exhaustive (to avoid requiring a wildcard arm).
+        let mut has_wildcard = false;
+        let mut covered: HashMap<u8, bool> = HashMap::new();
+        for arm in arms {
+            match &arm.pattern {
+                crate::ast::MatchPattern::Wildcard => {
+                    has_wildcard = true;
+                }
+                crate::ast::MatchPattern::Variant { path, .. } => {
+                    let variant_name = match path.as_slice() {
+                        [v] => v.as_str(),
+                        [en, v] if en.as_str() == enum_decl.name => v.as_str(),
+                        _ => continue,
+                    };
+                    if let Some(variant) = enum_decl
+                        .variants
+                        .iter()
+                        .find(|variant| variant.name == variant_name)
+                    {
+                        covered.insert(variant.tag, true);
+                    }
+                }
+            }
+        }
+        let mut exhaustive = has_wildcard;
+        if !exhaustive {
+            exhaustive = enum_decl
+                .variants
+                .iter()
+                .all(|variant| covered.get(&variant.tag).copied().unwrap_or(false));
+        }
+
+        let join_bb = self.new_block();
+        let mut result_local: Option<usize> = None;
+        let mut result_ty: Option<TypeRef> = None;
+
+        // The current block is the first "test" block.
+        let mut test_bb = self.blocks[self.current_block].label.clone();
+
+        for (index, arm) in arms.iter().enumerate() {
+            self.switch_to_block(&test_bb);
+            if self.block_is_terminated(self.current_block) {
+                break;
+            }
+
+            let is_last = index + 1 == arms.len();
+
+            match &arm.pattern {
+                crate::ast::MatchPattern::Wildcard => {
+                    let arm_bb = self.new_block();
+                    self.set_terminator(MirTerminator::Goto {
+                        target: arm_bb.clone(),
+                    });
+
+                    self.switch_to_block(&arm_bb);
+                    let value =
+                        self.with_scope(|builder| builder.lower_match_arm_body(&scrut_op, enum_decl, None, None, &arm.body))?;
+                    self.record_match_arm_result(&mut result_local, &mut result_ty, value)?;
+
+                    if !self.block_is_terminated(self.current_block) {
+                        self.set_terminator(MirTerminator::Goto {
+                            target: join_bb.clone(),
+                        });
+                    }
+                    // Wildcard consumes the rest.
+                    break;
+                }
+                crate::ast::MatchPattern::Variant { path, bind } => {
+                    let variant_name = match path.as_slice() {
+                        [v] => v.as_str(),
+                        [en, v] => {
+                            if en.as_str() != enum_decl.name {
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "function '{}' match pattern targets different enum '{}'",
+                                        self.function.name, en
+                                    ),
+                                    self.function.span,
+                                ));
+                            }
+                            v.as_str()
+                        }
+                        _ => {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "function '{}' uses unsupported match pattern path '{}'",
+                                    self.function.name,
+                                    path.join(".")
+                                ),
+                                self.function.span,
+                            ));
+                        }
+                    };
+
+                    let Some(variant) = enum_decl
+                        .variants
+                        .iter()
+                        .find(|variant| variant.name == variant_name)
+                    else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' match pattern uses unknown variant '{}::{}'",
+                                self.function.name, enum_decl.name, variant_name
+                            ),
+                            self.function.span,
+                        ));
+                    };
+
+                    let tag_local = self.new_temp_local(TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    });
+                    self.current_block_mut()
+                        .statements
+                        .push(MirStatement::Assign {
+                            dst: tag_local,
+                            rvalue: MirRvalue::EnumTag {
+                                base: scrut_op.clone(),
+                                enum_name: enum_decl.name.clone(),
+                            },
+                        });
+                    let cmp_local = self.new_temp_local(TypeRef {
+                        name: "Bool".to_string(),
+                        args: Vec::new(),
+                    });
+                    self.current_block_mut()
+                        .statements
+                        .push(MirStatement::Assign {
+                            dst: cmp_local,
+                            rvalue: MirRvalue::Binary {
+                                op: BinaryOp::Eq,
+                                left: MirOperand::Local(tag_local),
+                                right: MirOperand::ConstInt(variant.tag as i64),
+                            },
+                        });
+
+                    let arm_bb = self.new_block();
+                    let else_bb = if is_last && exhaustive {
+                        // Exhaustive match without wildcard: else branch is unreachable,
+                        // but we still need a valid CFG edge.
+                        join_bb.clone()
+                    } else {
+                        self.new_block()
+                    };
+
+                    self.set_terminator(MirTerminator::If {
+                        cond: MirOperand::Local(cmp_local),
+                        then_bb: arm_bb.clone(),
+                        else_bb: else_bb.clone(),
+                    });
+
+                    self.switch_to_block(&arm_bb);
+                    let scrut_args = type_args_as_types(&scrut_ty);
+                    let subst = build_subst(&enum_decl.generics, &scrut_args);
+                    let payload_ty = variant.payload.as_ref().map(|pty| apply_subst(pty, &subst));
+                    let value = self.with_scope(|builder| {
+                        builder.lower_match_arm_body(
+                            &scrut_op,
+                            enum_decl,
+                            payload_ty,
+                            bind.clone(),
+                            &arm.body,
+                        )
+                    })?;
+                    self.record_match_arm_result(&mut result_local, &mut result_ty, value)?;
+                    if !self.block_is_terminated(self.current_block) {
+                        self.set_terminator(MirTerminator::Goto {
+                            target: join_bb.clone(),
+                        });
+                    }
+
+                    test_bb = else_bb;
+
+                    if is_last && !exhaustive {
+                        self.switch_to_block(&test_bb);
+                        return Err(Diagnostic::error(
+                            "non-exhaustive match expression is not supported by native lowering yet",
+                            self.function.span,
+                        ));
+                    }
+                }
+            }
+        }
+
+        self.switch_to_block(&join_bb);
+        let ty = result_ty.unwrap_or(TypeRef {
+            name: "Unit".to_string(),
+            args: Vec::new(),
+        });
+
+        if ty.head() == "Unit" {
+            Ok(ExprValue::unit())
+        } else {
+            let Some(local) = result_local else {
+                return Ok(ExprValue::unit());
+            };
+            Ok(ExprValue {
+                ty,
+                operand: Some(MirOperand::Local(local)),
+            })
+        }
+    }
+
+    fn record_match_arm_result(
+        &mut self,
+        result_local: &mut Option<usize>,
+        result_ty: &mut Option<TypeRef>,
+        value: ExprValue,
+    ) -> Result<(), Diagnostic> {
+        if value.ty.head() == "Unit" {
+            if result_ty.is_none() {
+                *result_ty = Some(TypeRef {
+                    name: "Unit".to_string(),
+                    args: Vec::new(),
+                });
+            }
+            return Ok(());
+        }
+
+        if result_local.is_none() {
+            *result_ty = Some(value.ty.clone());
+            *result_local = Some(self.new_temp_local(value.ty.clone()));
+        }
+
+        if let Some(dst) = *result_local {
+            self.emit_store(dst, value);
+        }
+        Ok(())
+    }
+
+    fn lower_match_arm_body(
+        &mut self,
+        scrutinee: &MirOperand,
+        enum_decl: &MirEnum,
+        payload_ty: Option<TypeRef>,
+        bind: Option<String>,
+        body: &crate::ast::MatchArmBody,
+    ) -> Result<ExprValue, Diagnostic> {
+        if let Some(name) = bind {
+            if name == "_" {
+                // Discard binder.
+                return match body {
+                    crate::ast::MatchArmBody::Expr(expr) => self.lower_expr(expr),
+                    crate::ast::MatchArmBody::Block(block) => self.lower_block_value(block),
+                };
+            }
+            let Some(payload_ty2) = payload_ty else {
+                return Err(Diagnostic::error(
+                    format!(
+                        "function '{}' uses payload binder for unit variant of enum '{}'",
+                        self.function.name, enum_decl.name
+                    ),
+                    self.function.span,
+                ));
+            };
+
+            let temp = self.new_temp_local(payload_ty2.clone());
+            self.current_block_mut()
+                .statements
+                .push(MirStatement::Assign {
+                    dst: temp,
+                    rvalue: MirRvalue::EnumPayload {
+                        base: scrutinee.clone(),
+                        enum_name: enum_decl.name.clone(),
+                        payload_ty: payload_ty2.clone(),
+                    },
+                });
+            let local = self.declare_local(&name, payload_ty2.clone(), false)?;
+            self.emit_store(
+                local,
+                ExprValue {
+                    ty: payload_ty2,
+                    operand: Some(MirOperand::Local(temp)),
+                },
+            );
+        }
+
+        match body {
+            crate::ast::MatchArmBody::Expr(expr) => self.lower_expr(expr),
+            crate::ast::MatchArmBody::Block(block) => self.lower_block_value(block),
         }
     }
 
@@ -983,6 +1562,7 @@ impl<'a> MirBuilder<'a> {
 
         self.switch_to_block(&then_bb);
         let then_value = self.with_scope(|builder| builder.lower_block_value(then_block))?;
+        let then_end_bb = self.blocks[self.current_block].label.clone();
         let then_needs_join = !self.block_is_terminated(self.current_block);
         if then_needs_join {
             self.set_terminator(MirTerminator::Goto {
@@ -996,6 +1576,7 @@ impl<'a> MirBuilder<'a> {
         } else {
             ExprValue::unit()
         };
+        let else_end_bb = self.blocks[self.current_block].label.clone();
         let else_needs_join = !self.block_is_terminated(self.current_block);
         if else_needs_join {
             self.set_terminator(MirTerminator::Goto {
@@ -1047,11 +1628,11 @@ impl<'a> MirBuilder<'a> {
 
         if let Some(temp) = result_temp {
             if then_needs_join {
-                self.switch_to_block(&then_bb);
+                self.switch_to_block(&then_end_bb);
                 self.emit_store(temp, then_value.clone());
             }
             if else_needs_join {
-                self.switch_to_block(&else_bb);
+                self.switch_to_block(&else_end_bb);
                 self.emit_store(temp, else_value.clone());
             }
         }

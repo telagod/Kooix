@@ -313,6 +313,32 @@ fn s1_resolver_list_contains_text(xs: List<Text>, needle: Text) -> Bool {
   found
 };
 
+fn s1_resolver_dedup_texts(xs: List<Text>) -> List<Text> {
+  let acc_rev: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        if s1_resolver_list_contains_text(acc_rev, cell.head) == true {
+          cur = cell.tail;
+          0
+        } else {
+          acc_rev = Cons(ListCons<Text> { head: cell.head; tail: acc_rev; });
+          cur = cell.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  s1_resolver_reverse_texts(acc_rev)
+};
+
 fn s1_resolver_collect_import_namespaces(items: List<S1Item>) -> List<Text> {
   let ns_rev: List<Text> = Nil;
   let cur: List<S1Item> = items;
@@ -599,7 +625,52 @@ fn s1_resolver_resolve_expr(
       0
     };
     IntLit(_) => 0;
+    BoolLit(_) => 0;
     StringLit(_) => 0;
+    RecordLit(rl) => {
+      let r0: Result<Int, S1Diagnostic> =
+        s1_resolver_resolve_type(rl.ty, import_ns, locals, mods);
+      match r0 {
+        Err(e0) => {
+          ok = false;
+          diag = e0;
+          0
+        };
+        Ok(_) => 0;
+      };
+
+      if ok == true {
+        let cur: List<S1RecordLitField> = rl.fields;
+        let done: Bool = false;
+        while done == false {
+          match cur {
+            Nil => {
+              done = true;
+              0
+            };
+            Cons(cell) => {
+              let r: Result<Int, S1Diagnostic> =
+                s1_resolver_resolve_expr(cell.head.value, import_ns, locals, mods, items);
+              match r {
+                Err(e2) => {
+                  ok = false;
+                  diag = e2;
+                  done = true;
+                  0
+                };
+                Ok(_) => {
+                  cur = cell.tail;
+                  0
+                };
+              };
+              0
+            };
+          }
+        };
+        0
+      } else { 0 };
+      0
+    };
     Member(m) => {
       let r: Result<Int, S1Diagnostic> = s1_resolver_resolve_expr(m.base, import_ns, locals, mods, items);
       match r {
@@ -960,22 +1031,15 @@ evidence {
   metrics [stage1_resolve_calls];
 }
 {
-  let import_ns: List<Text> = s1_resolver_collect_import_namespaces(p.items);
+  let import_ns: List<Text> =
+    s1_resolver_dedup_texts(s1_resolver_collect_import_namespaces(p.items));
   let locals: List<Text> = s1_resolver_collect_local_item_names(p.items);
   let mods: List<S1Module> = s1_mod_build(p.items);
 
   let ok: Bool = true;
   let diag: S1Diagnostic = s1_diag(Error, 0, 0, "resolver: error");
 
-  // Namespace hygiene: no duplicate imports; no namespace collides with local item.
-  if ok == true {
-    if s1_resolver_list_has_duplicates(import_ns) == true {
-      ok = false;
-      diag = s1_diag(Error, 0, 0, "resolver: duplicate import namespace");
-      0
-    } else { 0 };
-    0
-  } else { 0 };
+  // Namespace hygiene: no namespace collides with local item.
 
   if ok == true {
     let cur_ns: List<Text> = import_ns;

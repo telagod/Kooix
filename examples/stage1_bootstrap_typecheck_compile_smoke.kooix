@@ -1,0 +1,23 @@
+import "../stdlib/prelude";
+import "../stage1/compiler";
+
+fn main() -> Int {
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/typecheck.kooix");
+  match src_r {
+    Err(m) => {
+      host_eprintln(m);
+      2
+    };
+    Ok(src) => {
+      let r: Result<Int, S1Diagnostic> = s1_compile(src);
+      match r {
+        Ok(_code) => 0;
+        Err(e) => {
+          host_eprintln(e.message);
+          1
+        };
+      }
+    };
+  }
+};
+

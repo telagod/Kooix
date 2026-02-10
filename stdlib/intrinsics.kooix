@@ -1,4 +1,6 @@
-// Intrinsics are implemented by the Stage0 interpreter/runtime.
+// Intrinsics are implemented by the Stage0 interpreter/runtime and (where applicable) by the
+// Stage0 native backend runtime.
+//
 // They are declared here (no bodies) so sema can typecheck programs that use them.
 
 fn text_len(s: Text) -> Int;
@@ -13,3 +15,13 @@ fn byte_is_ascii_alnum(b: Int) -> Bool;
 fn byte_is_ascii_ident_start(b: Int) -> Bool;
 fn byte_is_ascii_ident_continue(b: Int) -> Bool;
 
+// Host-only helper: load a Kooix entry file and expand include-style `import "..." ;`
+// into a single combined source string (same behavior as Stage0 loader).
+// - Interpreter: implemented directly (Rust).
+// - Native: implemented by a libc-only runtime linked into the produced binary; may also be
+//   constant-folded by the emitter when `entry_path` is a string literal.
+fn host_load_source_map(entry_path: Text) -> Result<Text, Text>;
+
+// Host-only debug output (Stage0 interpreter).
+// - Native: prints to host stderr.
+fn host_eprintln(s: Text) -> Unit;

@@ -17,7 +17,7 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 - Evidence-first: critical flows declare `evidence` (trace/metrics) to support auditability.
 - Workflow/Agent as first-class: orchestration (`workflow`) and agent loops (`agent`) are type-checkable structures, not ad-hoc scripts.
 
-## Current Status (as of 2026-02-09)
+## Current Status (as of 2026-02-10)
 
 Kooix already has a runnable minimal compiler pipeline:
 
@@ -29,7 +29,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - Kooix-Core function bodies (frontend): `fn ... { ... }`, `let`/`x = ...`/`return`, basic expressions (literal/path/call/record literal/member projection `x.y`/`if/else`/`while`/`match`/`+`/`==`/`!=`), and return-type checking.
 - Branching: `match` (patterns `_` / `Variant(bind?)`, arm type convergence, exhaustiveness checking).
 - Algebraic data types: `enum` declarations + variant construction (unit + payload; generic enums rely on expected type context for minimal inference).
-- Native lowering v1: supports a function-body subset for `Int/Bool/Unit` in `mir/llvm/native` (`let`/assignment/`return`/call/`if`/`while`/`+`/`==`/`!=`); supports non-generic `record` (Int/Bool fields only) for record literals + member projection; `Text`/`enum`/`match` are not lowered to native yet.
+- Native lowering v1: the native backend now covers the core runtime pieces needed for bootstrap: `Text` (C-string pointers) with string literals; `enum`/`match` (tag+payload); heap-allocated `record` values with word-based fields (works with pointer-like/generic fields); and intrinsic support for `text_len/text_byte_at/text_slice/text_starts_with` plus ASCII byte predicates.
 - AI v1 function contract subset: `intent`, `ensures`, `failure`, `evidence`.
 - AI v1 orchestration subset: `workflow` (`steps/on_fail/output/evidence`).
 - Record types: `record` declarations, field projection, and minimal generic substitution (e.g. `Box<Answer>.value`).
@@ -91,6 +91,8 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.9: Function generics syntax + explicit call type args (minimal subset)
 - ✅ Phase 9.0: MIR/LLVM lowering for function bodies (Int/Bool/Unit subset) + native runnable loop
 - ✅ Phase 9.1: Native lowering for `record` (non-generic + Int/Bool field subset)
+- ✅ Phase 9.2: Native lowering for `Text/enum/match` + intrinsic runtime (enables Stage1 execution)
+- ✅ Phase 9.3: Native runtime for `host_load_source_map/host_eprintln` (Stage1 bootstrap path runs)
 
 See also: `DESIGN.md` / `BOOTSTRAP.md`
 

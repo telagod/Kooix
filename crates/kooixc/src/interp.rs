@@ -1,8 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::ast::{BinaryOp, Block, Expr, MatchArmBody, MatchPattern, Program, Statement, TypeRef};
 use crate::error::{Diagnostic, Span};
 use crate::hir::{lower_program, HirFunction};
+use crate::loader::load_source_map;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -12,12 +16,12 @@ pub enum Value {
     Text(String),
     Record {
         name: String,
-        fields: HashMap<String, Value>,
+        fields: Vec<(String, Arc<Value>)>,
     },
     Enum {
         name: String,
         variant: String,
-        payload: Option<Box<Value>>,
+        payload: Option<Arc<Value>>,
     },
 }
 
@@ -414,15 +418,79 @@ fn eval_intrinsic_function(
             };
             Ok(Value::Bool(is_ascii_ident_continue(*b)))
         }
+        "host_load_source_map" => {
+            let [Value::Text(path)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_load_source_map expects (Text)",
+                    function.span,
+                )));
+            };
+
+            let mut entry = PathBuf::from(path);
+            if entry.extension().is_none() {
+                entry.set_extension("kooix");
+            }
+
+            if fs::metadata(&entry).is_err() {
+                // Tests (and some tooling) execute with cwd = `crates/kooixc`, while most CLI usage
+                // runs from repo root. Make this intrinsic resilient by searching parent dirs.
+                let mut prefix = PathBuf::new();
+                for _ in 0..8 {
+                    prefix.push("..");
+                    let candidate = prefix.join(&entry);
+                    if fs::metadata(&candidate).is_ok() {
+                        entry = candidate;
+                        break;
+                    }
+                }
+            }
+
+            match load_source_map(&entry) {
+                Ok(map) => Ok(result_ok(Value::Text(map.combined))),
+                Err(errors) => {
+                    let message = errors
+                        .first()
+                        .map(|error| error.message.clone())
+                        .unwrap_or_else(|| "failed to load source map".to_string());
+                    Ok(result_err(Value::Text(message)))
+                }
+            }
+        }
+        "host_eprintln" => {
+            let [Value::Text(s)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_eprintln expects (Text)",
+                    function.span,
+                )));
+            };
+            eprintln!("{s}");
+            Ok(Value::Unit)
+        }
         _ => return None,
     })
+}
+
+fn result_ok(value: Value) -> Value {
+    Value::Enum {
+        name: "Result".to_string(),
+        variant: "Ok".to_string(),
+        payload: Some(Arc::new(value)),
+    }
+}
+
+fn result_err(value: Value) -> Value {
+    Value::Enum {
+        name: "Result".to_string(),
+        variant: "Err".to_string(),
+        payload: Some(Arc::new(value)),
+    }
 }
 
 fn option_some(value: Value) -> Value {
     Value::Enum {
         name: "Option".to_string(),
         variant: "Some".to_string(),
-        payload: Some(Box::new(value)),
+        payload: Some(Arc::new(value)),
     }
 }
 
@@ -492,10 +560,14 @@ fn eval_expr(
         Expr::String(value) => Ok(Value::Text(value.clone())),
         Expr::Bool(value) => Ok(Value::Bool(*value)),
         Expr::RecordLit { ty, fields } => {
-            let mut values: HashMap<String, Value> = HashMap::new();
+            let mut values: Vec<(String, Arc<Value>)> = Vec::new();
             for field in fields {
                 let value = eval_expr(&field.value, function, functions, variants, env, depth)?;
-                values.insert(field.name.clone(), value);
+                if let Some((_, slot)) = values.iter_mut().find(|(name, _)| name == &field.name) {
+                    *slot = Arc::new(value);
+                } else {
+                    values.push((field.name.clone(), Arc::new(value)));
+                }
             }
             Ok(Value::Record {
                 name: ty.name.clone(),
@@ -512,12 +584,17 @@ fn eval_expr(
                 for member in segments.iter().skip(1) {
                     match value {
                         Value::Record { fields, .. } => {
-                            value = fields.get(member).cloned().ok_or_else(|| {
-                                Diagnostic::error(
-                                    format!("unknown member '{member}' on record value"),
-                                    function.span,
-                                )
-                            })?;
+                            value = fields
+                                .iter()
+                                .rev()
+                                .find(|(name, _)| name == member)
+                                .map(|(_, value)| value.as_ref().clone())
+                                .ok_or_else(|| {
+                                    Diagnostic::error(
+                                        format!("unknown member '{member}' on record value"),
+                                        function.span,
+                                    )
+                                })?;
                         }
                         other => {
                             return Err(Diagnostic::error(
@@ -640,7 +717,7 @@ fn eval_expr(
                     ));
                 }
 
-                Some(Box::new(eval_expr(
+                Some(Arc::new(eval_expr(
                     &args[0], function, functions, variants, env, depth,
                 )?))
             } else {
@@ -802,7 +879,7 @@ fn eval_expr(
                                         function.span,
                                     ));
                                 }
-                                env.insert(bind_name.clone(), (**payload).clone());
+                                env.insert(bind_name.clone(), payload.as_ref().clone());
                             }
                             Value::Enum {
                                 name,

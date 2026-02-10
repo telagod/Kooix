@@ -2332,6 +2332,143 @@ fn stage1_compiler_skeleton_typechecks_and_runs() {
 }
 
 #[test]
+fn stage1_compiler_can_compile_its_own_token_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_token_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap token smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap token smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap token smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+fn stage1_compiler_can_compile_its_own_lexer_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_lexer_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap lexer smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap lexer smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap lexer smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+fn stage1_compiler_can_compile_its_own_parser_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_parser_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap parser smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap parser smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap parser smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+fn stage1_compiler_can_compile_its_own_modules_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_modules_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap modules smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap modules smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap modules smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+#[ignore = "slow bootstrap smoke (compiles large Stage1 sources)"]
+fn stage1_compiler_can_compile_its_own_typecheck_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_typecheck_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap typecheck smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap typecheck smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap typecheck smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+#[ignore = "slow bootstrap smoke (compiles large Stage1 sources)"]
+fn stage1_compiler_can_compile_its_own_compiler_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_compiler_compile_smoke.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 bootstrap compiler smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap compiler smoke should have no semantic errors"
+    );
+
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap compiler smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
+#[ignore = "slow bootstrap smoke (compiles full Stage1 compiler_main import graph)"]
+fn stage1_compiler_can_compile_its_own_compiler_main_module_via_host_loader() {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("examples/stage1_bootstrap_compiler_main_compile_smoke.kooix");
+    let source_map =
+        load_source_map(&entry).expect("stage1 bootstrap compiler_main smoke should load");
+
+    let diagnostics = check_source(&source_map.combined);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "stage1 bootstrap compiler_main smoke should have no semantic errors"
+    );
+
+    let result = run_source(&source_map.combined)
+        .expect("stage1 bootstrap compiler_main smoke should run");
+    assert_eq!(result.value, Value::Int(0));
+}
+
+#[test]
 fn interpreter_intrinsics_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/intrinsics_smoke.kooix");
@@ -3014,6 +3151,66 @@ fn main() -> Int { if true { 1 } else { 2 } };
     let run_output =
         compile_and_run_native_source(source, &output).expect("compile+run should work");
     assert_eq!(run_output.status_code, Some(1));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn compiles_and_runs_native_binary_with_nested_if_expression() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn f(x: Int) -> Int {
+  if x == 0 { 1 } else { if x == 1 { 2 } else { 3 } }
+};
+fn main() -> Int { f(2) };
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-nested-if-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(3));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
+fn compiles_and_runs_native_binary_with_host_load_source_map() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+enum Result<T, E> { Ok(T); Err(E); };
+
+fn text_len(s: Text) -> Int;
+fn text_starts_with(s: Text, prefix: Text) -> Bool;
+fn host_load_source_map(entry_path: Text) -> Result<Text, Text>;
+fn host_eprintln(s: Text) -> Unit;
+
+fn main() -> Int {
+  // Force the runtime path (argument is not a ConstText operand).
+  let p: Text = "examples/run.kooix";
+  let r: Result<Text, Text> = host_load_source_map(p);
+  match r {
+    Ok(src) => {
+      if text_starts_with(src, "// --- file:") { 0 } else { 1 }
+    };
+    Err(m) => { host_eprintln(m); 2 };
+  }
+};
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-host-load-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(0));
 
     let _ = std::fs::remove_file(&output);
 }

@@ -96,13 +96,25 @@ record S1While {
 enum S1Expr {
   Path(S1Path);
   IntLit(Text);
+  BoolLit(Bool);
   StringLit(Text);
+  RecordLit(S1RecordLit);
   Call(S1Call);
   Member(S1Member);
   Block(S1Block);
   If(S1If);
   Match(S1Match);
   Binary(S1Binary);
+};
+
+record S1RecordLitField {
+  name: Text;
+  value: S1Expr;
+};
+
+record S1RecordLit {
+  ty: S1Type;
+  fields: List<S1RecordLitField>;
 };
 
 record S1Call {

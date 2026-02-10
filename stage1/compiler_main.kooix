@@ -11,7 +11,7 @@ evidence {
 {
   // No CLI args yet for `run`; keep this deterministic and pure.
   let boot_src: Text =
-    "import \"../stdlib/prelude\" as prelude; enum Option<T> { None; Some(T); }; record Pair<A, B> { a: A; b: B; }; fn id<T: Answer + Summary>(x: T) -> T { x }; fn len(xs: prelude::List<Int>) -> Int { 0 }; fn mk(x: Int) -> Option<Int> { Option::Some(x) };";
+    "enum Option<T> { Some(T); None; }; record Pair<A, B> { a: A; b: B; }; fn id<T>(x: T) -> T { x }; fn mk(x: Int) -> Option<Int> { Option::Some(x) }; fn mkp(x: Int) -> Pair<Int, Int> { Pair<Int, Int> { a: x; b: x; } }; fn main() -> Int { let p: Pair<Int, Int> = mkp(1); if p.a == 1 { 0 } else { 1 } };";
   let result: Result<Int, S1Diagnostic> = s1_compile(boot_src);
   match result {
     Ok(code) => code;
