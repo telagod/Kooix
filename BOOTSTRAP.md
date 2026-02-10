@@ -114,7 +114,7 @@ cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
 
 目标：`kooixc(stage1)` 编译 `kooixc(stage1)` 自己，产出 stage2。
 
-当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。
+当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。同时新增 v0.1 Text smoke：StringLit 常量、`text_concat/int_to_text/text_len/text_starts_with`（`stage1/self_host_text_main.kooix` → `/tmp/kooixc_stage2_text.ll`，目标 `stage1/stage2_text_smoke.kooix`）。
 
 验收口径（推荐先松后紧）：
 

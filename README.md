@@ -140,6 +140,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --ru
 # Stage1 self-host v0：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2.ll；当前输入为 stage1/stage2_min.kooix；覆盖 block expr/stmtful let 与 if/while）
 cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
 
+# Stage1 self-host v0.1（Text smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_text.ll；当前输入为 stage1/stage2_text_smoke.kooix）
+cargo run -p kooixc -- native stage1/self_host_text_main.kooix /tmp/kx-selfhost-text --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text.ll /tmp/kooixc-stage2-text --run
+
 # 测试
 cargo test -p kooixc
 ```
