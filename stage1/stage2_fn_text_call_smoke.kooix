@@ -1,0 +1,13 @@
+import "../stdlib/prelude";
+
+fn id_text(x: Text) -> Text { x };
+
+fn is_two(n: Int) -> Bool {
+  if n == 2 { true } else { false }
+};
+
+fn main() -> Int {
+  let t: Text = id_text("ab");
+  if is_two(text_len(t)) { 0 } else { 1 }
+};
+
