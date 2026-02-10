@@ -3768,6 +3768,36 @@ fn main() -> Int;
 }
 
 #[test]
+fn native_host_argv_intrinsics_work() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn host_argc() -> Int;
+fn host_argv(index: Int) -> Text;
+
+fn main() -> Int {
+  if host_argc() == 3 {
+    if host_argv(1) == "alpha" {
+      if host_argv(2) == "beta" { 0 } else { 6 }
+    } else { 5 }
+  } else { 4 }
+};
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-host-argv-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let args = vec!["alpha".to_string(), "beta".to_string()];
+    let run_output = compile_and_run_native_source_with_args(source, &output, &args)
+        .expect("compile+run with args should work");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_stdin() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

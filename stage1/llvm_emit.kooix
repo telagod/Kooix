@@ -2460,7 +2460,32 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_eprintln expects (Text)"))
                               }
                             } else {
-                              if fname == "byte_is_ascii_whitespace" {
+                              if fname == "host_argc" {
+                                if argc == 0 {
+                                  let tmp_id: Text = int_to_text(nt);
+                                  let tmp: Text = text_concat("%t", tmp_id);
+                                  let out1: Text = s1_cg_line(ot, text_concat(text_concat("  ", tmp), " = call i64 @kx_host_argc()"));
+                                  s1_cg_expr_ok(S1CgExprOut { text: out1; value: tmp; ty: "i64"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Int")); bb: bt; next_tmp: nt + 1; })
+                                } else {
+                                  s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_argc expects ()"))
+                                }
+                              } else {
+                                if fname == "host_argv" {
+                                  if argc == 1 {
+                                    if a_ty == "i64" {
+                                      let tmp_id: Text = int_to_text(nt);
+                                      let tmp: Text = text_concat("%t", tmp_id);
+                                      let inst: Text = text_concat(text_concat("  ", tmp), text_concat(" = call i8* @kx_host_argv(i64 ", text_concat(a_val, ")")));
+                                      let out1: Text = s1_cg_line(ot, inst);
+                                      s1_cg_expr_ok(S1CgExprOut { text: out1; value: tmp; ty: "i8*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Text")); bb: bt; next_tmp: nt + 1; })
+                                    } else {
+                                      s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_argv expects (Int)"))
+                                    }
+                                  } else {
+                                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_argv expects (Int)"))
+                                  }
+                                } else {
+                                  if fname == "byte_is_ascii_whitespace" {
                                 if argc == 1 {
                                   if a_ty == "i64" {
                                     let eq9_id: Text = int_to_text(nt);
@@ -2754,6 +2779,8 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                   }
                 }
               }
+            }
+            }
             };
           }
             }
