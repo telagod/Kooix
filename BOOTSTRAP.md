@@ -114,7 +114,7 @@ cargo run -p kooixc -- native stage1/compiler_main.kooix "$out" --run
 
 目标：`kooixc(stage1)` 编译 `kooixc(stage1)` 自己，产出 stage2。
 
-当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。同时新增 Text/Host 线：v0.1 Text smoke（StringLit 常量、`text_concat/int_to_text/text_len/text_starts_with`；`stage1/self_host_text_main.kooix` → `/tmp/kooixc_stage2_text.ll`，目标 `stage1/stage2_text_smoke.kooix`），v0.2 Text eq（`==/!=` via `strcmp`；`stage1/self_host_text_eq_main.kooix` → `/tmp/kooixc_stage2_text_eq.ll`，目标 `stage1/stage2_text_eq_smoke.kooix`），v0.3 host_eprintln smoke（Text -> stderr；`stage1/self_host_host_eprintln_main.kooix` → `/tmp/kooixc_stage2_host_eprintln.ll`，目标 `stage1/stage2_host_eprintln_smoke.kooix`）。
+当前进展（v0）：已打通 “Stage1（Kooix 写的 LLVM emitter）写出 stage2 LLVM IR → Stage0 `native-llvm` 链接运行” 的闭环通道（`stage1/self_host_main.kooix` + `host_write_file` + `native-llvm`）。当前 stage2 目标为 `stage1/stage2_min.kooix`（Int-only 子集：`+` / `==` / `!=` / direct call / `let` / assignment / `while` / `if` / block expr（含 stmtful `let`）），用于验证端到端链路与最小 codegen（含 phi incoming block label 正确性）。同时新增 Text/Host 线：v0.1 Text smoke（StringLit 常量、`text_concat/int_to_text/text_len/text_starts_with`；`stage1/self_host_text_main.kooix` → `/tmp/kooixc_stage2_text.ll`，目标 `stage1/stage2_text_smoke.kooix`），v0.2 Text eq（`==/!=` via `strcmp`；`stage1/self_host_text_eq_main.kooix` → `/tmp/kooixc_stage2_text_eq.ll`，目标 `stage1/stage2_text_eq_smoke.kooix`），v0.3 host_eprintln smoke（Text -> stderr；`stage1/self_host_host_eprintln_main.kooix` → `/tmp/kooixc_stage2_host_eprintln.ll`，目标 `stage1/stage2_host_eprintln_smoke.kooix`），以及 v0.4 enum/match/IO smoke（Stage2 侧新增 `%Option/%Result` enum layout、`Option<Int>` ctor + 2-arm `match`、`host_write_file/host_load_source_map` lowering；`stage1/self_host_option_match_main.kooix` → `/tmp/kooixc_stage2_option_match.ll`，目标 `stage1/stage2_option_match_smoke.kooix`；`stage1/self_host_host_write_file_main.kooix` → `/tmp/kooixc_stage2_host_write_file.ll`，目标 `stage1/stage2_host_write_file_smoke.kooix`）。
 
 验收口径（推荐先松后紧）：
 
@@ -130,6 +130,14 @@ cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
 
 # 2) 用 Stage0 链接 stage2
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
+
+# v0.4: Option<Int> ctor + 2-arm match
+cargo run -p kooixc -- native stage1/self_host_option_match_main.kooix /tmp/kx-selfhost-opt --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_option_match.ll /tmp/kooixc-stage2-opt --run
+
+# v0.4: host_write_file lowering + Result match
+cargo run -p kooixc -- native stage1/self_host_host_write_file_main.kooix /tmp/kx-selfhost-io --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_write_file.ll /tmp/kooixc-stage2-io --run
 ```
 
 ## 余劫（主要风险）

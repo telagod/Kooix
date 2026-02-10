@@ -56,7 +56,7 @@ Kooix already has a runnable minimal compiler pipeline:
 ### Test Status
 
 - Latest regression command: `cargo test -p kooixc`
-- Result: `170 passed, 0 failed`
+- Result: `178 passed, 0 failed`
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 

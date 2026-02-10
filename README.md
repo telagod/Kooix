@@ -54,7 +54,7 @@ Kooix 已完成一条可运行的最小编译链路：
 ### 测试状态
 
 - 最新回归：`cargo test -p kooixc`
-- 结果：`170 passed, 0 failed`
+- 结果：`178 passed, 0 failed`
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
