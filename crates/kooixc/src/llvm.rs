@@ -36,6 +36,8 @@ pub fn emit_program(program: &MirProgram) -> String {
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
     output.push_str("declare i8* @kx_host_write_file(i8*, i8*)\n\n");
+    output.push_str("declare i64 @kx_host_argc()\n");
+    output.push_str("declare i8* @kx_host_argv(i64)\n\n");
     output.push_str("declare i8* @kx_text_concat(i8*, i8*)\n");
     output.push_str("declare i8* @kx_int_to_text(i64)\n\n");
 
@@ -128,14 +130,16 @@ fn emit_function(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let fn_name = sanitize_symbol(&function.name);
+    let llvm_name = if function.name == "main" {
+        "kx_program_main"
+    } else {
+        function.name.as_str()
+    };
+    let fn_name = sanitize_symbol(llvm_name);
     let _ = writeln!(output, "define {return_type} @{fn_name}({params}) {{");
 
     if function.blocks.is_empty() {
         let _ = writeln!(output, "entry:");
-        if function.name == "main" {
-            let _ = writeln!(output, "  call void @kx_runtime_init()");
-        }
         let _ = writeln!(
             output,
             "  {}",
@@ -190,9 +194,6 @@ impl<'a> FunctionEmitter<'a> {
         let _ = writeln!(output, "{}:", sanitize_label(&block.label));
 
         if is_entry {
-            if self.function.name == "main" {
-                let _ = writeln!(output, "  call void @kx_runtime_init()");
-            }
             self.emit_allocas(output);
             if !self.function.effects.is_empty() {
                 let _ = writeln!(output, "  ; effects: {}", self.function.effects.join(", "));
@@ -474,7 +475,12 @@ impl<'a> FunctionEmitter<'a> {
             .collect::<Vec<_>>()
             .join(", ");
 
-        let fn_name = sanitize_symbol(callee);
+        let callee_llvm = if callee == "main" {
+            "kx_program_main"
+        } else {
+            callee
+        };
+        let fn_name = sanitize_symbol(callee_llvm);
         let ret_llvm_ty = llvm_type(return_ty, self.records, self.enums);
         if ret_llvm_ty == "void" {
             let _ = writeln!(output, "  call void @{fn_name}({call_args})");
@@ -786,6 +792,25 @@ impl<'a> FunctionEmitter<'a> {
                 let cast = self.fresh_tmp();
                 let _ = writeln!(output, "  {cast} = bitcast i8* {raw} to {res_ty}");
                 Some(cast)
+            }
+            "host_argc" => {
+                let tmp = self.fresh_tmp();
+                let _ = writeln!(output, "  {tmp} = call i64 @kx_host_argc()");
+                Some(tmp)
+            }
+            "host_argv" => {
+                let [index] = args else { return Some("null".to_string()) };
+                let iv = self.emit_operand_value(
+                    index,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let tmp = self.fresh_tmp();
+                let _ = writeln!(output, "  {tmp} = call i8* @kx_host_argv(i64 {iv})");
+                Some(tmp)
             }
             "text_concat" => {
                 let [a, b] = args else { return Some("null".to_string()) };

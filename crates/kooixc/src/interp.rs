@@ -499,6 +499,26 @@ fn eval_intrinsic_function(
                 )))),
             }
         }
+        "host_argc" => {
+            if !args.is_empty() {
+                return Some(Err(Diagnostic::error(
+                    "host_argc expects ()",
+                    function.span,
+                )));
+            }
+            // Interpreter runs don't currently accept argv; keep this deterministic.
+            Ok(Value::Int(0))
+        }
+        "host_argv" => {
+            let [_index] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_argv expects (Int)",
+                    function.span,
+                )));
+            };
+            // Interpreter runs don't currently accept argv; keep this deterministic.
+            Ok(Value::Text("".to_string()))
+        }
         _ => return None,
     })
 }

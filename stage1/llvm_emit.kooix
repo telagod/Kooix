@@ -4156,7 +4156,12 @@ fn s1_cg_emit_function_min(out: Text, items: List<S1Item>, strs: List<S1CgStrCon
   match f.body {
     None => s1_cg_text_ok(out);
     Some(body) => {
-      let head: Text = text_concat(text_concat("define ", ret_llvm), text_concat(" @", f.name));
+      let llvm_name: Text = f.name;
+      if f.name == "main" {
+        llvm_name = "kx_program_main";
+        0
+      } else { 0 };
+      let head: Text = text_concat(text_concat("define ", ret_llvm), text_concat(" @", llvm_name));
       let out1: Text = s1_cg_line(out, text_concat(head, text_concat("(", text_concat(ps, ") {"))));
       let out2: Text = s1_cg_line(out1, "entry:");
       let entry_out: Text = out2;
@@ -4593,6 +4598,8 @@ fn s1_cg_emit_prelude(strs: List<S1CgStrConst>) -> Text {
   ot = s1_cg_line(ot, "declare i8* @kx_host_load_source_map(i8*)");
   ot = s1_cg_line(ot, "declare void @kx_host_eprintln(i8*)");
   ot = s1_cg_line(ot, "declare i8* @kx_host_write_file(i8*, i8*)");
+  ot = s1_cg_line(ot, "declare i64 @kx_host_argc()");
+  ot = s1_cg_line(ot, "declare i8* @kx_host_argv(i64)");
   ot = s1_cg_line(ot, "declare i8* @kx_text_concat(i8*, i8*)");
   ot = s1_cg_line(ot, "declare i8* @kx_int_to_text(i64)");
   ot = s1_cg_line(ot, "");

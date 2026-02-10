@@ -31,3 +31,10 @@ fn host_eprintln(s: Text) -> Unit;
 // Host-only file write (Stage0 interpreter / native runtime).
 // Returns Ok(0) on success, Err(message) on failure.
 fn host_write_file(path: Text, content: Text) -> Result<Int, Text>;
+
+// Host-only argv access (native/runtime). Indexing follows C argv semantics:
+// - argv[0] is the program path/name
+// - argv[1..] are user-provided arguments
+// Stage0 interpreter currently returns argc=0 / argv="" (best-effort).
+fn host_argc() -> Int;
+fn host_argv(index: Int) -> Text;

@@ -159,7 +159,7 @@ fn main() -> Int { add(20, 22) };
     let ir = emit_llvm_ir_source(source).expect("source should emit llvm ir");
     assert!(ir.contains("define i64 @add(i64 %a, i64 %b)"));
     assert!(ir.contains("add i64"));
-    assert!(ir.contains("define i64 @main()"));
+    assert!(ir.contains("define i64 @kx_program_main()"));
     assert!(ir.contains("call i64 @add"));
     assert!(ir.contains("ret i64"));
 }
@@ -3084,7 +3084,7 @@ fn compiles_native_binary_when_toolchain_available() {
         return;
     }
 
-    let ir = "define i32 @main() {\nentry:\n  ret i32 0\n}\n";
+    let ir = "define i64 @kx_program_main() {\nentry:\n  ret i64 0\n}\n";
     let output = std::env::temp_dir().join("kooixc-native-smoke");
     let _ = std::fs::remove_file(&output);
 
@@ -3662,7 +3662,10 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir = std::fs::read_to_string("/tmp/kooixc_stage2_stage1_compiler.ll")
         .expect("stage1 self-host driver should write /tmp/kooixc_stage2_stage1_compiler.ll");
-    assert!(ir.contains("define i64 @main"), "emitted LLVM IR should contain main()");
+    assert!(
+        ir.contains("define i64 @kx_program_main"),
+        "emitted LLVM IR should contain entrypoint"
+    );
     assert!(ir.len() > 100_000, "emitted LLVM IR should be non-trivial");
 
     // Link+run the emitted LLVM IR as a standalone Stage2 compiler binary.
@@ -3678,8 +3681,8 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
         .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler.ll");
     assert!(
-        ir2.contains("define i64 @main"),
-        "stage3-emitted LLVM IR should contain main()"
+        ir2.contains("define i64 @kx_program_main"),
+        "stage3-emitted LLVM IR should contain entrypoint"
     );
     assert!(
         ir2.len() > 100_000,
@@ -3795,7 +3798,7 @@ fn runs_existing_executable_with_stdin() {
         return;
     }
 
-    let ir = "define i32 @main() {\nentry:\n  ret i32 0\n}\n";
+    let ir = "define i64 @kx_program_main() {\nentry:\n  ret i64 0\n}\n";
     let output = std::env::temp_dir().join("kooixc-native-stdin-direct");
     let _ = std::fs::remove_file(&output);
 

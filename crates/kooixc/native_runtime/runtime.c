@@ -24,6 +24,9 @@ typedef struct KxStrNode {
   struct KxStrNode* next;
 } KxStrNode;
 
+static int kx_argc = 0;
+static char** kx_argv = NULL;
+
 // Best-effort: increase stack limit for deeply recursive Stage1 tooling when running as a native
 // executable. No-op if unsupported or if raising the limit fails.
 void kx_runtime_init(void) {
@@ -517,4 +520,28 @@ char* kx_int_to_text(int64_t v) {
   snprintf(out, (size_t)n + 1, "%lld", (long long)v);
   out[n] = '\0';
   return out;
+}
+
+int64_t kx_host_argc(void) {
+  return (int64_t)kx_argc;
+}
+
+char* kx_host_argv(int64_t index) {
+  if (index < 0 || index >= (int64_t)kx_argc || !kx_argv) {
+    return "";
+  }
+  const char* s = kx_argv[(int)index];
+  return (char*)(s ? s : "");
+}
+
+// The Kooix program entry point emitted by the compiler. It corresponds to `fn main() -> Int`,
+// but we keep the host-visible `main(argc, argv)` in C so we can expose argv to intrinsics.
+extern int64_t kx_program_main(void);
+
+int main(int argc, char** argv) {
+  kx_runtime_init();
+  kx_argc = argc;
+  kx_argv = argv;
+  int64_t code = kx_program_main();
+  return (int)code;
 }
