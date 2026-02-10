@@ -148,6 +148,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text.ll /tmp/kooixc-stage2
 cargo run -p kooixc -- native stage1/self_host_text_eq_main.kooix /tmp/kx-selfhost-text-eq --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_eq.ll /tmp/kooixc-stage2-text-eq --run
 
+# Stage1 self-host v0.3（host_eprintln smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_host_eprintln.ll；当前输入为 stage1/stage2_host_eprintln_smoke.kooix）
+cargo run -p kooixc -- native stage1/self_host_host_eprintln_main.kooix /tmp/kx-selfhost-host-eprintln --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_eprintln.ll /tmp/kooixc-stage2-host-eprintln --run
+
 # 测试
 cargo test -p kooixc
 ```
