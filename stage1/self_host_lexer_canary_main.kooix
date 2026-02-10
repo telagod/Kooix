@@ -1,0 +1,39 @@
+import "../stdlib/prelude";
+import "diag";
+import "llvm_emit";
+
+fn main() -> Int
+intent "Stage1 self-host bootstrap (v0.7): emit stage2_lexer_canary_smoke LLVM IR and write to disk"
+evidence {
+  trace "stage1.self_host.v0_7.lexer_canary";
+  metrics [stage1_self_host_lexer_canary_calls];
+}
+{
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/stage2_lexer_canary_smoke.kooix");
+  match src_r {
+    Err(m) => {
+      host_eprintln(m);
+      2
+    };
+    Ok(src) => {
+      let ir_r: Result<Text, S1Diagnostic> = s1_emit_llvm_ir(src);
+      match ir_r {
+        Err(e) => {
+          host_eprintln(e.message);
+          3
+        };
+        Ok(ir) => {
+          let w: Result<Int, Text> = host_write_file("/tmp/kooixc_stage2_lexer_canary.ll", ir);
+          match w {
+            Ok(_n) => 0;
+            Err(msg) => {
+              host_eprintln(msg);
+              4
+            };
+          }
+        };
+      }
+    };
+  }
+};
+

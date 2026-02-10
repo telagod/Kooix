@@ -1,0 +1,42 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  // Exercise: text_byte_at + byte_is_ascii_* classifiers.
+  match text_byte_at("a1_ ", 0) {
+    None => 10;
+    Some(b0) => {
+      if byte_is_ascii_ident_start(b0) == false { 11 } else {
+        if byte_is_ascii_alpha(b0) == false { 12 } else {
+          if byte_is_ascii_alnum(b0) == false { 13 } else {
+            match text_byte_at("a1_ ", 1) {
+              None => 14;
+              Some(b1) => {
+                if byte_is_ascii_digit(b1) == false { 15 } else {
+                  if byte_is_ascii_ident_start(b1) == true { 16 } else {
+                    if byte_is_ascii_ident_continue(b1) == false { 17 } else {
+                      match text_byte_at("a1_ ", 2) {
+                        None => 18;
+                        Some(b2) => {
+                          if byte_is_ascii_ident_start(b2) == false { 19 } else {
+                            if byte_is_ascii_ident_continue(b2) == false { 20 } else {
+                              match text_byte_at("a1_ ", 3) {
+                                None => 21;
+                                Some(b3) => {
+                                  if byte_is_ascii_whitespace(b3) == false { 22 } else { 0 }
+                                };
+                              }
+                            }
+                          }
+                        };
+                      }
+                    }
+                  }
+                }
+              };
+            }
+          }
+        }
+      }
+    };
+  }
+};
