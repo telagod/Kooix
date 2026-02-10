@@ -11,6 +11,7 @@ record S1CgExprOut { text: Text; value: Text; ty: Text; s1_ty: Option<S1Type>; b
 record S1CgBlockOut { text: Text; env: List<S1CgEnvBind>; bb: Text; next_tmp: Int; };
 record S1CgStrConst { lit: Text; global: Text; n: Int; };
 record S1CgFnSig { name: Text; ret_llvm: Text; params_llvm: List<Text>; ret_s1: S1Type; };
+record S1CgEnumVariantInfo { enum_name: Text; tag: Int; payload_ty: Option<S1Type>; };
 
 fn s1_cg_s1_type_prim(name: Text) -> S1Type {
   let seg_tail: List<Text> = Nil;
@@ -639,6 +640,120 @@ fn s1_cg_lookup_record(items: List<S1Item>, name: Text) -> Option<S1Record> {
   out
 };
 
+fn s1_cg_lookup_enum(items: List<S1Item>, name: Text) -> Option<S1Enum> {
+  let out: Option<S1Enum> = None;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        match c0.head {
+          Enum(e) => {
+            if e.name == name { out = Some(e); done = true; 0 } else { 0 };
+            0
+          };
+          _ => 0;
+        };
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_enum_variant_info_in_enum(e: S1Enum, vname: Text) -> Option<S1CgEnumVariantInfo> {
+  let out: Option<S1CgEnumVariantInfo> = None;
+  let cur: List<S1EnumVariant> = e.variants;
+  let i: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        if c0.head.name == vname {
+          out = Some(S1CgEnumVariantInfo { enum_name: e.name; tag: i; payload_ty: c0.head.payload_ty; });
+          done = true;
+          0
+        } else {
+          cur = c0.tail;
+          i = i + 1;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_resolve_enum_variant(items: List<S1Item>, p: S1Path) -> Option<S1CgEnumVariantInfo> {
+  let out: Option<S1CgEnumVariantInfo> = None;
+  match p.segments {
+    Nil => 0;
+    Cons(a0) => {
+      match a0.tail {
+        Nil => {
+          // Unqualified variant name; must be unique across all enums.
+          let cur: List<S1Item> = items;
+          let done: Bool = false;
+          let found: Bool = false;
+          while done == false {
+            match cur {
+              Nil => { done = true; 0 };
+              Cons(c0) => {
+                match c0.head {
+                  Enum(e) => {
+                    match s1_cg_enum_variant_info_in_enum(e, a0.head) {
+                      None => 0;
+                      Some(info) => {
+                        if found == true {
+                          // ambiguous
+                          out = None;
+                          done = true;
+                          0
+                        } else {
+                          out = Some(info);
+                          found = true;
+                          0
+                        };
+                        0
+                      };
+                    };
+                    0
+                  };
+                  _ => 0;
+                };
+                cur = c0.tail;
+                0
+              };
+            }
+          };
+          0
+        };
+        Cons(b0) => {
+          match b0.tail {
+            Nil => {
+              // Qualified: Enum::Variant
+              match s1_cg_lookup_enum(items, a0.head) {
+                None => 0;
+                Some(e) => { out = s1_cg_enum_variant_info_in_enum(e, b0.head); 0 };
+              };
+              0
+            };
+            _ => 0;
+          };
+          0
+        };
+        _ => 0;
+      };
+      0
+    };
+  };
+  out
+};
+
 fn s1_cg_collect_generic_names(gs: List<S1GenericParam>) -> List<Text> {
   let acc: List<Text> = Nil;
   let cur: List<S1GenericParam> = gs;
@@ -1030,144 +1145,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
         };
       }
     };
-    RecordLit(r) => {
-      // Minimal record lowering for bootstrap:
-      // represent records as `i8*` heap pointers to an array of i64 words.
-      //
-      // Currently only supports `ListCons<T> { head: T; tail: List<T>; }` used by stdlib/prelude.
-      match s1_cg_path_single_name(r.ty.path) {
-        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: record type path not supported in v0"));
-        Some(rname) => {
-          if rname == "ListCons" {
-            // Extract element type T.
-            let elem_ty: S1Type = s1_cg_s1_type_prim("Int");
-            match r.ty.args {
-              Cons(a0) => {
-                match a0.tail {
-                  Nil => { elem_ty = a0.head; 0 };
-                  _ => 0;
-                };
-                0
-              };
-              _ => 0;
-            };
-
-            // Allocate 2 i64 words: head, tail.
-            let raw_id: Text = int_to_text(next_tmp);
-            let raw: Text = text_concat("%t", raw_id);
-            let out1: Text = s1_cg_line(out, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
-            let wptr_id: Text = int_to_text(next_tmp + 1);
-            let wptr: Text = text_concat("%t", wptr_id);
-            let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", wptr), " = bitcast i8* "), text_concat(raw, " to i64*")));
-
-            // Emit stores for fields (order-independent).
-            let cur: List<S1RecordLitField> = r.fields;
-            let done: Bool = false;
-            let ok: Bool = true;
-            let diag: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: record literal failed in v0");
-            let ot: Text = out2;
-            let nt: Int = next_tmp + 2;
-            let bt: Text = bb;
-            while done == false {
-              match cur {
-                Nil => { done = true; 0 };
-                Cons(c0) => {
-                  if ok == false {
-                    done = true;
-                    0
-                  } else {
-                    let idx: Int = 0;
-                    let field_s1: S1Type = elem_ty;
-                    if c0.head.name == "head" {
-                      idx = 0;
-                      field_s1 = elem_ty;
-                      0
-                    } else {
-                      if c0.head.name == "tail" {
-                        idx = 1;
-                        field_s1 = s1_cg_s1_type_list(elem_ty);
-                        0
-                      } else {
-                        ok = false;
-                        diag = s1_diag(Error, 0, 0, "codegen: unsupported record field in v0");
-                        done = true;
-                        0
-                      };
-                      0
-                    };
-
-                    if ok == true {
-                      let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, items, strs, fns, c0.head.value);
-                      match rr {
-                        Err(e1) => { ok = false; diag = e1; done = true; 0 };
-                        Ok(v) => {
-                          // Convert value to i64 word.
-                          let word: Text = v.value;
-                          let ot2: Text = v.text;
-                          let nt2: Int = v.next_tmp;
-                          let bt2: Text = v.bb;
-
-                          let word_id: Text = int_to_text(nt2);
-                          let word_tmp: Text = text_concat("%t", word_id);
-                          let made_word: Bool = false;
-
-                          if v.ty == "i64" {
-                            word = v.value;
-                            made_word = true;
-                            0
-                          } else {
-                            if v.ty == "i1" {
-                              ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = zext i1 "), v.value), " to i64"));
-                              word = word_tmp;
-                              made_word = true;
-                              0
-                            } else { 0 };
-                            0
-                          };
-
-                          if made_word == false {
-                            // Assume pointer.
-                            ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = ptrtoint "), v.ty), text_concat(text_concat(" ", v.value), " to i64")));
-                            word = word_tmp;
-                            0
-                          } else { 0 };
-
-                          let nt3: Int = nt2 + 1;
-
-                          // Compute field slot pointer and store the word.
-                          let slotp_id: Text = int_to_text(nt3);
-                          let slotp: Text = text_concat("%t", slotp_id);
-                          let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), wptr), text_concat(", i64 ", int_to_text(idx)));
-                          let ot3: Text = s1_cg_line(ot2, gep);
-                          let ot4: Text = s1_cg_line(ot3, text_concat(text_concat("  store i64 ", word), text_concat(", i64* ", slotp)));
-
-                          ot = ot4;
-                          nt = nt3 + 1;
-                          bt = bt2;
-                          cur = c0.tail;
-                          0
-                        };
-                      };
-                      0
-                    } else { 0 };
-                    0
-                  };
-                  0
-                };
-              }
-            };
-
-            if ok == false {
-              s1_cg_expr_err(diag)
-            } else {
-              s1_cg_expr_ok(S1CgExprOut { text: ot; value: raw; ty: "i8*"; s1_ty: s1_cg_s1_ty_some(r.ty); bb: bt; next_tmp: nt; })
-            }
-          } else {
-            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: record literal type not supported in v0"))
-          }
-        };
-      }
-    };
+    RecordLit(r) => s1_cg_emit_record_lit_min(out, env, next_tmp, bb, items, strs, fns, r);
     Path(p) => {
       match s1_cg_path_single_name(p) {
         None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: multi-segment path not supported"));
@@ -1192,7 +1170,36 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                 let out6: Text = s1_cg_line(out5, text_concat("  store i64 0, i64* ", payp));
                 s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%List*"; s1_ty: s1_cg_s1_ty_none(); bb: bb; next_tmp: next_tmp + 4; })
               } else {
-                s1_cg_expr_err(s1_diag(Error, 0, 0, text_concat("codegen: unknown variable ", name)))
+                // Try lowering as a unit enum variant (e.g. `KwFn`).
+                match s1_cg_resolve_enum_variant(items, p) {
+                  None => s1_cg_expr_err(s1_diag(Error, 0, 0, text_concat("codegen: unknown variable ", name)));
+                  Some(info) => {
+                    match info.payload_ty {
+                      Some(_t0) => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: enum variant requires payload in v0"));
+                      None => {
+                        let raw_id: Text = int_to_text(next_tmp);
+                        let raw: Text = text_concat("%t", raw_id);
+                        let out1: Text = s1_cg_line(out, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                        let cast_id: Text = int_to_text(next_tmp + 1);
+                        let cast: Text = text_concat("%t", cast_id);
+                        let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                        let tagp_id: Text = int_to_text(next_tmp + 2);
+                        let tagp: Text = text_concat("%t", tagp_id);
+                        let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(cast, ", i32 0, i32 0")));
+                        let out4: Text = s1_cg_line(out3, text_concat(text_concat("  store i8 ", int_to_text(info.tag)), text_concat(", i8* ", tagp)));
+                        let payp_id: Text = int_to_text(next_tmp + 3);
+                        let payp: Text = text_concat("%t", payp_id);
+                        let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(cast, ", i32 0, i32 1")));
+                        let out6: Text = s1_cg_line(out5, text_concat("  store i64 0, i64* ", payp));
+                        let st: S1Type = s1_cg_s1_type_prim(info.enum_name);
+                        let ret_val: Text = raw;
+                        let ret_ty: Text = "i8*";
+                        if info.enum_name == "Option" { ret_val = cast; ret_ty = "%Option*"; 0 } else { 0 };
+                        s1_cg_expr_ok(S1CgExprOut { text: out6; value: ret_val; ty: ret_ty; s1_ty: s1_cg_s1_ty_some(st); bb: bb; next_tmp: next_tmp + 4; })
+                      };
+                    }
+                  };
+                }
               }
             };
             Some(v) => {
@@ -1207,137 +1214,146 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
       }
     };
     Member(m) => {
-      // Minimal record field access for bootstrap (ListCons<T>.head / .tail).
-      let br: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, m.base);
-      match br {
-        Err(e1) => s1_cg_expr_err(e1);
-        Ok(b0) => {
-          if b0.ty != "i8*" {
-            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member base must be record pointer (i8*) in v0"))
-          } else {
-            match b0.s1_ty {
-              None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member access missing type info in v0"));
-              Some(bt0) => {
-                match s1_cg_path_single_name(bt0.path) {
-                  None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member record type path not supported in v0"));
-                  Some(rname) => {
-                    if rname != "ListCons" {
-                      s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member record type not supported in v0"))
-                    } else {
-                      // Extract element type T.
-                      let elem_ty: S1Type = s1_cg_s1_type_prim("Int");
-                      match bt0.args {
-                        Cons(a0) => {
-                          match a0.tail {
-                            Nil => { elem_ty = a0.head; 0 };
-                            _ => 0;
-                          };
-                          0
-                        };
-                        _ => 0;
-                      };
+      // Enum variant access: `Enum.Variant` (unit variants only).
+      // Stage1 sources use this for AST construction (e.g. `S1BinOp.Equals`).
+      let out_enum: Result<S1CgExprOut, S1Diagnostic> =
+        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member lowering failed"));
+      let handled: Bool = false;
 
-                      // Field selection.
-                      let idx: Int = 0;
-                      let field_s1: S1Type = elem_ty;
-                      if m.name == "head" {
-                        idx = 0;
-                        field_s1 = elem_ty;
-                        0
-                      } else {
-                        if m.name == "tail" {
-                          idx = 1;
-                          field_s1 = s1_cg_s1_type_list(elem_ty);
-                          0
-                        } else {
-                          idx = 0;
-                          field_s1 = elem_ty;
-                          0
-                        };
-                        0
-                      };
+      match m.base {
+        Path(bp) => {
+          match s1_cg_path_single_name(bp) {
+            None => 0;
+            Some(enm) => {
+              let seg_nil: List<Text> = Nil;
+              let seg2: List<Text> = Cons(ListCons<Text> { head: m.name; tail: seg_nil; });
+              let segs: List<Text> = Cons(ListCons<Text> { head: enm; tail: seg2; });
+              let qp: S1Path = S1Path { segments: segs; };
 
-                      if m.name != "head" {
-                        if m.name != "tail" {
-                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: unsupported member field in v0"))
-                        } else {
-                          // ok, continue
-                          match s1_cg_llvm_ty_of_s1(field_s1) {
-                            None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member field type not supported in v0"));
-                            Some(field_llvm) => {
-                              let cast_id: Text = int_to_text(b0.next_tmp);
-                              let cast: Text = text_concat("%t", cast_id);
-                              let out1: Text = s1_cg_line(b0.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), b0.value), " to i64*"));
+              match s1_cg_resolve_enum_variant(items, qp) {
+                None => 0;
+                Some(info) => {
+                  match info.payload_ty {
+                    Some(_t0) => 0;
+                    None => {
+                      let layout: Text = "Option";
+                      let ret_ty: Text = "i8*";
+                      let out_s1: Option<S1Type> = s1_cg_s1_ty_some(s1_cg_s1_type_prim(info.enum_name));
 
-                              let slotp_id: Text = int_to_text(b0.next_tmp + 1);
-                              let slotp: Text = text_concat("%t", slotp_id);
-                              let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), cast), text_concat(", i64 ", int_to_text(idx)));
-                              let out2: Text = s1_cg_line(out1, gep);
+                      if info.enum_name == "Option" { layout = "Option"; ret_ty = "%Option*"; 0 } else { 0 };
+                      if info.enum_name == "List" { layout = "List"; ret_ty = "%List*"; out_s1 = s1_cg_s1_ty_none(); 0 } else { 0 };
 
-                              let word_id: Text = int_to_text(b0.next_tmp + 2);
-                              let word: Text = text_concat("%t", word_id);
-                              let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", word), " = load i64, i64* "), slotp));
+                      let store_ty: Text = text_concat("%", layout);
+                      let store_ptr_ty: Text = text_concat(store_ty, "*");
 
-                              if field_llvm == "i64" {
-                                s1_cg_expr_ok(S1CgExprOut { text: out3; value: word; ty: "i64"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 3; })
-                              } else {
-                                if field_llvm == "i1" {
-                                  let tr_id: Text = int_to_text(b0.next_tmp + 3);
-                                  let tr: Text = text_concat("%t", tr_id);
-                                  let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), word), " to i1"));
-                                  s1_cg_expr_ok(S1CgExprOut { text: out4; value: tr; ty: "i1"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
-                                } else {
-                                  let cast2_id: Text = int_to_text(b0.next_tmp + 3);
-                                  let cast2: Text = text_concat("%t", cast2_id);
-                                  let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", cast2), " = inttoptr i64 "), word), text_concat(" to ", field_llvm)));
-                                  s1_cg_expr_ok(S1CgExprOut { text: out4; value: cast2; ty: field_llvm; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
-                                }
-                              }
-                            };
-                          }
-                        }
-                      } else {
-                        match s1_cg_llvm_ty_of_s1(field_s1) {
-                          None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member field type not supported in v0"));
-                          Some(field_llvm) => {
-                            let cast_id: Text = int_to_text(b0.next_tmp);
-                            let cast: Text = text_concat("%t", cast_id);
-                            let out1: Text = s1_cg_line(b0.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), b0.value), " to i64*"));
+                      let raw_id: Text = int_to_text(next_tmp);
+                      let raw: Text = text_concat("%t", raw_id);
+                      let out1: Text = s1_cg_line(out, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
 
-                            let slotp_id: Text = int_to_text(b0.next_tmp + 1);
-                            let slotp: Text = text_concat("%t", slotp_id);
-                            let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), cast), text_concat(", i64 ", int_to_text(idx)));
-                            let out2: Text = s1_cg_line(out1, gep);
+                      let cast_id: Text = int_to_text(next_tmp + 1);
+                      let cast: Text = text_concat("%t", cast_id);
+                      let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), text_concat(raw, text_concat(" to ", store_ptr_ty))));
 
-                            let word_id: Text = int_to_text(b0.next_tmp + 2);
-                            let word: Text = text_concat("%t", word_id);
-                            let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", word), " = load i64, i64* "), slotp));
+                      let tagp_id: Text = int_to_text(next_tmp + 2);
+                      let tagp: Text = text_concat("%t", tagp_id);
+                      let out3: Text = s1_cg_line(
+                        out2,
+                        text_concat(
+                          text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds "), text_concat(store_ty, ", ")),
+                          text_concat(store_ptr_ty, text_concat(" ", text_concat(cast, ", i32 0, i32 0")))
+                        )
+                      );
+                      let out4: Text = s1_cg_line(out3, text_concat(text_concat("  store i8 ", int_to_text(info.tag)), text_concat(", i8* ", tagp)));
 
-                            if field_llvm == "i64" {
-                              s1_cg_expr_ok(S1CgExprOut { text: out3; value: word; ty: "i64"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 3; })
-                            } else {
-                              if field_llvm == "i1" {
-                                let tr_id: Text = int_to_text(b0.next_tmp + 3);
-                                let tr: Text = text_concat("%t", tr_id);
-                                let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), word), " to i1"));
-                                s1_cg_expr_ok(S1CgExprOut { text: out4; value: tr; ty: "i1"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
-                              } else {
-                                let cast2_id: Text = int_to_text(b0.next_tmp + 3);
-                                let cast2: Text = text_concat("%t", cast2_id);
-                                let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", cast2), " = inttoptr i64 "), word), text_concat(" to ", field_llvm)));
-                                s1_cg_expr_ok(S1CgExprOut { text: out4; value: cast2; ty: field_llvm; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
-                              }
-                            }
-                          };
-                        }
-                      }
-                    }
+                      let payp_id: Text = int_to_text(next_tmp + 3);
+                      let payp: Text = text_concat("%t", payp_id);
+                      let out5: Text = s1_cg_line(
+                        out4,
+                        text_concat(
+                          text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(store_ty, ", ")),
+                          text_concat(store_ptr_ty, text_concat(" ", text_concat(cast, ", i32 0, i32 1")))
+                        )
+                      );
+                      let out6: Text = s1_cg_line(out5, text_concat("  store i64 0, i64* ", payp));
+
+                      let ret_val: Text = raw;
+                      if ret_ty != "i8*" { ret_val = cast; 0 } else { 0 };
+
+                      out_enum = s1_cg_expr_ok(S1CgExprOut { text: out6; value: ret_val; ty: ret_ty; s1_ty: out_s1; bb: bb; next_tmp: next_tmp + 4; });
+                      handled = true;
+                      0
+                    };
                   };
-                }
+                  0
+                };
               };
-            }
-          }
+              0
+            };
+          };
+          0
         };
+        _ => 0;
+      };
+
+      if handled == true {
+        out_enum
+      } else {
+        // Record field access for bootstrap.
+        let br: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, m.base);
+        match br {
+          Err(e1) => s1_cg_expr_err(e1);
+          Ok(b0) => {
+            if b0.ty != "i8*" {
+              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member base must be record pointer (i8*) in v0"))
+            } else {
+              match b0.s1_ty {
+                None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member access missing type info in v0"));
+                Some(bt0) => {
+                  match s1_cg_record_field_info(items, bt0, m.name) {
+                    Err(ei) => s1_cg_expr_err(ei);
+                    Ok(fi) => {
+                      let idx: Int = fi.a;
+                      let field_s1: S1Type = fi.b;
+                      match s1_cg_llvm_ty_of_s1(field_s1) {
+                        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member field type not supported in v0"));
+                        Some(field_llvm) => {
+                          let cast_id: Text = int_to_text(b0.next_tmp);
+                          let cast: Text = text_concat("%t", cast_id);
+                          let out1: Text = s1_cg_line(b0.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), b0.value), " to i64*"));
+
+                          let slotp_id: Text = int_to_text(b0.next_tmp + 1);
+                          let slotp: Text = text_concat("%t", slotp_id);
+                          let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), cast), text_concat(", i64 ", int_to_text(idx)));
+                          let out2: Text = s1_cg_line(out1, gep);
+
+                          let word_id: Text = int_to_text(b0.next_tmp + 2);
+                          let word: Text = text_concat("%t", word_id);
+                          let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", word), " = load i64, i64* "), slotp));
+
+                          if field_llvm == "i64" {
+                            s1_cg_expr_ok(S1CgExprOut { text: out3; value: word; ty: "i64"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 3; })
+                          } else {
+                            if field_llvm == "i1" {
+                              let tr_id: Text = int_to_text(b0.next_tmp + 3);
+                              let tr: Text = text_concat("%t", tr_id);
+                              let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), word), " to i1"));
+                              s1_cg_expr_ok(S1CgExprOut { text: out4; value: tr; ty: "i1"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
+                            } else {
+                              let cast2_id: Text = int_to_text(b0.next_tmp + 3);
+                              let cast2: Text = text_concat("%t", cast2_id);
+                              let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", cast2), " = inttoptr i64 "), word), text_concat(" to ", field_llvm)));
+                              s1_cg_expr_ok(S1CgExprOut { text: out4; value: cast2; ty: field_llvm; s1_ty: s1_cg_s1_ty_some(field_s1); bb: b0.bb; next_tmp: b0.next_tmp + 4; })
+                            }
+                          }
+                        };
+                      }
+                    };
+                  }
+                };
+              }
+            }
+          };
+        }
       }
     };
     Binary(b) => {
@@ -1478,8 +1494,34 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
       // - single-segment path (direct function call)
       // - Option::Some/Option::None constructors (Option<Int> only)
       // - List::Cons constructor (List<T> only; payload as i8* record pointer)
+      let p_opt: Option<S1Path> = None;
       match c.callee {
-        Path(p) => {
+        Path(p0) => { p_opt = Some(p0); 0 };
+        Member(m0) => {
+          match m0.base {
+            Path(bp) => {
+              match s1_cg_path_single_name(bp) {
+                None => 0;
+                Some(enm) => {
+                  let seg_nil: List<Text> = Nil;
+                  let seg2: List<Text> = Cons(ListCons<Text> { head: m0.name; tail: seg_nil; });
+                  let segs: List<Text> = Cons(ListCons<Text> { head: enm; tail: seg2; });
+                  p_opt = Some(S1Path { segments: segs; });
+                  0
+                };
+              };
+              0
+            };
+            _ => 0;
+          };
+          0
+        };
+        _ => 0;
+      };
+
+      match p_opt {
+        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: callee must be a path in v0"));
+        Some(p) => {
           let is_option_ctor: Bool = false;
           let option_variant: Text = "";
           let is_list_ctor: Bool = false;
@@ -1516,8 +1558,114 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
           };
 
           let out_call: Result<S1CgExprOut, S1Diagnostic> = s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: call lowering failed"));
+          let handled: Bool = false;
 
-          out_call = if is_option_ctor == true {
+          // Generic enum payload constructor lowering (v0.12+):
+          // - used by the Stage1 compiler itself (e.g. `Ok(x)`, `Err(e)`, `Ident(s)`).
+          // - excludes Option/List which have dedicated LLVM pointer types in v0.
+          match s1_cg_resolve_enum_variant(items, p) {
+            None => 0;
+            Some(info) => {
+              if info.enum_name != "Option" {
+                if info.enum_name != "List" {
+                  match info.payload_ty {
+                    None => 0;
+                    Some(_payload_ty) => {
+                      match c.args {
+                        Cons(a0) => {
+                          match a0.tail {
+                            Nil => {
+                              let ar: Result<S1CgExprOut, S1Diagnostic> =
+                                s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, a0.head);
+                              match ar {
+                                Err(e1) => { out_call = s1_cg_expr_err(e1); handled = true; 0 };
+                                Ok(av) => {
+                                  let word: Text = av.value;
+                                  let ot2: Text = av.text;
+                                  let nt2: Int = av.next_tmp;
+                                  let bt2: Text = av.bb;
+
+                                  let word_id: Text = int_to_text(nt2);
+                                  let word_tmp: Text = text_concat("%t", word_id);
+                                  let used_tmp: Bool = false;
+
+                                  if av.ty == "i1" {
+                                    ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = zext i1 "), av.value), " to i64"));
+                                    word = word_tmp;
+                                    used_tmp = true;
+                                    0
+                                  } else { 0 };
+
+                                  if av.ty != "i64" {
+                                    if used_tmp == false {
+                                      ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = ptrtoint "), av.ty), text_concat(text_concat(" ", av.value), " to i64")));
+                                      word = word_tmp;
+                                      used_tmp = true;
+                                      0
+                                    } else { 0 };
+                                    0
+                                  } else { 0 };
+
+                                  let nt3: Int = nt2;
+                                  if used_tmp == true { nt3 = nt2 + 1; 0 } else { 0 };
+
+                                  let raw_id: Text = int_to_text(nt3);
+                                  let raw: Text = text_concat("%t", raw_id);
+                                  let out1: Text = s1_cg_line(ot2, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                  let store_cast_id: Text = int_to_text(nt3 + 1);
+                                  let store_cast: Text = text_concat("%t", store_cast_id);
+                                  let out2a: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", store_cast), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                  let tagp_id: Text = int_to_text(nt3 + 2);
+                                  let tagp: Text = text_concat("%t", tagp_id);
+                                  let out3: Text = s1_cg_line(out2a, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(store_cast, ", i32 0, i32 0")));
+                                  let out4: Text = s1_cg_line(out3, text_concat(text_concat("  store i8 ", int_to_text(info.tag)), text_concat(", i8* ", tagp)));
+                                  let payp_id: Text = int_to_text(nt3 + 3);
+                                  let payp: Text = text_concat("%t", payp_id);
+                                  let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(store_cast, ", i32 0, i32 1")));
+                                  let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", word), text_concat(", i64* ", payp)));
+
+                                  let ret_ptr: Text = raw;
+                                  let ret_ty: Text = "i8*";
+                                  let out7: Text = out6;
+                                  let nt4: Int = nt3 + 4;
+                                  if info.enum_name == "Result" {
+                                    let ret_id: Text = int_to_text(nt3 + 4);
+                                    ret_ptr = text_concat("%t", ret_id);
+                                    ret_ty = "%Result*";
+                                    out7 = s1_cg_line(out6, text_concat(text_concat(text_concat("  ", ret_ptr), " = bitcast i8* "), text_concat(raw, " to %Result*")));
+                                    nt4 = nt3 + 5;
+                                    0
+                                  } else {
+                                    nt4 = nt3 + 4;
+                                    0
+                                  };
+
+                                  let st: S1Type = s1_cg_s1_type_prim(info.enum_name);
+                                  out_call = s1_cg_expr_ok(S1CgExprOut { text: out7; value: ret_ptr; ty: ret_ty; s1_ty: s1_cg_s1_ty_some(st); bb: bt2; next_tmp: nt4; });
+                                  handled = true;
+                                  0
+                                };
+                              };
+                              0
+                            };
+                            _ => 0;
+                          };
+                          0
+                        };
+                        _ => 0;
+                      };
+                      0
+                    };
+                  };
+                  0
+                } else { 0 };
+                0
+              } else { 0 };
+              0
+            };
+          };
+
+          if handled == false { out_call = if is_option_ctor == true {
             if option_variant == "None" {
               match c.args {
                 Nil => {
@@ -2494,9 +2642,9 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
             }
           }
           ;
+          };
           out_call
         };
-        _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: callee must be a path in v0"));
       }
     };
     If(i) => {
@@ -2506,86 +2654,139 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
         Ok(c0) => {
           if c0.ty == "i1" {
             match i.else_block {
-              None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if expression requires else branch in v0"));
+              None => {
+                // Statement-like if in expression position: execute then-branch, return 0.
+                let then_id: Text = int_to_text(c0.next_tmp);
+                let then_lbl: Text = text_concat("then", then_id);
+                let join_id: Text = int_to_text(c0.next_tmp + 1);
+                let join_lbl: Text = text_concat("join", join_id);
+                let nt0: Int = c0.next_tmp + 2;
+
+                let br1: Text =
+                  text_concat(
+                    text_concat("  br i1 ", c0.value),
+                    text_concat(text_concat(", label %", then_lbl), text_concat(", label %", join_lbl))
+                  );
+                let out_br: Text = s1_cg_line(c0.text, br1);
+
+                // then:
+                let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
+                let tr: Result<S1CgBlockOut, S1Diagnostic> =
+                  s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, then_lbl, items, strs, fns, i.then_block.stmts);
+                match tr {
+                  Err(e2) => s1_cg_expr_err(e2);
+                  Ok(tb) => {
+                    let tail_e: S1Expr =
+                      match i.then_block.result {
+                        None => IntLit("0");
+                        Some(te) => te;
+                      };
+                    let tail_r: Result<S1CgExprOut, S1Diagnostic> =
+                      s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, tb.bb, items, strs, fns, tail_e);
+                    match tail_r {
+                      Err(e3) => s1_cg_expr_err(e3);
+                      Ok(tail0) => {
+                        let out_then_end: Text = s1_cg_line(tail0.text, text_concat("  br label %", join_lbl));
+                        let out_join_lbl: Text = s1_cg_line(out_then_end, text_concat(join_lbl, ":"));
+                        s1_cg_expr_ok(S1CgExprOut { text: out_join_lbl; value: "0"; ty: "i64"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Int")); bb: join_lbl; next_tmp: tail0.next_tmp; })
+                      };
+                    }
+                  };
+                }
+              };
               Some(else_b) => {
-                match i.then_block.result {
-                  None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-then block has no value"));
-                  Some(then_e) => {
-                    match else_b.result {
-                      None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-else block has no value"));
-                      Some(else_e) => {
-                        // Allocate labels.
-                        let then_id: Text = int_to_text(c0.next_tmp);
-                        let then_lbl: Text = text_concat("then", then_id);
-                        let else_id: Text = int_to_text(c0.next_tmp + 1);
-                        let else_lbl: Text = text_concat("else", else_id);
-                        let join_id: Text = int_to_text(c0.next_tmp + 2);
-                        let join_lbl: Text = text_concat("join", join_id);
-                        let nt0: Int = c0.next_tmp + 3;
+                // Default missing branch values to `0` to support statement-like control flow.
+                let then_e: S1Expr =
+                  match i.then_block.result {
+                    None => IntLit("0");
+                    Some(te) => te;
+                  };
+                let else_e: S1Expr =
+                  match else_b.result {
+                    None => IntLit("0");
+                    Some(ee) => ee;
+                  };
 
-                        let br1: Text = text_concat(text_concat("  br i1 ", c0.value), text_concat(text_concat(", label %", then_lbl), text_concat(", label %", else_lbl)));
-                        let out_br: Text = s1_cg_line(c0.text, br1);
+                // Allocate labels.
+                let then_id: Text = int_to_text(c0.next_tmp);
+                let then_lbl: Text = text_concat("then", then_id);
+                let else_id: Text = int_to_text(c0.next_tmp + 1);
+                let else_lbl: Text = text_concat("else", else_id);
+                let join_id: Text = int_to_text(c0.next_tmp + 2);
+                let join_lbl: Text = text_concat("join", join_id);
+                let nt0: Int = c0.next_tmp + 3;
 
-                        // then:
-                        let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
-                        let tr: Result<S1CgBlockOut, S1Diagnostic> =
-                          s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, then_lbl, items, strs, fns, i.then_block.stmts);
-                        match tr {
-                          Err(e2) => s1_cg_expr_err(e2);
-                          Ok(tb) => {
-                            let t_r: Result<S1CgExprOut, S1Diagnostic> =
-                              s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, tb.bb, items, strs, fns, then_e);
-                            match t_r {
-                              Err(e3) => s1_cg_expr_err(e3);
-                              Ok(t0) => {
-                                let out_then_end: Text = s1_cg_line(t0.text, text_concat("  br label %", join_lbl));
+                let br1: Text =
+                  text_concat(
+                    text_concat("  br i1 ", c0.value),
+                    text_concat(text_concat(", label %", then_lbl), text_concat(", label %", else_lbl))
+                  );
+                let out_br: Text = s1_cg_line(c0.text, br1);
 
-                                // else:
-                                let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
-                                let er: Result<S1CgBlockOut, S1Diagnostic> =
-                                  s1_cg_emit_stmt_list_min(out_else_lbl, env, t0.next_tmp, else_lbl, items, strs, fns, else_b.stmts);
-                                match er {
-                                  Err(e4) => s1_cg_expr_err(e4);
-                                  Ok(eb) => {
-                                    let e_r: Result<S1CgExprOut, S1Diagnostic> =
-                                      s1_cg_emit_expr_min(eb.text, eb.env, eb.next_tmp, eb.bb, items, strs, fns, else_e);
-                                    match e_r {
-                                      Err(e5) => s1_cg_expr_err(e5);
-                                      Ok(e0) => {
-                                        if e0.ty == t0.ty {
-                                          if t0.ty == "i64" {
-                                            let out_else_end: Text = s1_cg_line(e0.text, text_concat("  br label %", join_lbl));
-                                            let out_join_lbl: Text = s1_cg_line(out_else_end, text_concat(join_lbl, ":"));
-                                            let phi_id: Text = int_to_text(e0.next_tmp);
-                                            let phi_tmp: Text = text_concat("%t", phi_id);
-                                            let p1: Text = text_concat(text_concat(text_concat("  ", phi_tmp), " = phi "), text_concat(t0.ty, " "));
-                                            let in1: Text = text_concat(text_concat("[ ", t0.value), text_concat(text_concat(", %", t0.bb), " ]"));
-                                            let in2: Text = text_concat(text_concat("[ ", e0.value), text_concat(text_concat(", %", e0.bb), " ]"));
-                                            let inst: Text = text_concat(text_concat(p1, in1), text_concat(", ", in2));
-                                            let out_phi: Text = s1_cg_line(out_join_lbl, inst);
-                                            s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: t0.ty; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                // then:
+                let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
+                let tr: Result<S1CgBlockOut, S1Diagnostic> =
+                  s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, then_lbl, items, strs, fns, i.then_block.stmts);
+                match tr {
+                  Err(e2) => s1_cg_expr_err(e2);
+                  Ok(tb) => {
+                    let t_r: Result<S1CgExprOut, S1Diagnostic> =
+                      s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, tb.bb, items, strs, fns, then_e);
+                    match t_r {
+                      Err(e3) => s1_cg_expr_err(e3);
+                      Ok(t0) => {
+                        let out_then_end: Text = s1_cg_line(t0.text, text_concat("  br label %", join_lbl));
+
+                        // else:
+                        let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
+                        let er: Result<S1CgBlockOut, S1Diagnostic> =
+                          s1_cg_emit_stmt_list_min(out_else_lbl, env, t0.next_tmp, else_lbl, items, strs, fns, else_b.stmts);
+                        match er {
+                          Err(e4) => s1_cg_expr_err(e4);
+                          Ok(eb) => {
+                            let e_r: Result<S1CgExprOut, S1Diagnostic> =
+                              s1_cg_emit_expr_min(eb.text, eb.env, eb.next_tmp, eb.bb, items, strs, fns, else_e);
+                            match e_r {
+                              Err(e5) => s1_cg_expr_err(e5);
+                              Ok(e0) => {
+                                if e0.ty == t0.ty {
+                                  let out_else_end: Text = s1_cg_line(e0.text, text_concat("  br label %", join_lbl));
+                                  let out_join_lbl: Text = s1_cg_line(out_else_end, text_concat(join_lbl, ":"));
+                                  let phi_id: Text = int_to_text(e0.next_tmp);
+                                  let phi_tmp: Text = text_concat("%t", phi_id);
+                                  let p1: Text = text_concat(text_concat(text_concat("  ", phi_tmp), " = phi "), text_concat(t0.ty, " "));
+                                  let in1: Text = text_concat(text_concat("[ ", t0.value), text_concat(text_concat(", %", t0.bb), " ]"));
+                                  let in2: Text = text_concat(text_concat("[ ", e0.value), text_concat(text_concat(", %", e0.bb), " ]"));
+                                  let inst: Text = text_concat(text_concat(p1, in1), text_concat(", ", in2));
+                                  let out_phi: Text = s1_cg_line(out_join_lbl, inst);
+
+                                  if t0.ty == "i64" {
+                                    s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "i64"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                                  } else {
+                                    if t0.ty == "i1" {
+                                      s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "i1"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                                    } else {
+                                      if t0.ty == "i8*" {
+                                        s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "i8*"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                                      } else {
+                                        if t0.ty == "%Option*" {
+                                          s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "%Option*"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                                        } else {
+                                          if t0.ty == "%Result*" {
+                                            s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "%Result*"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
                                           } else {
-                                            if t0.ty == "i1" {
-                                              let out_else_end: Text = s1_cg_line(e0.text, text_concat("  br label %", join_lbl));
-                                              let out_join_lbl: Text = s1_cg_line(out_else_end, text_concat(join_lbl, ":"));
-                                              let phi_id: Text = int_to_text(e0.next_tmp);
-                                              let phi_tmp: Text = text_concat("%t", phi_id);
-                                              let p1: Text = text_concat(text_concat(text_concat("  ", phi_tmp), " = phi "), text_concat(t0.ty, " "));
-                                              let in1: Text = text_concat(text_concat("[ ", t0.value), text_concat(text_concat(", %", t0.bb), " ]"));
-                                              let in2: Text = text_concat(text_concat("[ ", e0.value), text_concat(text_concat(", %", e0.bb), " ]"));
-                                              let inst: Text = text_concat(text_concat(p1, in1), text_concat(", ", in2));
-                                              let out_phi: Text = s1_cg_line(out_join_lbl, inst);
-                                              s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: t0.ty; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
+                                            if t0.ty == "%List*" {
+                                              s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: "%List*"; s1_ty: t0.s1_ty; bb: join_lbl; next_tmp: e0.next_tmp + 1; })
                                             } else {
                                               s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if branch type not supported in v0"))
                                             }
                                           }
-                                        } else {
-                                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if branches must return same type in v0"))
                                         }
-                                      };
+                                      }
                                     }
-                                  };
+                                  }
+                                } else {
+                                  s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if branches must return same type in v0"))
                                 }
                               };
                             }
@@ -2643,14 +2844,18 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                       let arm1: S1MatchArm = a1.head;
 
                       // Determine enum kind + payload types from scrutinee's S1Type.
+                      // v0.12+: also supports user-defined enums (lowered as `{ tag: i8, payload_word: i64 }` via `%Option` layout).
                       let enum_name: Text = "";
                       let ok_payload_s1: S1Type = s1_cg_s1_type_prim("Int");
                       let err_payload_s1: S1Type = s1_cg_s1_type_prim("Int");
                       let have_enum: Bool = false;
+                      let generic_enum: Bool = false;
+                      let scrut_s1: S1Type = s1_cg_s1_type_prim("Int");
 
                       match s0.s1_ty {
                         None => 0;
                         Some(st0) => {
+                          scrut_s1 = st0;
                           if s1_cg_type_is_option(st0) == true {
                             enum_name = "Option";
                             match st0.args {
@@ -2701,7 +2906,20 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 };
                                 err_payload_s1 = s1_cg_s1_type_prim("Int");
                                 0
-                              } else { 0 };
+                              } else {
+                                // User-defined enum.
+                                match s1_cg_path_single_name(st0.path) {
+                                  None => 0;
+                                  Some(enm) => {
+                                    match s1_cg_lookup_enum(items, enm) {
+                                      None => 0;
+                                      Some(_e0) => { enum_name = enm; have_enum = true; generic_enum = true; 0 };
+                                    };
+                                    0
+                                  };
+                                };
+                                0
+                              };
                               0
                             };
                             0
@@ -2711,8 +2929,24 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                       };
 
                       if have_enum == false {
-                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match scrutinee must be Option<T> or Result<T,E> or List<T> in v0.4"))
+                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match scrutinee must be an enum in v0.4"))
                       } else {
+                        // For user enums, cast the opaque `i8*` pointer to `%Option*` for tag/payload GEP.
+                        let scrut_ptr: Text = s0.value;
+                        let scrut_text: Text = s0.text;
+                        let scrut_next_tmp: Int = s0.next_tmp;
+                        if generic_enum == true {
+                          let cast_id: Text = int_to_text(scrut_next_tmp);
+                          let cast: Text = text_concat("%t", cast_id);
+                          scrut_text = s1_cg_line(scrut_text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), scrut_ptr), " to %Option*"));
+                          scrut_ptr = cast;
+                          scrut_next_tmp = scrut_next_tmp + 1;
+                          0
+                        } else { 0 };
+
+                        let en_layout_name: Text = enum_name;
+                        if generic_enum == true { en_layout_name = "Option"; 0 } else { 0 };
+
                         // Parse patterns.
                         let a0_wild: Bool = false;
                         let a0_vname: Text = "";
@@ -2782,19 +3016,34 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         let a0_has_tag: Bool = false;
                         let a0_tag: Text = "0";
                         if a0_wild == false {
-                          if enum_name == "Option" {
-                            if a0_vname == "Some" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
-                            if a0_vname == "None" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
+                          if generic_enum == true {
+                            match s1_cg_lookup_enum(items, enum_name) {
+                              None => 0;
+                              Some(e0) => {
+                                match s1_cg_enum_variant_info_in_enum(e0, a0_vname) {
+                                  None => 0;
+                                  Some(info) => { a0_has_tag = true; a0_tag = int_to_text(info.tag); 0 };
+                                };
+                                0
+                              };
+                            };
                             0
                           } else {
-                            if enum_name == "Result" {
-                              if a0_vname == "Ok" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
-                              if a0_vname == "Err" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
+                            if enum_name == "Option" {
+                              if a0_vname == "Some" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
+                              if a0_vname == "None" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
                               0
                             } else {
-                              // List
-                              if a0_vname == "Nil" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
-                              if a0_vname == "Cons" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
+                              if enum_name == "Result" {
+                                if a0_vname == "Ok" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
+                                if a0_vname == "Err" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
+                                0
+                              } else {
+                                // List
+                                if a0_vname == "Nil" { a0_has_tag = true; a0_tag = "0"; 0 } else { 0 };
+                                if a0_vname == "Cons" { a0_has_tag = true; a0_tag = "1"; 0 } else { 0 };
+                                0
+                              };
                               0
                             };
                             0
@@ -2805,19 +3054,34 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         let a1_has_tag: Bool = false;
                         let a1_tag: Text = "0";
                         if a1_wild == false {
-                          if enum_name == "Option" {
-                            if a1_vname == "Some" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
-                            if a1_vname == "None" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
+                          if generic_enum == true {
+                            match s1_cg_lookup_enum(items, enum_name) {
+                              None => 0;
+                              Some(e0) => {
+                                match s1_cg_enum_variant_info_in_enum(e0, a1_vname) {
+                                  None => 0;
+                                  Some(info) => { a1_has_tag = true; a1_tag = int_to_text(info.tag); 0 };
+                                };
+                                0
+                              };
+                            };
                             0
                           } else {
-                            if enum_name == "Result" {
-                              if a1_vname == "Ok" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
-                              if a1_vname == "Err" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
+                            if enum_name == "Option" {
+                              if a1_vname == "Some" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
+                              if a1_vname == "None" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
                               0
                             } else {
-                              // List
-                              if a1_vname == "Nil" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
-                              if a1_vname == "Cons" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
+                              if enum_name == "Result" {
+                                if a1_vname == "Ok" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
+                                if a1_vname == "Err" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
+                                0
+                              } else {
+                                // List
+                                if a1_vname == "Nil" { a1_has_tag = true; a1_tag = "0"; 0 } else { 0 };
+                                if a1_vname == "Cons" { a1_has_tag = true; a1_tag = "1"; 0 } else { 0 };
+                                0
+                              };
                               0
                             };
                             0
@@ -2834,18 +3098,18 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: unsupported match arm pattern in v0.4"))
                               } else {
                                 // ok
-                                let arm0_lbl: Text = text_concat("match_a0", int_to_text(s0.next_tmp));
-                                let arm1_lbl: Text = text_concat("match_a1", int_to_text(s0.next_tmp + 1));
-                                let join_lbl: Text = text_concat("match_join", int_to_text(s0.next_tmp + 2));
-                                let nt0: Int = s0.next_tmp + 3;
+                                let arm0_lbl: Text = text_concat("match_a0", int_to_text(scrut_next_tmp));
+                                let arm1_lbl: Text = text_concat("match_a1", int_to_text(scrut_next_tmp + 1));
+                                let join_lbl: Text = text_concat("match_join", int_to_text(scrut_next_tmp + 2));
+                                let nt0: Int = scrut_next_tmp + 3;
 
-                                let en_ty: Text = text_concat("%", enum_name);
+                                let en_ty: Text = text_concat("%", en_layout_name);
                                 let en_ptr_ty: Text = text_concat(en_ty, "*");
 
                                 // Load tag.
                                 let tagp_id: Text = int_to_text(nt0);
                                 let tagp: Text = text_concat("%t", tagp_id);
-                                let out1: Text = s1_cg_line(s0.text, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(s0.value, ", i32 0, i32 0"))))));
+                                let out1: Text = s1_cg_line(scrut_text, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(scrut_ptr, ", i32 0, i32 0"))))));
                                 let tag8_id: Text = int_to_text(nt0 + 1);
                                 let tag8: Text = text_concat("%t", tag8_id);
                                 let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", tag8), " = load i8, i8* "), tagp));
@@ -2871,44 +3135,65 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                   // Load payload word.
                                   let payp_id: Text = int_to_text(nt0a);
                                   let payp: Text = text_concat("%t", payp_id);
-                                  ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(s0.value, ", i32 0, i32 1"))))));
+                                  ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(scrut_ptr, ", i32 0, i32 1"))))));
                                   let payw_id: Text = int_to_text(nt0a + 1);
                                   let payw: Text = text_concat("%t", payw_id);
                                   ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", payw), " = load i64, i64* "), payp));
 
                                   // Determine binder LLVM type.
-                                  let bind_llvm_ty: Text = "i64";
-                                  let bind_s1_ty: S1Type = s1_cg_s1_type_prim("Int");
-                                  if enum_name == "Option" {
-                                    let pl: S1Type = ok_payload_s1;
-                                    if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
-                                    if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
+                                  let bind_payload_s1: S1Type = ok_payload_s1;
+                                  if enum_name == "Result" {
+                                    if a0_tag == "1" { bind_payload_s1 = err_payload_s1; 0 } else { 0 };
                                     0
-                                  } else {
-                                    if enum_name == "Result" {
-                                      // Result: Ok uses ok_payload_s1; Err uses err_payload_s1.
-                                      let pl: S1Type = ok_payload_s1;
-                                      if a0_tag == "1" { pl = err_payload_s1; 0 } else { 0 };
-                                      if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
-                                      if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
-                                      0
-                                    } else {
-                                      // List<T>::Cons payload is ListCons<T> record pointer.
-                                      bind_llvm_ty = "i8*";
-                                      bind_s1_ty = ok_payload_s1;
-                                      0
+                                  } else { 0 };
+                                  if generic_enum == true {
+                                    match s1_cg_lookup_enum(items, enum_name) {
+                                      None => 0;
+                                      Some(e0) => {
+                                        let gen_names: List<Text> = s1_cg_collect_generic_names(e0.generics);
+                                        let subst: List<S1Subst> = s1_cg_build_subst(gen_names, scrut_s1.args);
+                                        match s1_cg_enum_variant_info_in_enum(e0, a0_vname) {
+                                          None => 0;
+                                          Some(info) => {
+                                            match info.payload_ty {
+                                              None => 0;
+                                              Some(pt0) => { bind_payload_s1 = s1_cg_apply_subst(pt0, gen_names, subst); 0 };
+                                            };
+                                            0
+                                          };
+                                        };
+                                        0
+                                      };
                                     };
                                     0
+                                  } else { 0 };
+
+                                  let bind_s1_ty: S1Type = bind_payload_s1;
+                                  let bind_llvm_ty: Text = "i64";
+                                  match s1_cg_llvm_ty_of_s1(bind_payload_s1) {
+                                    None => 0;
+                                    Some(t0) => { bind_llvm_ty = t0; 0 };
                                   };
 
                                   let bind_val: Text = payw;
                                   let nt_adj: Int = nt0a;
-                                  if bind_llvm_ty == "i8*" {
-                                    let cast_id: Text = int_to_text(nt0a + 2);
-                                    let cast: Text = text_concat("%t", cast_id);
-                                    ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat(text_concat("  ", cast), " = inttoptr i64 "), payw), " to i8*"));
-                                    bind_val = cast;
+                                  if bind_llvm_ty == "i1" {
+                                    let tr_id: Text = int_to_text(nt0a + 2);
+                                    let tr: Text = text_concat("%t", tr_id);
+                                    ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), payw), " to i1"));
+                                    bind_val = tr;
                                     nt_adj = nt0a + 1;
+                                    0
+                                  } else { 0 };
+                                  if bind_llvm_ty != "i64" {
+                                    if bind_llvm_ty != "i1" {
+                                      let cast_id: Text = int_to_text(nt0a + 2);
+                                      let cast: Text = text_concat("%t", cast_id);
+                                      ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat(text_concat("  ", cast), " = inttoptr i64 "), payw), text_concat(" to ", bind_llvm_ty)));
+                                      bind_val = cast;
+                                      nt_adj = nt0a + 1;
+                                      0
+                                    } else { 0 };
                                     0
                                   } else { 0 };
 
@@ -2938,41 +3223,64 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                     if a1_bind_kind == "bind" {
                                       let payp_id: Text = int_to_text(nt1);
                                       let payp: Text = text_concat("%t", payp_id);
-                                      ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(s0.value, ", i32 0, i32 1"))))));
+                                      ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(scrut_ptr, ", i32 0, i32 1"))))));
                                       let payw_id: Text = int_to_text(nt1 + 1);
                                       let payw: Text = text_concat("%t", payw_id);
                                       ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat("  ", payw), " = load i64, i64* "), payp));
 
-                                      let bind_llvm_ty: Text = "i64";
-                                      let bind_s1_ty: S1Type = s1_cg_s1_type_prim("Int");
-                                      if enum_name == "Option" {
-                                        let pl: S1Type = ok_payload_s1;
-                                        if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
-                                        if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
+                                      let bind_payload_s1: S1Type = ok_payload_s1;
+                                      if enum_name == "Result" {
+                                        if a1_tag == "1" { bind_payload_s1 = err_payload_s1; 0 } else { 0 };
                                         0
-                                      } else {
-                                        if enum_name == "Result" {
-                                          let pl: S1Type = ok_payload_s1;
-                                          if a1_tag == "1" { pl = err_payload_s1; 0 } else { 0 };
-                                          if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
-                                          if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
-                                          0
-                                        } else {
-                                          bind_llvm_ty = "i8*";
-                                          bind_s1_ty = ok_payload_s1;
-                                          0
+                                      } else { 0 };
+                                      if generic_enum == true {
+                                        match s1_cg_lookup_enum(items, enum_name) {
+                                          None => 0;
+                                          Some(e0) => {
+                                            let gen_names: List<Text> = s1_cg_collect_generic_names(e0.generics);
+                                            let subst: List<S1Subst> = s1_cg_build_subst(gen_names, scrut_s1.args);
+                                            match s1_cg_enum_variant_info_in_enum(e0, a1_vname) {
+                                              None => 0;
+                                              Some(info) => {
+                                                match info.payload_ty {
+                                                  None => 0;
+                                                  Some(pt0) => { bind_payload_s1 = s1_cg_apply_subst(pt0, gen_names, subst); 0 };
+                                                };
+                                                0
+                                              };
+                                            };
+                                            0
+                                          };
                                         };
                                         0
+                                      } else { 0 };
+
+                                      let bind_s1_ty: S1Type = bind_payload_s1;
+                                      let bind_llvm_ty: Text = "i64";
+                                      match s1_cg_llvm_ty_of_s1(bind_payload_s1) {
+                                        None => 0;
+                                        Some(t0) => { bind_llvm_ty = t0; 0 };
                                       };
 
                                       let bind_val: Text = payw;
                                       let nt_adj: Int = nt1;
-                                      if bind_llvm_ty == "i8*" {
-                                        let cast_id: Text = int_to_text(nt1 + 2);
-                                        let cast: Text = text_concat("%t", cast_id);
-                                        ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat(text_concat("  ", cast), " = inttoptr i64 "), payw), " to i8*"));
-                                        bind_val = cast;
+                                      if bind_llvm_ty == "i1" {
+                                        let tr_id: Text = int_to_text(nt1 + 2);
+                                        let tr: Text = text_concat("%t", tr_id);
+                                        ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), payw), " to i1"));
+                                        bind_val = tr;
                                         nt_adj = nt1 + 1;
+                                        0
+                                      } else { 0 };
+                                      if bind_llvm_ty != "i64" {
+                                        if bind_llvm_ty != "i1" {
+                                          let cast_id: Text = int_to_text(nt1 + 2);
+                                          let cast: Text = text_concat("%t", cast_id);
+                                          ot_arm1 = s1_cg_line(ot_arm1, text_concat(text_concat(text_concat(text_concat("  ", cast), " = inttoptr i64 "), payw), text_concat(" to ", bind_llvm_ty)));
+                                          bind_val = cast;
+                                          nt_adj = nt1 + 1;
+                                          0
+                                        } else { 0 };
                                         0
                                       } else { 0 };
 
@@ -3019,7 +3327,34 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                                 let out_phi: Text = s1_cg_line(out_join, inst);
                                                 s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "i8*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
                                               } else {
-                                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match result type not supported in v0.4"))
+                                                if v0.ty == "%Option*" {
+                                                  let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %Option* "), "");
+                                                  let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                  let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                  let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                  let out_phi: Text = s1_cg_line(out_join, inst);
+                                                  s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%Option*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                                } else {
+                                                  if v0.ty == "%Result*" {
+                                                    let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %Result* "), "");
+                                                    let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                    let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                    let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                    let out_phi: Text = s1_cg_line(out_join, inst);
+                                                    s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%Result*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                                  } else {
+                                                    if v0.ty == "%List*" {
+                                                      let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %List* "), "");
+                                                      let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                      let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                      let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                      let out_phi: Text = s1_cg_line(out_join, inst);
+                                                      s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%List*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                                    } else {
+                                                      s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match result type not supported in v0.4"))
+                                                    }
+                                                  }
+                                                }
                                               }
                                             }
                                           }
@@ -3033,17 +3368,17 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               }
                             } else {
                               // a1 is wildcard, still ok.
-                              let arm0_lbl: Text = text_concat("match_a0", int_to_text(s0.next_tmp));
-                              let arm1_lbl: Text = text_concat("match_a1", int_to_text(s0.next_tmp + 1));
-                              let join_lbl: Text = text_concat("match_join", int_to_text(s0.next_tmp + 2));
-                              let nt0: Int = s0.next_tmp + 3;
+                              let arm0_lbl: Text = text_concat("match_a0", int_to_text(scrut_next_tmp));
+                              let arm1_lbl: Text = text_concat("match_a1", int_to_text(scrut_next_tmp + 1));
+                              let join_lbl: Text = text_concat("match_join", int_to_text(scrut_next_tmp + 2));
+                              let nt0: Int = scrut_next_tmp + 3;
 
-                              let en_ty: Text = text_concat("%", enum_name);
+                              let en_ty: Text = text_concat("%", en_layout_name);
                               let en_ptr_ty: Text = text_concat(en_ty, "*");
 
                               let tagp_id: Text = int_to_text(nt0);
                               let tagp: Text = text_concat("%t", tagp_id);
-                              let out1: Text = s1_cg_line(s0.text, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(s0.value, ", i32 0, i32 0"))))));
+                              let out1: Text = s1_cg_line(scrut_text, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(scrut_ptr, ", i32 0, i32 0"))))));
                               let tag8_id: Text = int_to_text(nt0 + 1);
                               let tag8: Text = text_concat("%t", tag8_id);
                               let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", tag8), " = load i8, i8* "), tagp));
@@ -3057,7 +3392,87 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               let out4: Text = s1_cg_line(out3, br0);
 
                               let out5: Text = s1_cg_line(out4, text_concat(arm0_lbl, ":"));
-                              let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out5, env, nt0 + 3, arm0_lbl, items, strs, fns, arm0.value);
+                              let env_arm0: List<S1CgEnvBind> = env;
+                              let ot_arm0: Text = out5;
+                              let nt0a: Int = nt0 + 3;
+
+                              if a0_bind_kind == "bind" {
+                                // Load payload word.
+                                let payp_id: Text = int_to_text(nt0a);
+                                let payp: Text = text_concat("%t", payp_id);
+                                ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds "), text_concat(text_concat(en_ty, ", "), text_concat(en_ptr_ty, text_concat(" ", text_concat(scrut_ptr, ", i32 0, i32 1"))))));
+                                let payw_id: Text = int_to_text(nt0a + 1);
+                                let payw: Text = text_concat("%t", payw_id);
+                                ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", payw), " = load i64, i64* "), payp));
+
+                                // Determine binder LLVM type.
+                                let bind_payload_s1: S1Type = ok_payload_s1;
+                                if enum_name == "Result" {
+                                  if a0_tag == "1" { bind_payload_s1 = err_payload_s1; 0 } else { 0 };
+                                  0
+                                } else { 0 };
+                                if generic_enum == true {
+                                  match s1_cg_lookup_enum(items, enum_name) {
+                                    None => 0;
+                                    Some(e0) => {
+                                      let gen_names: List<Text> = s1_cg_collect_generic_names(e0.generics);
+                                      let subst: List<S1Subst> = s1_cg_build_subst(gen_names, scrut_s1.args);
+                                      match s1_cg_enum_variant_info_in_enum(e0, a0_vname) {
+                                        None => 0;
+                                        Some(info) => {
+                                          match info.payload_ty {
+                                            None => 0;
+                                            Some(pt0) => { bind_payload_s1 = s1_cg_apply_subst(pt0, gen_names, subst); 0 };
+                                          };
+                                          0
+                                        };
+                                      };
+                                      0
+                                    };
+                                  };
+                                  0
+                                } else { 0 };
+
+                                let bind_s1_ty: S1Type = bind_payload_s1;
+                                let bind_llvm_ty: Text = "i64";
+                                match s1_cg_llvm_ty_of_s1(bind_payload_s1) {
+                                  None => 0;
+                                  Some(t0) => { bind_llvm_ty = t0; 0 };
+                                };
+
+                                let bind_val: Text = payw;
+                                let nt_adj: Int = nt0a;
+                                if bind_llvm_ty == "i1" {
+                                  let tr_id: Text = int_to_text(nt0a + 2);
+                                  let tr: Text = text_concat("%t", tr_id);
+                                  ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), payw), " to i1"));
+                                  bind_val = tr;
+                                  nt_adj = nt0a + 1;
+                                  0
+                                } else { 0 };
+                                if bind_llvm_ty != "i64" {
+                                  if bind_llvm_ty != "i1" {
+                                    let cast_id: Text = int_to_text(nt0a + 2);
+                                    let cast: Text = text_concat("%t", cast_id);
+                                    ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat(text_concat("  ", cast), " = inttoptr i64 "), payw), text_concat(" to ", bind_llvm_ty)));
+                                    bind_val = cast;
+                                    nt_adj = nt0a + 1;
+                                    0
+                                  } else { 0 };
+                                  0
+                                } else { 0 };
+
+                                let slot_id: Text = int_to_text(nt_adj + 2);
+                                let slot: Text = text_concat("%t", slot_id);
+                                ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  ", slot), " = alloca "), bind_llvm_ty));
+                                ot_arm0 = s1_cg_line(ot_arm0, text_concat(text_concat(text_concat("  store ", bind_llvm_ty), text_concat(" ", bind_val)), text_concat(text_concat(", ", bind_llvm_ty), text_concat("* ", slot))));
+                                let bind0: S1CgEnvBind = S1CgEnvBind { name: a0_bind_name; llvm: slot; ty: bind_llvm_ty; s1_ty: bind_s1_ty; };
+                                env_arm0 = Cons(ListCons<S1CgEnvBind> { head: bind0; tail: env_arm0; });
+                                nt0a = nt_adj + 3;
+                                0
+                              } else { 0 };
+
+                              let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot_arm0, env_arm0, nt0a, arm0_lbl, items, strs, fns, arm0.value);
                               match e0_r {
                                 Err(ea0) => s1_cg_expr_err(ea0);
                                 Ok(v0) => {
@@ -3080,7 +3495,52 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                           let out_phi: Text = s1_cg_line(out_join, inst);
                                           s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "i64"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
                                         } else {
-                                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match result type not supported in v0.4"))
+                                          if v0.ty == "i1" {
+                                            let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi i1 "), "");
+                                            let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                            let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                            let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                            let out_phi: Text = s1_cg_line(out_join, inst);
+                                            s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "i1"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                          } else {
+                                            if v0.ty == "i8*" {
+                                              let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi i8* "), "");
+                                              let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                              let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                              let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                              let out_phi: Text = s1_cg_line(out_join, inst);
+                                              s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "i8*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                            } else {
+                                              if v0.ty == "%Option*" {
+                                                let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %Option* "), "");
+                                                let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                let out_phi: Text = s1_cg_line(out_join, inst);
+                                                s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%Option*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                              } else {
+                                                if v0.ty == "%Result*" {
+                                                  let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %Result* "), "");
+                                                  let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                  let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                  let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                  let out_phi: Text = s1_cg_line(out_join, inst);
+                                                  s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%Result*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                                } else {
+                                                  if v0.ty == "%List*" {
+                                                    let p1: Text = text_concat(text_concat(text_concat("  ", phi), " = phi %List* "), "");
+                                                    let in0: Text = text_concat(text_concat("[ ", v0.value), text_concat(text_concat(", %", v0.bb), " ]"));
+                                                    let in1: Text = text_concat(text_concat("[ ", v1.value), text_concat(text_concat(", %", v1.bb), " ]"));
+                                                    let inst: Text = text_concat(text_concat(p1, in0), text_concat(", ", in1));
+                                                    let out_phi: Text = s1_cg_line(out_join, inst);
+                                                    s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi; ty: "%List*"; s1_ty: v0.s1_ty; bb: join_lbl; next_tmp: v1.next_tmp + 1; })
+                                                  } else {
+                                                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match result type not supported in v0.4"))
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
                                         }
                                       } else {
                                         s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match arms must return same type in v0.4"))
@@ -3093,9 +3553,41 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                           }
                         } else {
                           // First arm wildcard: just emit arm0.
-                          s1_cg_emit_expr_min(s0.text, env, s0.next_tmp, bb, items, strs, fns, arm0.value)
+                          s1_cg_emit_expr_min(scrut_text, env, scrut_next_tmp, bb, items, strs, fns, arm0.value)
                         }
                       }
+                    };
+                    Cons(_a2) => {
+                      // Desugar N-arm match into nested 2-arm matches (v0.12+).
+                      // Evaluate scrutinee once (already in `s0`), bind it to a temp, then build:
+                      //   match scrut { arm0 => ...; _ => match scrut { arm1 => ...; ... } }
+                      let scrut_name: Text = text_concat("__match_scrut", int_to_text(s0.next_tmp));
+
+                      let slot_id: Text = int_to_text(s0.next_tmp);
+                      let slot: Text = text_concat("%t", slot_id);
+                      let out1: Text = s1_cg_line(s0.text, text_concat(text_concat(text_concat("  ", slot), " = alloca "), s0.ty));
+                      let st_head: Text = text_concat(text_concat("  store ", s0.ty), text_concat(" ", s0.value));
+                      let st_tail: Text = text_concat(text_concat(", ", s0.ty), text_concat("* ", slot));
+                      let out2: Text = s1_cg_line(out1, text_concat(st_head, st_tail));
+
+                      let scrut_s1_ty: S1Type = s1_cg_s1_type_prim("Int");
+                      match s0.s1_ty { None => 0; Some(st0) => { scrut_s1_ty = st0; 0 }; };
+                      let bind: S1CgEnvBind = S1CgEnvBind { name: scrut_name; llvm: slot; ty: s0.ty; s1_ty: scrut_s1_ty; };
+                      let env2: List<S1CgEnvBind> = Cons(ListCons<S1CgEnvBind> { head: bind; tail: env; });
+
+                      let segs_nil: List<Text> = Nil;
+                      let segs: List<Text> = Cons(ListCons<Text> { head: scrut_name; tail: segs_nil; });
+                      let sp: S1Path = S1Path { segments: segs; };
+                      let scrut_expr: S1Expr = S1Expr.Path(sp);
+
+                      let nested_expr: S1Expr = S1Expr.Match(S1Match { scrutinee: scrut_expr; arms: a0.tail; });
+                      let default_arm: S1MatchArm = S1MatchArm { pat: S1Pattern.Wildcard; value: nested_expr; };
+                      let arms_nil: List<S1MatchArm> = Nil;
+                      let arms2_tail: List<S1MatchArm> = Cons(ListCons<S1MatchArm> { head: default_arm; tail: arms_nil; });
+                      let arms2: List<S1MatchArm> = Cons(ListCons<S1MatchArm> { head: a0.head; tail: arms2_tail; });
+                      let top_expr: S1Expr = S1Expr.Match(S1Match { scrutinee: scrut_expr; arms: arms2; });
+
+                      s1_cg_emit_expr_min(out2, env2, s0.next_tmp + 1, s0.bb, items, strs, fns, top_expr)
                     };
                     _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match must have 2 arms in v0.4"));
                   }
@@ -3307,17 +3799,184 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
               }
             };
             ExprStmt(e0) => {
-              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, e0);
-              match rr {
-                Err(e) => { ok = false; diag = e; done = true; 0 };
-                Ok(r) => {
-                  ot = r.text;
-                  bbt = r.bb;
-                  nt = r.next_tmp;
-                  cur = c0.tail;
+              let handled_if_stmt: Bool = false;
+
+              // Special-case: `if cond { ... };` as a statement (no else).
+              match e0 {
+                If(i0) => {
+                  match i0.else_block {
+                    Some(else_b) => {
+                      let c_r: Result<S1CgExprOut, S1Diagnostic> =
+                        s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, i0.cond);
+                      match c_r {
+                        Err(e) => { ok = false; diag = e; done = true; 0 };
+                        Ok(cond0) => {
+                          if cond0.ty != "i1" {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "codegen: if condition must be Bool (i1)");
+                            done = true;
+                            0
+                          } else {
+                            let then_lbl: Text = text_concat("if_then", int_to_text(cond0.next_tmp));
+                            let else_lbl: Text = text_concat("if_else", int_to_text(cond0.next_tmp + 1));
+                            let end_lbl: Text = text_concat("if_end", int_to_text(cond0.next_tmp + 2));
+                            let nt0: Int = cond0.next_tmp + 3;
+                            let br: Text = text_concat(
+                              text_concat(text_concat("  br i1 ", cond0.value), text_concat(", label %", then_lbl)),
+                              text_concat(", label %", else_lbl)
+                            );
+                            let out_br: Text = s1_cg_line(cond0.text, br);
+
+                            // then:
+                            let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
+                            let tr: Result<S1CgBlockOut, S1Diagnostic> =
+                              s1_cg_emit_stmt_list_min(out_then_lbl, envt, nt0, then_lbl, items, strs, fns, i0.then_block.stmts);
+                            match tr {
+                              Err(e2) => { ok = false; diag = e2; done = true; 0 };
+                              Ok(tb) => {
+                                // Optional tail expr inside then-block (discard value).
+                                let ot_then: Text = tb.text;
+                                let nt_then: Int = tb.next_tmp;
+                                let bb_then: Text = tb.bb;
+                                match i0.then_block.result {
+                                  None => 0;
+                                  Some(te) => {
+                                    let rr: Result<S1CgExprOut, S1Diagnostic> =
+                                      s1_cg_emit_expr_min(ot_then, tb.env, nt_then, bb_then, items, strs, fns, te);
+                                    match rr {
+                                      Err(e3) => { ok = false; diag = e3; done = true; 0 };
+                                      Ok(r0) => { ot_then = r0.text; nt_then = r0.next_tmp; bb_then = r0.bb; 0 };
+                                    };
+                                    0
+                                  };
+                                };
+
+                                let out_then_end: Text = s1_cg_line(ot_then, text_concat("  br label %", end_lbl));
+
+                                // else:
+                                let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
+                                let er: Result<S1CgBlockOut, S1Diagnostic> =
+                                  s1_cg_emit_stmt_list_min(out_else_lbl, envt, nt_then, else_lbl, items, strs, fns, else_b.stmts);
+                                match er {
+                                  Err(e4) => { ok = false; diag = e4; done = true; 0 };
+                                  Ok(eb) => {
+                                    // Optional tail expr inside else-block (discard value).
+                                    let ot_else: Text = eb.text;
+                                    let nt_else: Int = eb.next_tmp;
+                                    let bb_else: Text = eb.bb;
+                                    match else_b.result {
+                                      None => 0;
+                                      Some(ee) => {
+                                        let rr2: Result<S1CgExprOut, S1Diagnostic> =
+                                          s1_cg_emit_expr_min(ot_else, eb.env, nt_else, bb_else, items, strs, fns, ee);
+                                        match rr2 {
+                                          Err(e5) => { ok = false; diag = e5; done = true; 0 };
+                                          Ok(r1) => { ot_else = r1.text; nt_else = r1.next_tmp; bb_else = r1.bb; 0 };
+                                        };
+                                        0
+                                      };
+                                    };
+
+                                    let out_else_end: Text = s1_cg_line(ot_else, text_concat("  br label %", end_lbl));
+                                    let out_end: Text = s1_cg_line(out_else_end, text_concat(end_lbl, ":"));
+                                    ot = out_end;
+                                    bbt = end_lbl;
+                                    nt = nt_else;
+                                    cur = c0.tail;
+                                    handled_if_stmt = true;
+                                    0
+                                  };
+                                };
+                                0
+                              };
+                            };
+                            0
+                          }
+                        };
+                      };
+                      0
+                    };
+                    None => {
+                      let c_r: Result<S1CgExprOut, S1Diagnostic> =
+                        s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, i0.cond);
+                      match c_r {
+                        Err(e) => { ok = false; diag = e; done = true; 0 };
+                        Ok(cond0) => {
+                          if cond0.ty != "i1" {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "codegen: if condition must be Bool (i1)");
+                            done = true;
+                            0
+                          } else {
+                            let then_lbl: Text = text_concat("if_then", int_to_text(cond0.next_tmp));
+                            let end_lbl: Text = text_concat("if_end", int_to_text(cond0.next_tmp + 1));
+                            let nt0: Int = cond0.next_tmp + 2;
+                            let br: Text = text_concat(
+                              text_concat(text_concat("  br i1 ", cond0.value), text_concat(", label %", then_lbl)),
+                              text_concat(", label %", end_lbl)
+                            );
+                            let out_br: Text = s1_cg_line(cond0.text, br);
+
+                            // then:
+                            let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
+                            let tr: Result<S1CgBlockOut, S1Diagnostic> =
+                              s1_cg_emit_stmt_list_min(out_then_lbl, envt, nt0, then_lbl, items, strs, fns, i0.then_block.stmts);
+                            match tr {
+                              Err(e2) => { ok = false; diag = e2; done = true; 0 };
+                              Ok(tb) => {
+                                // Optional tail expr inside then-block (discard value).
+                                let ot_then: Text = tb.text;
+                                let nt_then: Int = tb.next_tmp;
+                                let bb_then: Text = tb.bb;
+                                match i0.then_block.result {
+                                  None => 0;
+                                  Some(te) => {
+                                    let rr: Result<S1CgExprOut, S1Diagnostic> =
+                                      s1_cg_emit_expr_min(ot_then, tb.env, nt_then, bb_then, items, strs, fns, te);
+                                    match rr {
+                                      Err(e3) => { ok = false; diag = e3; done = true; 0 };
+                                      Ok(r0) => { ot_then = r0.text; nt_then = r0.next_tmp; bb_then = r0.bb; 0 };
+                                    };
+                                    0
+                                  };
+                                };
+
+                                let out_then_end: Text = s1_cg_line(ot_then, text_concat("  br label %", end_lbl));
+                                let out_end: Text = s1_cg_line(out_then_end, text_concat(end_lbl, ":"));
+                                ot = out_end;
+                                bbt = end_lbl;
+                                nt = nt_then;
+                                cur = c0.tail;
+                                handled_if_stmt = true;
+                                0
+                              };
+                            };
+                            0
+                          }
+                        };
+                      };
+                      0
+                    };
+                  };
                   0
                 };
-              }
+                _ => 0;
+              };
+
+              if handled_if_stmt == false {
+                let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, e0);
+                match rr {
+                  Err(e) => { ok = false; diag = e; done = true; 0 };
+                  Ok(r) => {
+                    ot = r.text;
+                    bbt = r.bb;
+                    nt = r.next_tmp;
+                    cur = c0.tail;
+                    0
+                  };
+                }
+              } else { 0 };
+              0
             };
             Return(_r0) => {
               ok = false;
@@ -3485,6 +4144,57 @@ fn s1_cg_reverse_text_list(xs: List<Text>) -> List<Text> {
       };
     }
   };
+  out
+};
+
+fn s1_cg_join_text_chunks(chunks: List<Text>) -> Text {
+  // Pairwise concatenation in rounds to avoid O(n^2) growth when building large outputs.
+  // This is still not zero-copy, but reduces peak copying to roughly O(total_size * log n).
+  let cur: List<Text> = chunks;
+  let done: Bool = false;
+  let out: Text = "";
+
+  while done == false {
+    match cur {
+      Nil => { out = ""; done = true; 0 };
+      Cons(c0) => {
+        match c0.tail {
+          Nil => { out = c0.head; done = true; 0 };
+          _ => {
+            // Merge adjacent pairs into a new list.
+            let merged_rev: List<Text> = Nil;
+            let c2: List<Text> = cur;
+            let done2: Bool = false;
+            while done2 == false {
+              match c2 {
+                Nil => { done2 = true; 0 };
+                Cons(a0) => {
+                  match a0.tail {
+                    Nil => {
+                      merged_rev = Cons(ListCons<Text> { head: a0.head; tail: merged_rev; });
+                      done2 = true;
+                      0
+                    };
+                    Cons(b0) => {
+                      let m: Text = text_concat(a0.head, b0.head);
+                      merged_rev = Cons(ListCons<Text> { head: m; tail: merged_rev; });
+                      c2 = b0.tail;
+                      0
+                    };
+                  };
+                  0
+                };
+              }
+            };
+            cur = s1_cg_reverse_text_list(merged_rev);
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+
   out
 };
 
@@ -3815,10 +4525,11 @@ evidence {
                   let lits: List<Text> = s1_cg_collect_strs_program(p3);
                   let strs: List<S1CgStrConst> = s1_cg_build_str_table(lits);
                   let fnsigs: List<S1CgFnSig> = s1_cg_collect_fn_sigs_program(p3);
-                  let out: Text = s1_cg_emit_prelude(strs);
+                  let prelude: Text = s1_cg_emit_prelude(strs);
                   let cur: List<S1Item> = p3.items;
                   let done: Bool = false;
-                  let ot: Text = out;
+                  let chunks_nil: List<Text> = Nil;
+                  let chunks_rev: List<Text> = Cons(ListCons<Text> { head: prelude; tail: chunks_nil; });
                   let ok_cg: Bool = true;
                   let diag_cg: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: failed");
                   let emitted_main: Bool = false;
@@ -3833,15 +4544,16 @@ evidence {
                         match c0.head {
                           Function(f) => {
                             if s1_cg_function_supported(f) == true {
-                              match s1_cg_emit_function_min(ot, p3.items, strs, f, fnsigs) {
+                              match s1_cg_emit_function_min("", p3.items, strs, f, fnsigs) {
                                 Err(e5) => {
                                   ok_cg = false;
-                                  diag_cg = e5;
+                                  let msg: Text = text_concat(text_concat(text_concat("codegen in fn ", f.name), ": "), e5.message);
+                                  diag_cg = s1_diag(e5.severity, e5.span.start, e5.span.end, msg);
                                   done = true;
                                   0
                                 };
                                 Ok(t2) => {
-                                  ot = t2;
+                                  chunks_rev = Cons(ListCons<Text> { head: t2; tail: chunks_rev; });
                                   if f.name == "main" { emitted_main = true; 0 } else { 0 };
                                   0
                                 };
@@ -3866,7 +4578,113 @@ evidence {
                     if emitted_main == false {
                       s1_cg_text_err(s1_diag(Error, 0, 0, "codegen: no supported main() function found in v0 subset"))
                     } else {
-                      s1_cg_text_ok(ot)
+                      let chunks: List<Text> = s1_cg_reverse_text_list(chunks_rev);
+                      s1_cg_text_ok(s1_cg_join_text_chunks(chunks))
+                    }
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+  }
+};
+
+fn s1_emit_llvm_ir_debug(source: Text) -> Result<Text, S1Diagnostic>
+intent "Stage1 LLVM IR emitter (debug): print progress to stderr"
+evidence {
+  trace "stage1.emit_llvm.debug.v0";
+  metrics [stage1_emit_llvm_debug_calls];
+}
+{
+  host_eprintln("emit_llvm: lex");
+  let tokens: Result<List<S1Token>, S1Diagnostic> = s1_lex(source);
+  match tokens {
+    Err(e) => s1_cg_text_err(e);
+    Ok(ts) => {
+      host_eprintln("emit_llvm: parse");
+      let ast_r: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match ast_r {
+        Err(e2) => s1_cg_text_err(e2);
+        Ok(p) => {
+          host_eprintln("emit_llvm: resolve");
+          let res_r: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
+          match res_r {
+            Err(e3) => s1_cg_text_err(e3);
+            Ok(p2) => {
+              host_eprintln("emit_llvm: typecheck");
+              let tc_r: Result<S1Program, S1Diagnostic> = s1_typecheck_program(p2);
+              match tc_r {
+                Err(e4) => s1_cg_text_err(e4);
+                Ok(p3) => {
+                  host_eprintln("emit_llvm: collect strings");
+                  let lits: List<Text> = s1_cg_collect_strs_program(p3);
+                  let strs: List<S1CgStrConst> = s1_cg_build_str_table(lits);
+                  host_eprintln("emit_llvm: collect fn sigs");
+                  let fnsigs: List<S1CgFnSig> = s1_cg_collect_fn_sigs_program(p3);
+
+                  host_eprintln("emit_llvm: codegen begin");
+                  let prelude: Text = s1_cg_emit_prelude(strs);
+                  let cur: List<S1Item> = p3.items;
+                  let done: Bool = false;
+                  let chunks_nil: List<Text> = Nil;
+                  let chunks_rev: List<Text> = Cons(ListCons<Text> { head: prelude; tail: chunks_nil; });
+                  let ok_cg: Bool = true;
+                  let diag_cg: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: failed");
+                  let emitted_main: Bool = false;
+                  let fn_i: Int = 0;
+
+                  while done == false {
+                    match cur {
+                      Nil => {
+                        done = true;
+                        0
+                      };
+                      Cons(c0) => {
+                        match c0.head {
+                          Function(f) => {
+                            if s1_cg_function_supported(f) == true {
+                              host_eprintln(text_concat(text_concat("emit_llvm: cg fn ", f.name), text_concat(" #", int_to_text(fn_i))));
+                              match s1_cg_emit_function_min("", p3.items, strs, f, fnsigs) {
+                                Err(e5) => {
+                                  ok_cg = false;
+                                  let msg: Text = text_concat(text_concat(text_concat("codegen in fn ", f.name), ": "), e5.message);
+                                  diag_cg = s1_diag(e5.severity, e5.span.start, e5.span.end, msg);
+                                  done = true;
+                                  0
+                                };
+                                Ok(t2) => {
+                                  chunks_rev = Cons(ListCons<Text> { head: t2; tail: chunks_rev; });
+                                  if f.name == "main" { emitted_main = true; 0 } else { 0 };
+                                  0
+                                };
+                              };
+                              fn_i = fn_i + 1;
+                              0
+                            } else {
+                              0
+                            };
+                            0
+                          };
+                          _ => 0;
+                        };
+                        cur = c0.tail;
+                        0
+                      };
+                    }
+                  };
+
+                  host_eprintln("emit_llvm: codegen end");
+                  if ok_cg == false {
+                    s1_cg_text_err(diag_cg)
+                  } else {
+                    if emitted_main == false {
+                      s1_cg_text_err(s1_diag(Error, 0, 0, "codegen: no supported main() function found in v0 subset"))
+                    } else {
+                      let chunks: List<Text> = s1_cg_reverse_text_list(chunks_rev);
+                      s1_cg_text_ok(s1_cg_join_text_chunks(chunks))
                     }
                   }
                 };

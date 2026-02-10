@@ -3640,6 +3640,35 @@ fn stage1_self_host_v0_11_emits_and_runs_stage2_import_smoke() {
 }
 
 #[test]
+fn stage1_self_host_v0_12_emits_stage1_compiler_main_ir() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_stage1_compiler.ll.
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/self_host_stage1_compiler_main.kooix");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_stage1_compiler_main should load via include-style imports");
+
+    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-12-stage1-compiler-main");
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+
+    let run_output = compile_and_run_native_source(&source_map.combined, &output)
+        .expect("stage1 self-host stage1-compiler driver should run");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let ir = std::fs::read_to_string("/tmp/kooixc_stage2_stage1_compiler.ll")
+        .expect("stage1 self-host driver should write /tmp/kooixc_stage2_stage1_compiler.ll");
+    assert!(ir.contains("define i64 @main"), "emitted LLVM IR should contain main()");
+    assert!(ir.len() > 100_000, "emitted LLVM IR should be non-trivial");
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_while_loop() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

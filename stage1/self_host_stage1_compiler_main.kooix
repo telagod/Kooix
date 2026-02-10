@@ -1,0 +1,44 @@
+import "../stdlib/prelude";
+import "diag";
+import "llvm_emit";
+
+fn main() -> Int
+intent "Stage1 self-host bootstrap (v0.12): emit stage1/compiler_main LLVM IR and write to disk"
+evidence {
+  trace "stage1.self_host.v0_12.stage1_compiler";
+  metrics [stage1_self_host_stage1_compiler_calls];
+}
+{
+  host_eprintln("self_host: load stage1/compiler_main.kooix");
+  let src_r: Result<Text, Text> = host_load_source_map("stage1/compiler_main.kooix");
+  match src_r {
+    Err(m) => {
+      host_eprintln(m);
+      2
+    };
+    Ok(src) => {
+      host_eprintln(text_concat("self_host: loaded bytes=", int_to_text(text_len(src))));
+      host_eprintln("self_host: s1_emit_llvm_ir begin");
+      let ir_r: Result<Text, S1Diagnostic> = s1_emit_llvm_ir(src);
+      match ir_r {
+        Err(e) => {
+          host_eprintln(e.message);
+          3
+        };
+        Ok(ir) => {
+          host_eprintln(text_concat("self_host: llvm_ir bytes=", int_to_text(text_len(ir))));
+          host_eprintln("self_host: write /tmp/kooixc_stage2_stage1_compiler.ll");
+          let w: Result<Int, Text> =
+            host_write_file("/tmp/kooixc_stage2_stage1_compiler.ll", ir);
+          match w {
+            Ok(_n) => 0;
+            Err(msg) => {
+              host_eprintln(msg);
+              4
+            };
+          }
+        };
+      }
+    };
+  }
+};
