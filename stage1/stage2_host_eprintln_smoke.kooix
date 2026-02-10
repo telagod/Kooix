@@ -1,0 +1,7 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  host_eprintln("stage2_host_eprintln_smoke");
+  0
+};
+

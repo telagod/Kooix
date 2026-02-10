@@ -660,6 +660,19 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                           s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_starts_with expects (Text, Text)"))
                         }
                       } else {
+                        if fname == "host_eprintln" {
+                          if argc == 1 {
+                            if a_ty == "i8*" {
+                              let inst: Text = text_concat(text_concat("  call void @kx_host_eprintln(i8* ", a_val), ")");
+                              let out2: Text = s1_cg_line(ot, inst);
+                              s1_cg_expr_ok(S1CgExprOut { text: out2; value: "0"; ty: "void"; bb: bt; next_tmp: nt; })
+                            } else {
+                              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_eprintln expects (Text)"))
+                            }
+                          } else {
+                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_eprintln expects (Text)"))
+                          }
+                        } else {
                         if all_i64 == true {
                           let tmp_id: Text = int_to_text(nt);
                           let tmp: Text = text_concat("%t", tmp_id);
@@ -669,6 +682,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                           s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; ty: "i64"; bb: bt; next_tmp: nt + 1; })
                         } else {
                           s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: call expects i64 args in v0"))
+                        }
                         }
                       }
                     }
