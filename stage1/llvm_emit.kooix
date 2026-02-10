@@ -20,11 +20,19 @@ fn s1_cg_s1_type_prim(name: Text) -> S1Type {
 };
 
 fn s1_cg_s1_type_option_int() -> S1Type {
+  s1_cg_s1_type_option(s1_cg_s1_type_prim("Int"))
+};
+
+fn s1_cg_s1_type_option_text() -> S1Type {
+  s1_cg_s1_type_option(s1_cg_s1_type_prim("Text"))
+};
+
+fn s1_cg_s1_type_option(payload: S1Type) -> S1Type {
   let seg_tail: List<Text> = Nil;
   let segs: List<Text> = Cons(ListCons<Text> { head: "Option"; tail: seg_tail; });
   let path: S1Path = S1Path { segments: segs; };
   let args_tail: List<S1Type> = Nil;
-  let args: List<S1Type> = Cons(ListCons<S1Type> { head: s1_cg_s1_type_prim("Int"); tail: args_tail; });
+  let args: List<S1Type> = Cons(ListCons<S1Type> { head: payload; tail: args_tail; });
   S1Type { path: path; args: args; }
 };
 
