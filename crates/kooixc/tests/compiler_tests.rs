@@ -2332,6 +2332,45 @@ fn stage1_compiler_skeleton_typechecks_and_runs() {
 }
 
 #[test]
+fn stage1_compiler_cli_driver_emits_llvm_ir_for_entry_file() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/compiler_main.kooix");
+    let source_map = load_source_map(&entry).expect("stage1 compiler CLI driver should load");
+
+    let output = std::env::temp_dir().join("kooixc-stage1-compiler-cli-driver");
+    let _ = std::fs::remove_file(&output);
+    let ll_out = std::env::temp_dir().join("kooixc-stage1-compiler-cli-output.ll");
+    let _ = std::fs::remove_file(&ll_out);
+
+    let args = vec![
+        "stage1/stage2_min.kooix".to_string(),
+        ll_out.to_string_lossy().to_string(),
+    ];
+    let run_output = compile_and_run_native_source_with_args_stdin_and_timeout(
+        &source_map.combined,
+        &output,
+        &args,
+        None,
+        Some(60_000),
+    )
+    .expect("stage1 compiler CLI driver should run natively");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let ir = std::fs::read_to_string(&ll_out).expect("stage1 CLI should write LLVM IR file");
+    assert!(
+        ir.contains("define i64 @kx_program_main"),
+        "emitted LLVM IR should contain entrypoint"
+    );
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&ll_out);
+}
+
+#[test]
 fn stage1_compiler_can_compile_its_own_token_module_via_host_loader() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_bootstrap_token_compile_smoke.kooix");
