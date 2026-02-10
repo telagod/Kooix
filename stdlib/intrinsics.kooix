@@ -7,6 +7,8 @@ fn text_len(s: Text) -> Int;
 fn text_byte_at(s: Text, index: Int) -> Option<Int>;
 fn text_slice(s: Text, start: Int, end: Int) -> Option<Text>;
 fn text_starts_with(s: Text, prefix: Text) -> Bool;
+fn text_concat(a: Text, b: Text) -> Text;
+fn int_to_text(i: Int) -> Text;
 
 fn byte_is_ascii_whitespace(b: Int) -> Bool;
 fn byte_is_ascii_digit(b: Int) -> Bool;

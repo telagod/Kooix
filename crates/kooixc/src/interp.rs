@@ -364,6 +364,24 @@ fn eval_intrinsic_function(
             };
             Ok(Value::Bool(s.starts_with(prefix)))
         }
+        "text_concat" => {
+            let [Value::Text(a), Value::Text(b)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "text_concat expects (Text, Text)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Text(format!("{a}{b}")))
+        }
+        "int_to_text" => {
+            let [Value::Int(i)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "int_to_text expects (Int)",
+                    function.span,
+                )));
+            };
+            Ok(Value::Text(i.to_string()))
+        }
         "byte_is_ascii_whitespace" => {
             let [Value::Int(b)] = args else {
                 return Some(Err(Diagnostic::error(

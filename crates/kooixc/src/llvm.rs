@@ -34,6 +34,8 @@ pub fn emit_program(program: &MirProgram) -> String {
     // Native host intrinsics (provided by crates/kooixc/native_runtime/runtime.c).
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
+    output.push_str("declare i8* @kx_text_concat(i8*, i8*)\n");
+    output.push_str("declare i8* @kx_int_to_text(i64)\n\n");
 
     // String constants.
     let text_consts = collect_text_constants(program);
@@ -740,6 +742,42 @@ impl<'a> FunctionEmitter<'a> {
                 );
                 let _ = writeln!(output, "  call void @kx_host_eprintln(i8* {sv})");
                 Some("0".to_string())
+            }
+            "text_concat" => {
+                let [a, b] = args else { return Some("null".to_string()) };
+                let av = self.emit_operand_value(
+                    a,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let tmp = self.fresh_tmp();
+                let _ = writeln!(output, "  {tmp} = call i8* @kx_text_concat(i8* {av}, i8* {bv})");
+                Some(tmp)
+            }
+            "int_to_text" => {
+                let [i] = args else { return Some("null".to_string()) };
+                let iv = self.emit_operand_value(
+                    i,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let tmp = self.fresh_tmp();
+                let _ = writeln!(output, "  {tmp} = call i8* @kx_int_to_text(i64 {iv})");
+                Some(tmp)
             }
             _ => None,
         }

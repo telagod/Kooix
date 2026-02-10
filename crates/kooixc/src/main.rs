@@ -18,6 +18,85 @@ fn main() {
     }
 
     let command = args[1].as_str();
+    if command == "native-llvm" {
+        let ll_path = Path::new(&args[2]);
+        let options = match parse_native_options(&args[3..]) {
+            Ok(options) => options,
+            Err(message) => {
+                eprintln!("{message}");
+                print_usage();
+                process::exit(2);
+            }
+        };
+
+        let ir = match fs::read_to_string(ll_path) {
+            Ok(ir) => ir,
+            Err(error) => {
+                eprintln!("failed to read llvm ir file {}: {error}", ll_path.display());
+                process::exit(2);
+            }
+        };
+
+        let output_path = Path::new(&options.output);
+        match kooixc::native::compile_llvm_ir_to_executable(&ir, output_path) {
+            Ok(()) => {
+                println!("ok: native binary generated at {}", options.output);
+            }
+            Err(error) => {
+                eprintln!("native build failed: {error}");
+                process::exit(1);
+            }
+        }
+
+        if options.run_after_build {
+            let stdin_data = match options.stdin_path.as_deref() {
+                Some("-") => {
+                    let mut buffer = Vec::new();
+                    if let Err(error) = std::io::stdin().read_to_end(&mut buffer) {
+                        eprintln!("failed to read stdin: {error}");
+                        process::exit(2);
+                    }
+                    Some(buffer)
+                }
+                Some(path) => match fs::read(path) {
+                    Ok(data) => Some(data),
+                    Err(error) => {
+                        eprintln!("failed to read stdin file {path}: {error}");
+                        process::exit(2);
+                    }
+                },
+                None => None,
+            };
+
+            match kooixc::native::run_executable_with_args_and_stdin_and_timeout(
+                output_path,
+                &options.run_args,
+                stdin_data.as_deref(),
+                options.timeout_ms,
+            ) {
+                Ok(run_output) => {
+                    if !run_output.stdout.is_empty() {
+                        print!("{}", run_output.stdout);
+                    }
+                    if !run_output.stderr.is_empty() {
+                        eprint!("{}", run_output.stderr);
+                    }
+                    let exit_code = run_output.status_code.unwrap_or(1);
+                    println!("run exit code: {exit_code}");
+                    if exit_code != 0 {
+                        process::exit(exit_code);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("native run failed: {error}");
+                    process::exit(1);
+                }
+            }
+        }
+
+        return;
+    }
+
     let file = &args[2];
 
     let entry_path = Path::new(file);
@@ -206,7 +285,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 

@@ -430,3 +430,21 @@ void kx_host_eprintln(const char* s) {
   fputc('\n', stderr);
 }
 
+char* kx_text_concat(const char* a, const char* b) {
+  return kx_strcat2(a ? a : "", b ? b : "");
+}
+
+char* kx_int_to_text(int64_t v) {
+  // Portable enough for our bootstrap needs; libc-only.
+  int n = snprintf(NULL, 0, "%lld", (long long)v);
+  if (n < 0) {
+    return NULL;
+  }
+  char* out = (char*)malloc((size_t)n + 1);
+  if (!out) {
+    return NULL;
+  }
+  snprintf(out, (size_t)n + 1, "%lld", (long long)v);
+  out[n] = '\0';
+  return out;
+}

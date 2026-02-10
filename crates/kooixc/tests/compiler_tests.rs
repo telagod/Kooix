@@ -3216,6 +3216,32 @@ fn main() -> Int {
 }
 
 #[test]
+fn compiles_and_runs_native_binary_with_text_concat_and_int_to_text() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let source = r#"
+fn text_concat(a: Text, b: Text) -> Text;
+fn int_to_text(i: Int) -> Text;
+
+fn main() -> Int {
+  let s: Text = text_concat(int_to_text(40), "2");
+  if s == "402" { 0 } else { 1 }
+};
+"#;
+
+    let output = std::env::temp_dir().join("kooixc-native-run-text-concat-int-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_while_loop() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

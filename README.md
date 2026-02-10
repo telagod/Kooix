@@ -42,7 +42,7 @@ Kooix 已完成一条可运行的最小编译链路：
   - state reachability（不可达状态 warning）。
   - stop condition 目标状态校验（unknown/unreachable warning）。
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
-- CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`。
+- CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（从 LLVM IR 文件直接产出 native bin）。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper）。
@@ -132,6 +132,9 @@ printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/koo
 
 # 运行超时保护（ms）
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
+
+# 从 LLVM IR 文件生成本地可执行文件（供 Stage1 -> Stage2 self-host 使用）
+cargo run -p kooixc -- native-llvm /tmp/kooixc-stage2.ll /tmp/kooixc-stage2 --run
 
 # 测试
 cargo test -p kooixc

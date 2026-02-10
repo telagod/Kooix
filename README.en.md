@@ -44,7 +44,7 @@ Kooix already has a runnable minimal compiler pipeline:
   - stop condition target validation (unknown/unreachable state warning).
   - non-termination warning when there is no `max_iterations` guard and no reachable terminal path.
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
-- CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`.
+- CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (build native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers).
@@ -134,6 +134,9 @@ printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/koo
 
 # Runtime timeout (ms)
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
+
+# Build from LLVM IR file (used for Stage1 -> Stage2 self-host)
+cargo run -p kooixc -- native-llvm /tmp/kooixc-stage2.ll /tmp/kooixc-stage2 --run
 
 # Tests
 cargo test -p kooixc
