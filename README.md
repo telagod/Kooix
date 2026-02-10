@@ -139,6 +139,7 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --ru
 
 # Stage1 self-host v0：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2.ll；当前输入为 stage1/stage2_min.kooix；覆盖 block expr/stmtful let 与 if/while）
 cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
 
 # Stage1 self-host v0.1（Text smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_text.ll；当前输入为 stage1/stage2_text_smoke.kooix）
 cargo run -p kooixc -- native stage1/self_host_text_main.kooix /tmp/kx-selfhost-text --run
@@ -151,6 +152,16 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_eq.ll /tmp/kooixc-sta
 # Stage1 self-host v0.3（host_eprintln smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_host_eprintln.ll；当前输入为 stage1/stage2_host_eprintln_smoke.kooix）
 cargo run -p kooixc -- native stage1/self_host_host_eprintln_main.kooix /tmp/kx-selfhost-host-eprintln --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_eprintln.ll /tmp/kooixc-stage2-host-eprintln --run
+
+# Stage1 self-host v0.4（enum/match/IO smoke）：Option/Result + match + host_write_file/host_load_source_map
+cargo run -p kooixc -- native stage1/self_host_option_match_main.kooix /tmp/kx-selfhost-opt --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_option_match.ll /tmp/kooixc-stage2-opt --run
+cargo run -p kooixc -- native stage1/self_host_host_write_file_main.kooix /tmp/kx-selfhost-io --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_write_file.ll /tmp/kooixc-stage2-io --run
+
+# Stage1 self-host v0.5（text_byte_at smoke）：text_byte_at(Text, Int) -> Option<Int>
+cargo run -p kooixc -- native stage1/self_host_text_byte_at_main.kooix /tmp/kx-selfhost-tba --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_byte_at.ll /tmp/kooixc-stage2-tba --run
 
 # 测试
 cargo test -p kooixc
