@@ -171,6 +171,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_slice.ll /tmp/kooixc-
 cargo run -p kooixc -- native stage1/self_host_lexer_canary_main.kooix /tmp/kx-selfhost-lex --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_canary.ll /tmp/kooixc-stage2-lex --run
 
+# Stage1 self-host v0.8（lexer ident smoke）：while + text_slice + byte_is_ascii_ident_continue
+cargo run -p kooixc -- native stage1/self_host_lexer_ident_main.kooix /tmp/kx-selfhost-lid --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_ident.ll /tmp/kooixc-stage2-lid --run
+
 # 测试
 cargo test -p kooixc
 ```
