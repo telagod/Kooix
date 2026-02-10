@@ -1,0 +1,37 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let s: Text = "abc123 xyz";
+  let i: Int = 0;
+  let n: Int = text_len(s);
+  let done: Bool = false;
+
+  while done == false {
+    if i == n { done = true; 0 } else {
+      match text_byte_at(s, i) {
+        None => { done = true; 0 };
+        Some(b) => {
+          if byte_is_ascii_ident_continue(b) == true {
+            i = i + 1;
+            0
+          } else {
+            done = true;
+            0
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+
+  if i != 6 { 10 } else {
+    match text_slice(s, 0, i) {
+      None => 11;
+      Some(t) => {
+        if text_len(t) == 6 { 0 } else { 12 }
+      };
+    }
+  }
+};
+
