@@ -1,0 +1,7 @@
+import "stage2_import_lib";
+
+fn main() -> Int {
+  let v: Int = add1(41);
+  if v == 42 { 0 } else { 1 }
+};
+
