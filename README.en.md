@@ -165,6 +165,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_write_file.ll /tmp/ko
 cargo run -p kooixc -- native stage1/self_host_text_byte_at_main.kooix /tmp/kx-selfhost-tba --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_byte_at.ll /tmp/kooixc-stage2-tba --run
 
+# Stage1 self-host v0.6 (text_slice smoke): text_slice(Text, Int, Int) -> Option<Text>
+cargo run -p kooixc -- native stage1/self_host_text_slice_main.kooix /tmp/kx-selfhost-ts --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_slice.ll /tmp/kooixc-stage2-ts --run
+
 # Tests
 cargo test -p kooixc
 ```
