@@ -599,7 +599,415 @@ fn s1_cg_lookup_str_const(strs: List<S1CgStrConst>, lit: Text) -> Option<S1CgStr
   out
 };
 
-fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Text, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, e: S1Expr) -> Result<S1CgExprOut, S1Diagnostic> {
+fn s1_cg_reverse_s1_type_list(xs: List<S1Type>) -> List<S1Type> {
+  let out: List<S1Type> = Nil;
+  let cur: List<S1Type> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        out = Cons(ListCons<S1Type> { head: c0.head; tail: out; });
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_lookup_record(items: List<S1Item>, name: Text) -> Option<S1Record> {
+  let out: Option<S1Record> = None;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        match c0.head {
+          Record(r) => {
+            if r.name == name { out = Some(r); done = true; 0 } else { 0 };
+            0
+          };
+          _ => 0;
+        };
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_collect_generic_names(gs: List<S1GenericParam>) -> List<Text> {
+  let acc: List<Text> = Nil;
+  let cur: List<S1GenericParam> = gs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        acc = Cons(ListCons<Text> { head: c0.head.name; tail: acc; });
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+  s1_cg_reverse_text_list(acc)
+};
+
+fn s1_cg_lookup_subst(subst: List<S1Subst>, name: Text) -> Option<S1Type> {
+  let out: Option<S1Type> = None;
+  let cur: List<S1Subst> = subst;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        if c0.head.name == name {
+          out = Some(c0.head.ty);
+          done = true;
+          0
+        } else {
+          cur = c0.tail;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_apply_subst(ty: S1Type, gen_names: List<Text>, subst: List<S1Subst>) -> S1Type {
+  // If `ty` is a generic var, substitute it (only when used as a bare type: `T`).
+  match s1_cg_path_single_name(ty.path) {
+    None => 0;
+    Some(nm) => {
+      if s1_cg_text_list_contains(gen_names, nm) == true {
+        match ty.args {
+          Nil => {
+            match s1_cg_lookup_subst(subst, nm) {
+              None => 0;
+              Some(t2) => { ty = t2; 0 };
+            };
+            0
+          };
+          _ => 0;
+        };
+        0
+      } else { 0 };
+      0
+    };
+  };
+
+  // Recurse into args.
+  let acc: List<S1Type> = Nil;
+  let cur: List<S1Type> = ty.args;
+  let done: Bool = false;
+	  while done == false {
+	    match cur {
+	      Nil => { done = true; 0 };
+	      Cons(c0) => {
+	        let a2: S1Type = s1_cg_apply_subst(c0.head, gen_names, subst);
+	        acc = Cons(ListCons<S1Type> { head: a2; tail: acc; });
+	        cur = c0.tail;
+	        0
+	      };
+	    }
+	  };
+	  let args2: List<S1Type> = s1_cg_reverse_s1_type_list(acc);
+	  S1Type { path: ty.path; args: args2; }
+	};
+
+fn s1_cg_build_subst(gen_names: List<Text>, args: List<S1Type>) -> List<S1Subst> {
+  let out: List<S1Subst> = Nil;
+  let gcur: List<Text> = gen_names;
+  let acur: List<S1Type> = args;
+  let done: Bool = false;
+  while done == false {
+    match gcur {
+      Nil => { done = true; 0 };
+      Cons(g0) => {
+        match acur {
+          Nil => { done = true; 0 };
+          Cons(a0) => {
+            let s: S1Subst = S1Subst { name: g0.head; ty: a0.head; };
+            out = Cons(ListCons<S1Subst> { head: s; tail: out; });
+            gcur = g0.tail;
+            acur = a0.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  // Preserve parameter order (not required, but deterministic).
+  let acc2: List<S1Subst> = Nil;
+  let cur2: List<S1Subst> = out;
+  let done2: Bool = false;
+  while done2 == false {
+    match cur2 {
+      Nil => { done2 = true; 0 };
+      Cons(c0) => { acc2 = Cons(ListCons<S1Subst> { head: c0.head; tail: acc2; }); cur2 = c0.tail; 0 };
+    }
+  };
+  acc2
+};
+
+fn s1_cg_record_field_index(rec: S1Record, field: Text) -> Option<Int> {
+  let out: Option<Int> = None;
+  let cur: List<S1RecordField> = rec.fields;
+  let i: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        if c0.head.name == field {
+          out = Some(i);
+          done = true;
+          0
+        } else {
+          cur = c0.tail;
+          i = i + 1;
+          0
+        };
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_cg_record_field_info(items: List<S1Item>, base_ty: S1Type, field: Text) -> Result<Pair<Int, S1Type>, S1Diagnostic> {
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: record field lookup failed");
+  let out_idx: Int = 0;
+  let out_ty: S1Type = s1_cg_s1_type_prim("Int");
+
+  match s1_cg_path_single_name(base_ty.path) {
+    None => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: record type path not supported in v0"); 0 };
+    Some(rname) => {
+      match s1_cg_lookup_record(items, rname) {
+        None => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: unknown record type in v0"); 0 };
+        Some(rec) => {
+          let gen_names: List<Text> = s1_cg_collect_generic_names(rec.generics);
+          let subst: List<S1Subst> = s1_cg_build_subst(gen_names, base_ty.args);
+
+          let cur: List<S1RecordField> = rec.fields;
+          let i: Int = 0;
+          let done: Bool = false;
+          while done == false {
+            match cur {
+              Nil => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: unknown record field in v0"); done = true; 0 };
+              Cons(c0) => {
+                if c0.head.name == field {
+                  out_idx = i;
+                  out_ty = s1_cg_apply_subst(c0.head.ty, gen_names, subst);
+                  done = true;
+                  0
+                } else {
+                  cur = c0.tail;
+                  i = i + 1;
+                  0
+                };
+                0
+              };
+            }
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+
+  let out: Result<Pair<Int, S1Type>, S1Diagnostic> = Err(diag);
+  if ok == true {
+    out = Ok(Pair<Int, S1Type> { a: out_idx; b: out_ty; });
+  };
+  out
+};
+
+fn s1_cg_record_field_count(rec: S1Record) -> Int {
+  let n: Int = 0;
+  let cur: List<S1RecordField> = rec.fields;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => { n = n + 1; cur = c0.tail; 0 };
+    }
+  };
+  n
+};
+
+fn s1_cg_emit_record_lit_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Text, items: List<S1Item>, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, r: S1RecordLit) -> Result<S1CgExprOut, S1Diagnostic> {
+  match s1_cg_path_single_name(r.ty.path) {
+    None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: record type path not supported in v0"));
+	    Some(rname) => {
+	      match s1_cg_lookup_record(items, rname) {
+	        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: unknown record type in v0"));
+	        Some(rec) => {
+	          // No `*` operator in stage1; compute bytes via repeated +8 per field.
+	          let bytes: Int = 0;
+	          let cur_fields: List<S1RecordField> = rec.fields;
+	          let done_fields: Bool = false;
+	          while done_fields == false {
+	            match cur_fields {
+	              Nil => { done_fields = true; 0 };
+	              Cons(c0) => { bytes = bytes + 8; cur_fields = c0.tail; 0 };
+	            }
+	          };
+	
+	          let raw_id: Text = int_to_text(next_tmp);
+	          let raw: Text = text_concat("%t", raw_id);
+	          let out1: Text = s1_cg_line(out, text_concat(text_concat("  ", raw), text_concat(" = call i8* @malloc(i64 ", text_concat(int_to_text(bytes), ")"))));
+	          let wptr_id: Text = int_to_text(next_tmp + 1);
+          let wptr: Text = text_concat("%t", wptr_id);
+          let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", wptr), " = bitcast i8* "), text_concat(raw, " to i64*")));
+
+          // Emit stores for fields (order-independent).
+          let cur: List<S1RecordLitField> = r.fields;
+          let done: Bool = false;
+          let ok: Bool = true;
+          let diag: S1Diagnostic = s1_diag(Error, 0, 0, "codegen: record literal failed in v0");
+          let ot: Text = out2;
+          let nt: Int = next_tmp + 2;
+          let bt: Text = bb;
+          while done == false {
+            match cur {
+              Nil => { done = true; 0 };
+              Cons(c0) => {
+                if ok == false {
+                  done = true;
+                  0
+                } else {
+                  let idx: Int = 0;
+                  match s1_cg_record_field_index(rec, c0.head.name) {
+                    None => { ok = false; diag = s1_diag(Error, 0, 0, "codegen: unknown record field in v0"); done = true; 0 };
+                    Some(i2) => { idx = i2; 0 };
+                  };
+
+                  if ok == true {
+                    let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, items, strs, fns, c0.head.value);
+                    match rr {
+                      Err(e1) => { ok = false; diag = e1; done = true; 0 };
+                      Ok(v) => {
+                        // Convert value to i64 word.
+                        let word: Text = v.value;
+                        let ot2: Text = v.text;
+                        let nt2: Int = v.next_tmp;
+                        let bt2: Text = v.bb;
+
+                        let word_id: Text = int_to_text(nt2);
+                        let word_tmp: Text = text_concat("%t", word_id);
+                        let made_word: Bool = false;
+
+                        if v.ty == "i64" {
+                          word = v.value;
+                          made_word = true;
+                          0
+                        } else {
+                          if v.ty == "i1" {
+                            ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = zext i1 "), v.value), " to i64"));
+                            word = word_tmp;
+                            made_word = true;
+                            0
+                          } else { 0 };
+                          0
+                        };
+
+                        if made_word == false {
+                          // Assume pointer.
+                          ot2 = s1_cg_line(ot2, text_concat(text_concat(text_concat(text_concat("  ", word_tmp), " = ptrtoint "), v.ty), text_concat(text_concat(" ", v.value), " to i64")));
+                          word = word_tmp;
+                          0
+                        } else { 0 };
+
+                        let nt3: Int = nt2 + 1;
+
+                        // Compute field slot pointer and store the word.
+                        let slotp_id: Text = int_to_text(nt3);
+                        let slotp: Text = text_concat("%t", slotp_id);
+                        let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), wptr), text_concat(", i64 ", int_to_text(idx)));
+                        let ot3: Text = s1_cg_line(ot2, gep);
+                        let ot4: Text = s1_cg_line(ot3, text_concat(text_concat("  store i64 ", word), text_concat(", i64* ", slotp)));
+
+                        ot = ot4;
+                        nt = nt3 + 1;
+                        bt = bt2;
+                        cur = c0.tail;
+                        0
+                      };
+                    };
+                    0
+                  } else { 0 };
+                  0
+                };
+                0
+              };
+            }
+          };
+
+          if ok == false {
+            s1_cg_expr_err(diag)
+          } else {
+            s1_cg_expr_ok(S1CgExprOut { text: ot; value: raw; ty: "i8*"; s1_ty: s1_cg_s1_ty_some(r.ty); bb: bt; next_tmp: nt; })
+          }
+        };
+      }
+    };
+  }
+};
+
+fn s1_cg_emit_member_min(out: Text, base_ptr: Text, base_s1_ty: S1Type, next_tmp: Int, bb: Text, items: List<S1Item>, field: Text) -> Result<S1CgExprOut, S1Diagnostic> {
+  let info_r: Result<Pair<Int, S1Type>, S1Diagnostic> = s1_cg_record_field_info(items, base_s1_ty, field);
+  match info_r {
+    Err(e) => s1_cg_expr_err(e);
+    Ok(pair) => {
+      let idx: Int = pair.a;
+      let field_s1: S1Type = pair.b;
+      match s1_cg_llvm_ty_of_s1(field_s1) {
+        None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: member field type not supported in v0"));
+        Some(field_llvm) => {
+          let cast_id: Text = int_to_text(next_tmp);
+          let cast: Text = text_concat("%t", cast_id);
+          let out1: Text = s1_cg_line(out, text_concat(text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), base_ptr), " to i64*"));
+
+          let slotp_id: Text = int_to_text(next_tmp + 1);
+          let slotp: Text = text_concat("%t", slotp_id);
+          let gep: Text = text_concat(text_concat(text_concat(text_concat("  ", slotp), " = getelementptr inbounds i64, i64* "), cast), text_concat(", i64 ", int_to_text(idx)));
+          let out2: Text = s1_cg_line(out1, gep);
+
+          let word_id: Text = int_to_text(next_tmp + 2);
+          let word: Text = text_concat("%t", word_id);
+          let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", word), " = load i64, i64* "), slotp));
+
+          if field_llvm == "i64" {
+            s1_cg_expr_ok(S1CgExprOut { text: out3; value: word; ty: "i64"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: bb; next_tmp: next_tmp + 3; })
+          } else {
+            if field_llvm == "i1" {
+              let tr_id: Text = int_to_text(next_tmp + 3);
+              let tr: Text = text_concat("%t", tr_id);
+              let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", tr), " = trunc i64 "), word), " to i1"));
+              s1_cg_expr_ok(S1CgExprOut { text: out4; value: tr; ty: "i1"; s1_ty: s1_cg_s1_ty_some(field_s1); bb: bb; next_tmp: next_tmp + 4; })
+            } else {
+              let cast2_id: Text = int_to_text(next_tmp + 3);
+              let cast2: Text = text_concat("%t", cast2_id);
+              let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", cast2), " = inttoptr i64 "), word), text_concat(" to ", field_llvm)));
+              s1_cg_expr_ok(S1CgExprOut { text: out4; value: cast2; ty: field_llvm; s1_ty: s1_cg_s1_ty_some(field_s1); bb: bb; next_tmp: next_tmp + 4; })
+            }
+          }
+        };
+      }
+    };
+  }
+};
+
+fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Text, items: List<S1Item>, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, e: S1Expr) -> Result<S1CgExprOut, S1Diagnostic> {
   match e {
     IntLit(raw) => s1_cg_expr_ok(S1CgExprOut { text: out; value: raw; ty: "i64"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Int")); bb: bb; next_tmp: next_tmp; });
     BoolLit(v) => {
@@ -689,7 +1097,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                     };
 
                     if ok == true {
-                      let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, strs, fns, c0.head.value);
+                      let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, items, strs, fns, c0.head.value);
                       match rr {
                         Err(e1) => { ok = false; diag = e1; done = true; 0 };
                         Ok(v) => {
@@ -800,7 +1208,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
     };
     Member(m) => {
       // Minimal record field access for bootstrap (ListCons<T>.head / .tail).
-      let br: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, m.base);
+      let br: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, m.base);
       match br {
         Err(e1) => s1_cg_expr_err(e1);
         Ok(b0) => {
@@ -935,11 +1343,11 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
     Binary(b) => {
       match b.op {
         Add => {
-          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, b.left);
+          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, b.left);
           match l_r {
             Err(e1) => s1_cg_expr_err(e1);
             Ok(l) => {
-              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, strs, fns, b.right);
+              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, items, strs, fns, b.right);
               match r_r {
                 Err(e2) => s1_cg_expr_err(e2);
                 Ok(r) => {
@@ -962,11 +1370,11 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
           }
         };
         Equals => {
-          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, b.left);
+          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, b.left);
           match l_r {
             Err(e1) => s1_cg_expr_err(e1);
             Ok(l) => {
-              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, strs, fns, b.right);
+              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, items, strs, fns, b.right);
               match r_r {
                 Err(e2) => s1_cg_expr_err(e2);
                 Ok(r) => {
@@ -1013,11 +1421,11 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
           }
         };
         NotEquals => {
-          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, b.left);
+          let l_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, b.left);
           match l_r {
             Err(e1) => s1_cg_expr_err(e1);
             Ok(l) => {
-              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, strs, fns, b.right);
+              let r_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(l.text, env, l.next_tmp, l.bb, items, strs, fns, b.right);
               match r_r {
                 Err(e2) => s1_cg_expr_err(e2);
                 Ok(r) => {
@@ -1137,7 +1545,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                   Cons(a0) => {
                     match a0.tail {
                       Nil => {
-                        let ar: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, a0.head);
+                        let ar: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, a0.head);
                         match ar {
                           Err(e1) => s1_cg_expr_err(e1);
                           Ok(av) => {
@@ -1231,7 +1639,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                   Cons(a0) => {
                     match a0.tail {
                       Nil => {
-                        let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, a0.head);
+                        let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, a0.head);
                         match rr {
                           Err(e1) => s1_cg_expr_err(e1);
                           Ok(av) => {
@@ -1332,7 +1740,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                 match cur {
                   Nil => { done = true; 0 };
                   Cons(c0) => {
-                    let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, strs, fns, c0.head);
+                    let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env, nt, bt, items, strs, fns, c0.head);
                     match rr {
                       Err(e3) => {
                         ok = false;
@@ -2092,7 +2500,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
       }
     };
     If(i) => {
-      let c_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, i.cond);
+      let c_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, i.cond);
       match c_r {
         Err(e1) => s1_cg_expr_err(e1);
         Ok(c0) => {
@@ -2121,12 +2529,12 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         // then:
                         let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
                         let tr: Result<S1CgBlockOut, S1Diagnostic> =
-                          s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, then_lbl, strs, fns, i.then_block.stmts);
+                          s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, then_lbl, items, strs, fns, i.then_block.stmts);
                         match tr {
                           Err(e2) => s1_cg_expr_err(e2);
                           Ok(tb) => {
                             let t_r: Result<S1CgExprOut, S1Diagnostic> =
-                              s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, tb.bb, strs, fns, then_e);
+                              s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, tb.bb, items, strs, fns, then_e);
                             match t_r {
                               Err(e3) => s1_cg_expr_err(e3);
                               Ok(t0) => {
@@ -2135,12 +2543,12 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 // else:
                                 let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
                                 let er: Result<S1CgBlockOut, S1Diagnostic> =
-                                  s1_cg_emit_stmt_list_min(out_else_lbl, env, t0.next_tmp, else_lbl, strs, fns, else_b.stmts);
+                                  s1_cg_emit_stmt_list_min(out_else_lbl, env, t0.next_tmp, else_lbl, items, strs, fns, else_b.stmts);
                                 match er {
                                   Err(e4) => s1_cg_expr_err(e4);
                                   Ok(eb) => {
                                     let e_r: Result<S1CgExprOut, S1Diagnostic> =
-                                      s1_cg_emit_expr_min(eb.text, eb.env, eb.next_tmp, eb.bb, strs, fns, else_e);
+                                      s1_cg_emit_expr_min(eb.text, eb.env, eb.next_tmp, eb.bb, items, strs, fns, else_e);
                                     match e_r {
                                       Err(e5) => s1_cg_expr_err(e5);
                                       Ok(e0) => {
@@ -2199,12 +2607,12 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
       match b.result {
         None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: block has no value"));
         Some(e2) => {
-          let br: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_stmt_list_min(out, env, next_tmp, bb, strs, fns, b.stmts);
+          let br: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_stmt_list_min(out, env, next_tmp, bb, items, strs, fns, b.stmts);
           match br {
             Err(e3) => s1_cg_expr_err(e3);
             Ok(b0) => {
               // Block scope: use the extended env for the tail expression, but do not leak it to callers.
-              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(b0.text, b0.env, b0.next_tmp, b0.bb, strs, fns, e2);
+              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(b0.text, b0.env, b0.next_tmp, b0.bb, items, strs, fns, e2);
               match rr {
                 Err(e4) => s1_cg_expr_err(e4);
                 Ok(r0) => {
@@ -2219,7 +2627,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
     Match(m) => {
       // v0.4: minimal enum match lowering for Option<Int> and Result<T, E>.
       // Current limitation: only supports exactly 2 arms.
-      let scr_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, strs, fns, m.scrutinee);
+      let scr_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, bb, items, strs, fns, m.scrutinee);
       match scr_r {
         Err(e0) => s1_cg_expr_err(e0);
         Ok(s0) => {
@@ -2514,7 +2922,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                   0
                                 } else { 0 };
 
-                          let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot_arm0, env_arm0, nt0a, arm0_lbl, strs, fns, arm0.value);
+                          let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot_arm0, env_arm0, nt0a, arm0_lbl, items, strs, fns, arm0.value);
                                 match e0_r {
                                   Err(ea0) => s1_cg_expr_err(ea0);
                                   Ok(v0) => {
@@ -2578,7 +2986,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                       0
                                     } else { 0 };
 
-                                    let e1_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot_arm1, env_arm1, nt1, arm1_lbl, strs, fns, arm1.value);
+                                    let e1_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot_arm1, env_arm1, nt1, arm1_lbl, items, strs, fns, arm1.value);
                                     match e1_r {
                                       Err(ea1) => s1_cg_expr_err(ea1);
                                       Ok(v1) => {
@@ -2649,13 +3057,13 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               let out4: Text = s1_cg_line(out3, br0);
 
                               let out5: Text = s1_cg_line(out4, text_concat(arm0_lbl, ":"));
-                              let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out5, env, nt0 + 3, arm0_lbl, strs, fns, arm0.value);
+                              let e0_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out5, env, nt0 + 3, arm0_lbl, items, strs, fns, arm0.value);
                               match e0_r {
                                 Err(ea0) => s1_cg_expr_err(ea0);
                                 Ok(v0) => {
                                   let out_arm0_end: Text = s1_cg_line(v0.text, text_concat("  br label %", join_lbl));
                                   let out6: Text = s1_cg_line(out_arm0_end, text_concat(arm1_lbl, ":"));
-                                  let e1_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out6, env, v0.next_tmp, arm1_lbl, strs, fns, arm1.value);
+                                  let e1_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out6, env, v0.next_tmp, arm1_lbl, items, strs, fns, arm1.value);
                                   match e1_r {
                                     Err(ea1) => s1_cg_expr_err(ea1);
                                     Ok(v1) => {
@@ -2685,7 +3093,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                           }
                         } else {
                           // First arm wildcard: just emit arm0.
-                          s1_cg_emit_expr_min(s0.text, env, s0.next_tmp, bb, strs, fns, arm0.value)
+                          s1_cg_emit_expr_min(s0.text, env, s0.next_tmp, bb, items, strs, fns, arm0.value)
                         }
                       }
                     };
@@ -2702,7 +3110,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
   }
 };
 
-fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, w: S1While) -> Result<S1CgBlockOut, S1Diagnostic> {
+fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, items: List<S1Item>, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, w: S1While) -> Result<S1CgBlockOut, S1Diagnostic> {
   let cond_id: Text = int_to_text(next_tmp);
   let cond_lbl: Text = text_concat("while_cond", cond_id);
   let body_id: Text = int_to_text(next_tmp + 1);
@@ -2713,7 +3121,7 @@ fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, s
 
   let out1: Text = s1_cg_line(out, text_concat("  br label %", cond_lbl));
   let out2: Text = s1_cg_line(out1, text_concat(cond_lbl, ":"));
-  let cond_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out2, env, nt0, cond_lbl, strs, fns, w.cond);
+  let cond_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out2, env, nt0, cond_lbl, items, strs, fns, w.cond);
   match cond_r {
     Err(e) => s1_cg_block_err(e);
     Ok(c0) => {
@@ -2728,7 +3136,7 @@ fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, s
 
         let body_env: List<S1CgEnvBind> = env;
         let body_r: Result<S1CgBlockOut, S1Diagnostic> =
-          s1_cg_emit_stmt_list_min(out4, body_env, c0.next_tmp, body_lbl, strs, fns, w.body.stmts);
+          s1_cg_emit_stmt_list_min(out4, body_env, c0.next_tmp, body_lbl, items, strs, fns, w.body.stmts);
         match body_r {
           Err(e2) => s1_cg_block_err(e2);
           Ok(b0) => {
@@ -2744,7 +3152,7 @@ fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, s
                 s1_cg_block_ok(S1CgBlockOut { text: out_end; env: env; bb: end_lbl; next_tmp: nt; })
               };
               Some(expr) => {
-                let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env2, nt, b0.bb, strs, fns, expr);
+                let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, env2, nt, b0.bb, items, strs, fns, expr);
                 match rr {
                   Err(e3) => s1_cg_block_err(e3);
                   Ok(r0) => {
@@ -2764,7 +3172,7 @@ fn s1_cg_emit_while_stmt_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, s
   }
 };
 
-fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Text, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, stmts: List<S1Stmt>) -> Result<S1CgBlockOut, S1Diagnostic> {
+fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Text, items: List<S1Item>, strs: List<S1CgStrConst>, fns: List<S1CgFnSig>, stmts: List<S1Stmt>) -> Result<S1CgBlockOut, S1Diagnostic> {
   let ot: Text = out;
   let envt: List<S1CgEnvBind> = env;
   let bbt: Text = bb;
@@ -2784,7 +3192,7 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
         } else {
           match c0.head {
             Let(l0) => {
-              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, strs, fns, l0.value);
+              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, l0.value);
               match rr {
                 Err(e) => { ok = false; diag = e; done = true; 0 };
                 Ok(r) => {
@@ -2862,7 +3270,7 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
                   0
                 };
                 Some(v) => {
-                  let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, strs, fns, a0.value);
+                  let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, a0.value);
                   match rr {
                     Err(e) => { ok = false; diag = e; done = true; 0 };
                     Ok(r) => {
@@ -2886,7 +3294,7 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
               }
             };
             While(w0) => {
-              let wr: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_while_stmt_min(ot, envt, nt, strs, fns, w0);
+              let wr: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_while_stmt_min(ot, envt, nt, items, strs, fns, w0);
               match wr {
                 Err(e) => { ok = false; diag = e; done = true; 0 };
                 Ok(b) => {
@@ -2899,7 +3307,7 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
               }
             };
             ExprStmt(e0) => {
-              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, strs, fns, e0);
+              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(ot, envt, nt, bbt, items, strs, fns, e0);
               match rr {
                 Err(e) => { ok = false; diag = e; done = true; 0 };
                 Ok(r) => {
@@ -2932,7 +3340,7 @@ fn s1_cg_emit_stmt_list_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb
   }
 };
 
-fn s1_cg_emit_function_min(out: Text, strs: List<S1CgStrConst>, f: S1Function, fns: List<S1CgFnSig>) -> Result<Text, S1Diagnostic> {
+fn s1_cg_emit_function_min(out: Text, items: List<S1Item>, strs: List<S1CgStrConst>, f: S1Function, fns: List<S1CgFnSig>) -> Result<Text, S1Diagnostic> {
   // Caller must ensure `s1_cg_function_supported(f) == true`.
   let ret_llvm: Text = "i64";
   match s1_cg_llvm_ty_of_s1(f.return_type) {
@@ -3009,14 +3417,14 @@ fn s1_cg_emit_function_min(out: Text, strs: List<S1CgStrConst>, f: S1Function, f
         }
       };
 
-      let stmts_r: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_stmt_list_min(ot, env, nt, "entry", strs, fns, body.stmts);
+      let stmts_r: Result<S1CgBlockOut, S1Diagnostic> = s1_cg_emit_stmt_list_min(ot, env, nt, "entry", items, strs, fns, body.stmts);
       match stmts_r {
         Err(e) => s1_cg_text_err(e);
         Ok(s0) => {
           match body.result {
             None => s1_cg_text_err(s1_diag(Error, 0, 0, "codegen: function body has no result"));
             Some(expr) => {
-              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(s0.text, s0.env, s0.next_tmp, s0.bb, strs, fns, expr);
+              let rr: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(s0.text, s0.env, s0.next_tmp, s0.bb, items, strs, fns, expr);
               match rr {
                 Err(e2) => s1_cg_text_err(e2);
                 Ok(r0) => {
@@ -3425,7 +3833,7 @@ evidence {
                         match c0.head {
                           Function(f) => {
                             if s1_cg_function_supported(f) == true {
-                              match s1_cg_emit_function_min(ot, strs, f, fnsigs) {
+                              match s1_cg_emit_function_min(ot, p3.items, strs, f, fnsigs) {
                                 Err(e5) => {
                                   ok_cg = false;
                                   diag_cg = e5;
