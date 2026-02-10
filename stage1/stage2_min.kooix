@@ -10,6 +10,7 @@ import "../stdlib/prelude";
 fn add2(x: Int, y: Int) -> Int { x + y };
 
 fn main() -> Int {
+  let seed: Int = { let a: Int = 40; a + 2 };
   let i: Int = 0;
   let sum: Int = 0;
   let done: Bool = false;
@@ -23,5 +24,7 @@ fn main() -> Int {
       0
     }
   };
-  if sum == 45 { 0 } else { 1 }
+  if seed == 42 {
+    if sum == 45 { 0 } else { 1 }
+  } else { 2 }
 };
