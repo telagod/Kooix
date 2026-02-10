@@ -1,0 +1,8 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let xs: List<Int> = list_cons_int(1, list_cons_int(2, Nil));
+  let n: Int = list_len_int(xs);
+  if n == 2 { 0 } else { 1 }
+};
+

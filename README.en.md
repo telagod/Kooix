@@ -181,6 +181,10 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_ident.ll /tmp/kooixc
 cargo run -p kooixc -- native stage1/self_host_fn_text_call_main.kooix /tmp/kx-selfhost-ftc --run
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_fn_text_call.ll /tmp/kooixc-stage2-ftc --run
 
+# Stage1 self-host v0.10 (List smoke): List<T> + Nil/Cons + match + ListCons record/member (input: stage1/stage2_list_smoke.kooix)
+cargo run -p kooixc -- native stage1/self_host_list_main.kooix /tmp/kx-selfhost-list --run
+cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2-list --run
+
 # Tests
 cargo test -p kooixc
 ```
