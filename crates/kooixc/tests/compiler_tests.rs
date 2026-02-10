@@ -3671,7 +3671,7 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
 
     let args: Vec<String> = vec![];
-    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
+    let stage2_out = run_executable_with_args_and_stdin_and_timeout(&stage2, &args, None, Some(120_000))
         .expect("stage2 compiler binary should run");
     assert_eq!(stage2_out.status_code, Some(0));
 
