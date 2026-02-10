@@ -147,6 +147,30 @@ fn s1_cg_type_is_option_int(ty: S1Type) -> Bool {
   ok
 };
 
+fn s1_cg_type_is_option(ty: S1Type) -> Bool {
+  let ok: Bool = false;
+  match s1_cg_path_single_name(ty.path) {
+    Some(name) => {
+      if name == "Option" {
+        match ty.args {
+          Cons(a0) => {
+            match a0.tail {
+              Nil => { ok = true; 0 };
+              _ => 0;
+            };
+            0
+          };
+          _ => 0;
+        };
+        0
+      } else { 0 };
+      0
+    };
+    _ => 0;
+  };
+  ok
+};
+
 fn s1_cg_type_is_result(ty: S1Type) -> Bool {
   let ok: Bool = false;
   match s1_cg_path_single_name(ty.path) {
@@ -680,7 +704,29 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", av.value), text_concat(", i64* ", payp)));
                               s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_int()); bb: bb; next_tmp: av.next_tmp + 4; })
                             } else {
-                              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: Option::Some expects Int payload in v0.4"))
+                              if av.ty == "i8*" {
+                                let cast_id: Text = int_to_text(av.next_tmp);
+                                let cast: Text = text_concat("%t", cast_id);
+                                let out0: Text = s1_cg_line(av.text, text_concat(text_concat(text_concat(text_concat("  ", cast), " = ptrtoint i8* "), av.value), " to i64"));
+
+                                let raw_id: Text = int_to_text(av.next_tmp + 1);
+                                let raw: Text = text_concat("%t", raw_id);
+                                let out1: Text = s1_cg_line(out0, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                let ptr_id: Text = int_to_text(av.next_tmp + 2);
+                                let ptr: Text = text_concat("%t", ptr_id);
+                                let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                let tagp_id: Text = int_to_text(av.next_tmp + 3);
+                                let tagp: Text = text_concat("%t", tagp_id);
+                                let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                let out4: Text = s1_cg_line(out3, text_concat("  store i8 0, i8* ", tagp));
+                                let payp_id: Text = int_to_text(av.next_tmp + 4);
+                                let payp: Text = text_concat("%t", payp_id);
+                                let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                let out6: Text = s1_cg_line(out5, text_concat(text_concat("  store i64 ", cast), text_concat(", i64* ", payp)));
+                                s1_cg_expr_ok(S1CgExprOut { text: out6; value: ptr; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_text()); bb: bb; next_tmp: av.next_tmp + 5; })
+                              } else {
+                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: Option::Some payload type not supported in v0.4"))
+                              }
                             }
                           };
                         }
@@ -718,6 +764,8 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
               let a_ty: Text = "";
               let b_val: Text = "";
               let b_ty: Text = "";
+              let c_val: Text = "";
+              let c_ty: Text = "";
               let all_i64: Bool = true;
 
               while done == false {
@@ -745,6 +793,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
 
                         if argc == 0 { a_val = r.value; a_ty = r.ty; 0 } else { 0 };
                         if argc == 1 { b_val = r.value; b_ty = r.ty; 0 } else { 0 };
+                        if argc == 2 { c_val = r.value; c_ty = r.ty; 0 } else { 0 };
                         argc = argc + 1;
                         if r.ty == "i64" { 0 } else { all_i64 = false; 0 };
 
@@ -987,6 +1036,139 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                             s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_byte_at expects (Text, Int)"))
                           }
                         } else {
+                        if fname == "text_slice" {
+                          // Returns Option<Text>
+                          if argc == 3 {
+                            if a_ty == "i8*" {
+                              if b_ty == "i64" {
+                                if c_ty == "i64" {
+                                  let start_neg_id: Text = int_to_text(nt);
+                                  let start_neg: Text = text_concat("%t", start_neg_id);
+                                  let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", start_neg), " = icmp slt i64 "), b_val), ", 0"));
+                                  let end_neg_id: Text = int_to_text(nt + 1);
+                                  let end_neg: Text = text_concat("%t", end_neg_id);
+                                  let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", end_neg), " = icmp slt i64 "), c_val), ", 0"));
+                                  let neg_id: Text = int_to_text(nt + 2);
+                                  let neg: Text = text_concat("%t", neg_id);
+                                  let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", neg), " = or i1 "), start_neg), text_concat(", ", end_neg)));
+
+                                  let slen_id: Text = int_to_text(nt + 3);
+                                  let slen: Text = text_concat("%t", slen_id);
+                                  let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat("  ", slen), " = call i64 @strlen(i8* "), text_concat(a_val, ")")));
+                                  let start_gt_end_id: Text = int_to_text(nt + 4);
+                                  let start_gt_end: Text = text_concat("%t", start_gt_end_id);
+                                  let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", start_gt_end), " = icmp sgt i64 "), b_val), text_concat(", ", c_val)));
+                                  let end_gt_len_id: Text = int_to_text(nt + 5);
+                                  let end_gt_len: Text = text_concat("%t", end_gt_len_id);
+                                  let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", end_gt_len), " = icmp sgt i64 "), c_val), text_concat(", ", slen)));
+                                  let gt_id: Text = int_to_text(nt + 6);
+                                  let gt: Text = text_concat("%t", gt_id);
+                                  let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", gt), " = or i1 "), start_gt_end), text_concat(", ", end_gt_len)));
+                                  let invalid_id: Text = int_to_text(nt + 7);
+                                  let invalid: Text = text_concat("%t", invalid_id);
+                                  let out8: Text = s1_cg_line(out7, text_concat(text_concat(text_concat(text_concat("  ", invalid), " = or i1 "), neg), text_concat(", ", gt)));
+
+                                  let slot_id: Text = int_to_text(nt + 8);
+                                  let slot: Text = text_concat("%t", slot_id);
+                                  let out9: Text = s1_cg_line(out8, text_concat(text_concat(text_concat("  ", slot), " = alloca "), "%Option*"));
+
+                                  let ok_lbl: Text = text_concat("ts_ok", int_to_text(nt + 9));
+                                  let none_lbl: Text = text_concat("ts_none", int_to_text(nt + 10));
+                                  let join_lbl: Text = text_concat("ts_join", int_to_text(nt + 11));
+
+                                  let br0: Text = text_concat(
+                                    text_concat(text_concat("  br i1 ", invalid), text_concat(", label %", none_lbl)),
+                                    text_concat(", label %", ok_lbl)
+                                  );
+                                  let out10: Text = s1_cg_line(out9, br0);
+
+                                  // ok: Some(slice)
+                                  let out_ok_lbl: Text = s1_cg_line(out10, text_concat(ok_lbl, ":"));
+                                  let slice_len_id: Text = int_to_text(nt + 9);
+                                  let slice_len: Text = text_concat("%t", slice_len_id);
+                                  let out11: Text = s1_cg_line(out_ok_lbl, text_concat(text_concat(text_concat(text_concat("  ", slice_len), " = sub i64 "), c_val), text_concat(", ", b_val)));
+                                  let lenp1_id: Text = int_to_text(nt + 10);
+                                  let lenp1: Text = text_concat("%t", lenp1_id);
+                                  let out12: Text = s1_cg_line(out11, text_concat(text_concat(text_concat(text_concat("  ", lenp1), " = add i64 "), slice_len), ", 1"));
+                                  let buf_id: Text = int_to_text(nt + 11);
+                                  let buf: Text = text_concat("%t", buf_id);
+                                  let out13: Text = s1_cg_line(out12, text_concat(text_concat(text_concat("  ", buf), " = call i8* @malloc(i64 "), text_concat(lenp1, ")")));
+                                  let src_id: Text = int_to_text(nt + 12);
+                                  let src: Text = text_concat("%t", src_id);
+                                  let out14: Text = s1_cg_line(out13, text_concat(text_concat(text_concat("  ", src), " = getelementptr inbounds i8, i8* "), text_concat(a_val, text_concat(", i64 ", b_val))));
+                                  let cp_id: Text = int_to_text(nt + 13);
+                                  let cp: Text = text_concat("%t", cp_id);
+                                  let inst_cp0: Text = text_concat(text_concat(text_concat("  ", cp), " = call i8* @memcpy(i8* "), buf);
+                                  let inst_cp1: Text = text_concat(inst_cp0, ", i8* ");
+                                  let inst_cp2: Text = text_concat(inst_cp1, src);
+                                  let inst_cp3: Text = text_concat(inst_cp2, ", i64 ");
+                                  let inst_cp4: Text = text_concat(inst_cp3, slice_len);
+                                  let inst_cp: Text = text_concat(inst_cp4, ")");
+                                  let out15: Text = s1_cg_line(out14, inst_cp);
+                                  let termp_id: Text = int_to_text(nt + 14);
+                                  let termp: Text = text_concat("%t", termp_id);
+                                  let out16: Text = s1_cg_line(out15, text_concat(text_concat(text_concat("  ", termp), " = getelementptr inbounds i8, i8* "), text_concat(buf, text_concat(", i64 ", slice_len))));
+                                  let out17: Text = s1_cg_line(out16, text_concat("  store i8 0, i8* ", termp));
+
+                                  // Allocate Option payload (ptr stored as i64).
+                                  let raw_id: Text = int_to_text(nt + 15);
+                                  let raw: Text = text_concat("%t", raw_id);
+                                  let out18: Text = s1_cg_line(out17, text_concat(text_concat("  ", raw), " = call i8* @malloc(i64 16)"));
+                                  let ptr_id: Text = int_to_text(nt + 16);
+                                  let ptr: Text = text_concat("%t", ptr_id);
+                                  let out19: Text = s1_cg_line(out18, text_concat(text_concat(text_concat("  ", ptr), " = bitcast i8* "), text_concat(raw, " to %Option*")));
+                                  let tagp_id: Text = int_to_text(nt + 17);
+                                  let tagp: Text = text_concat("%t", tagp_id);
+                                  let out20: Text = s1_cg_line(out19, text_concat(text_concat(text_concat("  ", tagp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 0")));
+                                  let out21: Text = s1_cg_line(out20, text_concat("  store i8 0, i8* ", tagp));
+                                  let payp_id: Text = int_to_text(nt + 18);
+                                  let payp: Text = text_concat("%t", payp_id);
+                                  let out22: Text = s1_cg_line(out21, text_concat(text_concat(text_concat("  ", payp), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr, ", i32 0, i32 1")));
+                                  let payw_id: Text = int_to_text(nt + 19);
+                                  let payw: Text = text_concat("%t", payw_id);
+                                  let out23: Text = s1_cg_line(out22, text_concat(text_concat(text_concat(text_concat("  ", payw), " = ptrtoint i8* "), buf), " to i64"));
+                                  let out24: Text = s1_cg_line(out23, text_concat(text_concat("  store i64 ", payw), text_concat(", i64* ", payp)));
+                                  let out25: Text = s1_cg_line(out24, text_concat("  store %Option* ", text_concat(ptr, text_concat(", %Option** ", slot))));
+                                  let out26: Text = s1_cg_line(out25, text_concat("  br label %", join_lbl));
+
+                                  // none: None
+                                  let out_none_lbl: Text = s1_cg_line(out26, text_concat(none_lbl, ":"));
+                                  let raw2_id: Text = int_to_text(nt + 20);
+                                  let raw2: Text = text_concat("%t", raw2_id);
+                                  let out27: Text = s1_cg_line(out_none_lbl, text_concat(text_concat("  ", raw2), " = call i8* @malloc(i64 16)"));
+                                  let ptr2_id: Text = int_to_text(nt + 21);
+                                  let ptr2: Text = text_concat("%t", ptr2_id);
+                                  let out28: Text = s1_cg_line(out27, text_concat(text_concat(text_concat("  ", ptr2), " = bitcast i8* "), text_concat(raw2, " to %Option*")));
+                                  let tagp2_id: Text = int_to_text(nt + 22);
+                                  let tagp2: Text = text_concat("%t", tagp2_id);
+                                  let out29: Text = s1_cg_line(out28, text_concat(text_concat(text_concat("  ", tagp2), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr2, ", i32 0, i32 0")));
+                                  let out30: Text = s1_cg_line(out29, text_concat("  store i8 1, i8* ", tagp2));
+                                  let payp2_id: Text = int_to_text(nt + 23);
+                                  let payp2: Text = text_concat("%t", payp2_id);
+                                  let out31: Text = s1_cg_line(out30, text_concat(text_concat(text_concat("  ", payp2), " = getelementptr inbounds %Option, %Option* "), text_concat(ptr2, ", i32 0, i32 1")));
+                                  let out32: Text = s1_cg_line(out31, text_concat("  store i64 0, i64* ", payp2));
+                                  let out33: Text = s1_cg_line(out32, text_concat("  store %Option* ", text_concat(ptr2, text_concat(", %Option** ", slot))));
+                                  let out34: Text = s1_cg_line(out33, text_concat("  br label %", join_lbl));
+
+                                  // join
+                                  let out_join_lbl: Text = s1_cg_line(out34, text_concat(join_lbl, ":"));
+                                  let outv_id: Text = int_to_text(nt + 24);
+                                  let outv: Text = text_concat("%t", outv_id);
+                                  let out35: Text = s1_cg_line(out_join_lbl, text_concat(text_concat(text_concat("  ", outv), " = load %Option*, %Option** "), slot));
+                                  s1_cg_expr_ok(S1CgExprOut { text: out35; value: outv; ty: "%Option*"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_option_text()); bb: join_lbl; next_tmp: nt + 25; })
+                                } else {
+                                  s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_slice expects (Text, Int, Int)"))
+                                }
+                              } else {
+                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_slice expects (Text, Int, Int)"))
+                              }
+                            } else {
+                              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_slice expects (Text, Int, Int)"))
+                            }
+                          } else {
+                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: text_slice expects (Text, Int, Int)"))
+                          }
+                        } else {
                         if fname == "host_load_source_map" {
                           if argc == 1 {
                             if a_ty == "i8*" {
@@ -1042,18 +1224,251 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                 s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_eprintln expects (Text)"))
                               }
                             } else {
-                              if all_i64 == true {
-                                let tmp_id: Text = int_to_text(nt);
-                                let tmp: Text = text_concat("%t", tmp_id);
-                                let call_head: Text = text_concat(text_concat(text_concat("  ", tmp), " = call i64 @"), fname);
-                                let inst: Text = text_concat(text_concat(call_head, "("), text_concat(at, ")"));
-                                let out2: Text = s1_cg_line(ot, inst);
-                                s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; ty: "i64"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Int")); bb: bt; next_tmp: nt + 1; })
+                              if fname == "byte_is_ascii_whitespace" {
+                                if argc == 1 {
+                                  if a_ty == "i64" {
+                                    let eq9_id: Text = int_to_text(nt);
+                                    let eq9: Text = text_concat("%t", eq9_id);
+                                    let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", eq9), " = icmp eq i64 "), a_val), ", 9"));
+                                    let eq10_id: Text = int_to_text(nt + 1);
+                                    let eq10: Text = text_concat("%t", eq10_id);
+                                    let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", eq10), " = icmp eq i64 "), a_val), ", 10"));
+                                    let eq13_id: Text = int_to_text(nt + 2);
+                                    let eq13: Text = text_concat("%t", eq13_id);
+                                    let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", eq13), " = icmp eq i64 "), a_val), ", 13"));
+                                    let eq32_id: Text = int_to_text(nt + 3);
+                                    let eq32: Text = text_concat("%t", eq32_id);
+                                    let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", eq32), " = icmp eq i64 "), a_val), ", 32"));
+                                    let or0_id: Text = int_to_text(nt + 4);
+                                    let or0: Text = text_concat("%t", or0_id);
+                                    let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", or0), " = or i1 "), eq9), text_concat(", ", eq10)));
+                                    let or1_id: Text = int_to_text(nt + 5);
+                                    let or1: Text = text_concat("%t", or1_id);
+                                    let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", or1), " = or i1 "), or0), text_concat(", ", eq13)));
+                                    let outv_id: Text = int_to_text(nt + 6);
+                                    let outv: Text = text_concat("%t", outv_id);
+                                    let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", outv), " = or i1 "), or1), text_concat(", ", eq32)));
+                                    s1_cg_expr_ok(S1CgExprOut { text: out7; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 7; })
+                                  } else {
+                                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_whitespace expects (Int)"))
+                                  }
+                                } else {
+                                  s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_whitespace expects (Int)"))
+                                }
                               } else {
-                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: call expects i64 args in v0"))
+                                if fname == "byte_is_ascii_digit" {
+                                  if argc == 1 {
+                                    if a_ty == "i64" {
+                                      let ge_id: Text = int_to_text(nt);
+                                      let ge: Text = text_concat("%t", ge_id);
+                                      let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", ge), " = icmp sge i64 "), a_val), ", 48"));
+                                      let le_id: Text = int_to_text(nt + 1);
+                                      let le: Text = text_concat("%t", le_id);
+                                      let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", le), " = icmp sle i64 "), a_val), ", 57"));
+                                      let outv_id: Text = int_to_text(nt + 2);
+                                      let outv: Text = text_concat("%t", outv_id);
+                                      let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", outv), " = and i1 "), ge), text_concat(", ", le)));
+                                      s1_cg_expr_ok(S1CgExprOut { text: out3; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 3; })
+                                    } else {
+                                      s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_digit expects (Int)"))
+                                    }
+                                  } else {
+                                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_digit expects (Int)"))
+                                  }
+                                } else {
+                                  if fname == "byte_is_ascii_alpha" {
+                                    if argc == 1 {
+                                      if a_ty == "i64" {
+                                        let uge_id: Text = int_to_text(nt);
+                                        let uge: Text = text_concat("%t", uge_id);
+                                        let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", uge), " = icmp sge i64 "), a_val), ", 65"));
+                                        let ule_id: Text = int_to_text(nt + 1);
+                                        let ule: Text = text_concat("%t", ule_id);
+                                        let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", ule), " = icmp sle i64 "), a_val), ", 90"));
+                                        let up_id: Text = int_to_text(nt + 2);
+                                        let up: Text = text_concat("%t", up_id);
+                                        let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", up), " = and i1 "), uge), text_concat(", ", ule)));
+
+                                        let lge_id: Text = int_to_text(nt + 3);
+                                        let lge: Text = text_concat("%t", lge_id);
+                                        let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", lge), " = icmp sge i64 "), a_val), ", 97"));
+                                        let lle_id: Text = int_to_text(nt + 4);
+                                        let lle: Text = text_concat("%t", lle_id);
+                                        let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", lle), " = icmp sle i64 "), a_val), ", 122"));
+                                        let low_id: Text = int_to_text(nt + 5);
+                                        let low: Text = text_concat("%t", low_id);
+                                        let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", low), " = and i1 "), lge), text_concat(", ", lle)));
+
+                                        let outv_id: Text = int_to_text(nt + 6);
+                                        let outv: Text = text_concat("%t", outv_id);
+                                        let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", outv), " = or i1 "), up), text_concat(", ", low)));
+                                        s1_cg_expr_ok(S1CgExprOut { text: out7; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 7; })
+                                      } else {
+                                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_alpha expects (Int)"))
+                                      }
+                                    } else {
+                                      s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_alpha expects (Int)"))
+                                    }
+                                  } else {
+                                    if fname == "byte_is_ascii_alnum" {
+                                      if argc == 1 {
+                                        if a_ty == "i64" {
+                                          let dge_id: Text = int_to_text(nt);
+                                          let dge: Text = text_concat("%t", dge_id);
+                                          let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", dge), " = icmp sge i64 "), a_val), ", 48"));
+                                          let dle_id: Text = int_to_text(nt + 1);
+                                          let dle: Text = text_concat("%t", dle_id);
+                                          let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", dle), " = icmp sle i64 "), a_val), ", 57"));
+                                          let dig_id: Text = int_to_text(nt + 2);
+                                          let dig: Text = text_concat("%t", dig_id);
+                                          let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", dig), " = and i1 "), dge), text_concat(", ", dle)));
+
+                                          let uge_id: Text = int_to_text(nt + 3);
+                                          let uge: Text = text_concat("%t", uge_id);
+                                          let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", uge), " = icmp sge i64 "), a_val), ", 65"));
+                                          let ule_id: Text = int_to_text(nt + 4);
+                                          let ule: Text = text_concat("%t", ule_id);
+                                          let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", ule), " = icmp sle i64 "), a_val), ", 90"));
+                                          let up_id: Text = int_to_text(nt + 5);
+                                          let up: Text = text_concat("%t", up_id);
+                                          let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", up), " = and i1 "), uge), text_concat(", ", ule)));
+
+                                          let lge_id: Text = int_to_text(nt + 6);
+                                          let lge: Text = text_concat("%t", lge_id);
+                                          let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", lge), " = icmp sge i64 "), a_val), ", 97"));
+                                          let lle_id: Text = int_to_text(nt + 7);
+                                          let lle: Text = text_concat("%t", lle_id);
+                                          let out8: Text = s1_cg_line(out7, text_concat(text_concat(text_concat(text_concat("  ", lle), " = icmp sle i64 "), a_val), ", 122"));
+                                          let low_id: Text = int_to_text(nt + 8);
+                                          let low: Text = text_concat("%t", low_id);
+                                          let out9: Text = s1_cg_line(out8, text_concat(text_concat(text_concat(text_concat("  ", low), " = and i1 "), lge), text_concat(", ", lle)));
+
+                                          let alp_id: Text = int_to_text(nt + 9);
+                                          let alp: Text = text_concat("%t", alp_id);
+                                          let out10: Text = s1_cg_line(out9, text_concat(text_concat(text_concat(text_concat("  ", alp), " = or i1 "), up), text_concat(", ", low)));
+                                          let outv_id: Text = int_to_text(nt + 10);
+                                          let outv: Text = text_concat("%t", outv_id);
+                                          let out11: Text = s1_cg_line(out10, text_concat(text_concat(text_concat(text_concat("  ", outv), " = or i1 "), dig), text_concat(", ", alp)));
+                                          s1_cg_expr_ok(S1CgExprOut { text: out11; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 11; })
+                                        } else {
+                                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_alnum expects (Int)"))
+                                        }
+                                      } else {
+                                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_alnum expects (Int)"))
+                                      }
+                                    } else {
+                                      if fname == "byte_is_ascii_ident_start" {
+                                        if argc == 1 {
+                                          if a_ty == "i64" {
+                                            let uge_id: Text = int_to_text(nt);
+                                            let uge: Text = text_concat("%t", uge_id);
+                                            let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", uge), " = icmp sge i64 "), a_val), ", 65"));
+                                            let ule_id: Text = int_to_text(nt + 1);
+                                            let ule: Text = text_concat("%t", ule_id);
+                                            let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", ule), " = icmp sle i64 "), a_val), ", 90"));
+                                            let up_id: Text = int_to_text(nt + 2);
+                                            let up: Text = text_concat("%t", up_id);
+                                            let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", up), " = and i1 "), uge), text_concat(", ", ule)));
+
+                                            let lge_id: Text = int_to_text(nt + 3);
+                                            let lge: Text = text_concat("%t", lge_id);
+                                            let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", lge), " = icmp sge i64 "), a_val), ", 97"));
+                                            let lle_id: Text = int_to_text(nt + 4);
+                                            let lle: Text = text_concat("%t", lle_id);
+                                            let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", lle), " = icmp sle i64 "), a_val), ", 122"));
+                                            let low_id: Text = int_to_text(nt + 5);
+                                            let low: Text = text_concat("%t", low_id);
+                                            let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", low), " = and i1 "), lge), text_concat(", ", lle)));
+
+                                            let alp_id: Text = int_to_text(nt + 6);
+                                            let alp: Text = text_concat("%t", alp_id);
+                                            let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", alp), " = or i1 "), up), text_concat(", ", low)));
+                                            let us_id: Text = int_to_text(nt + 7);
+                                            let us: Text = text_concat("%t", us_id);
+                                            let out8: Text = s1_cg_line(out7, text_concat(text_concat(text_concat(text_concat("  ", us), " = icmp eq i64 "), a_val), ", 95"));
+                                            let outv_id: Text = int_to_text(nt + 8);
+                                            let outv: Text = text_concat("%t", outv_id);
+                                            let out9: Text = s1_cg_line(out8, text_concat(text_concat(text_concat(text_concat("  ", outv), " = or i1 "), alp), text_concat(", ", us)));
+                                            s1_cg_expr_ok(S1CgExprOut { text: out9; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 9; })
+                                          } else {
+                                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_ident_start expects (Int)"))
+                                          }
+                                        } else {
+                                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_ident_start expects (Int)"))
+                                        }
+                                      } else {
+                                        if fname == "byte_is_ascii_ident_continue" {
+                                          if argc == 1 {
+                                            if a_ty == "i64" {
+                                              let dge_id: Text = int_to_text(nt);
+                                              let dge: Text = text_concat("%t", dge_id);
+                                              let out1: Text = s1_cg_line(ot, text_concat(text_concat(text_concat(text_concat("  ", dge), " = icmp sge i64 "), a_val), ", 48"));
+                                              let dle_id: Text = int_to_text(nt + 1);
+                                              let dle: Text = text_concat("%t", dle_id);
+                                              let out2: Text = s1_cg_line(out1, text_concat(text_concat(text_concat(text_concat("  ", dle), " = icmp sle i64 "), a_val), ", 57"));
+                                              let dig_id: Text = int_to_text(nt + 2);
+                                              let dig: Text = text_concat("%t", dig_id);
+                                              let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat(text_concat("  ", dig), " = and i1 "), dge), text_concat(", ", dle)));
+
+                                              let uge_id: Text = int_to_text(nt + 3);
+                                              let uge: Text = text_concat("%t", uge_id);
+                                              let out4: Text = s1_cg_line(out3, text_concat(text_concat(text_concat(text_concat("  ", uge), " = icmp sge i64 "), a_val), ", 65"));
+                                              let ule_id: Text = int_to_text(nt + 4);
+                                              let ule: Text = text_concat("%t", ule_id);
+                                              let out5: Text = s1_cg_line(out4, text_concat(text_concat(text_concat(text_concat("  ", ule), " = icmp sle i64 "), a_val), ", 90"));
+                                              let up_id: Text = int_to_text(nt + 5);
+                                              let up: Text = text_concat("%t", up_id);
+                                              let out6: Text = s1_cg_line(out5, text_concat(text_concat(text_concat(text_concat("  ", up), " = and i1 "), uge), text_concat(", ", ule)));
+
+                                              let lge_id: Text = int_to_text(nt + 6);
+                                              let lge: Text = text_concat("%t", lge_id);
+                                              let out7: Text = s1_cg_line(out6, text_concat(text_concat(text_concat(text_concat("  ", lge), " = icmp sge i64 "), a_val), ", 97"));
+                                              let lle_id: Text = int_to_text(nt + 7);
+                                              let lle: Text = text_concat("%t", lle_id);
+                                              let out8: Text = s1_cg_line(out7, text_concat(text_concat(text_concat(text_concat("  ", lle), " = icmp sle i64 "), a_val), ", 122"));
+                                              let low_id: Text = int_to_text(nt + 8);
+                                              let low: Text = text_concat("%t", low_id);
+                                              let out9: Text = s1_cg_line(out8, text_concat(text_concat(text_concat(text_concat("  ", low), " = and i1 "), lge), text_concat(", ", lle)));
+
+                                              let alp_id: Text = int_to_text(nt + 9);
+                                              let alp: Text = text_concat("%t", alp_id);
+                                              let out10: Text = s1_cg_line(out9, text_concat(text_concat(text_concat(text_concat("  ", alp), " = or i1 "), up), text_concat(", ", low)));
+                                              let us_id: Text = int_to_text(nt + 10);
+                                              let us: Text = text_concat("%t", us_id);
+                                              let out11: Text = s1_cg_line(out10, text_concat(text_concat(text_concat(text_concat("  ", us), " = icmp eq i64 "), a_val), ", 95"));
+                                              let is_id: Text = int_to_text(nt + 11);
+                                              let is: Text = text_concat("%t", is_id);
+                                              let out12: Text = s1_cg_line(out11, text_concat(text_concat(text_concat(text_concat("  ", is), " = or i1 "), alp), text_concat(", ", us)));
+                                              let outv_id: Text = int_to_text(nt + 12);
+                                              let outv: Text = text_concat("%t", outv_id);
+                                              let out13: Text = s1_cg_line(out12, text_concat(text_concat(text_concat(text_concat("  ", outv), " = or i1 "), is), text_concat(", ", dig)));
+                                              s1_cg_expr_ok(S1CgExprOut { text: out13; value: outv; ty: "i1"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Bool")); bb: bt; next_tmp: nt + 13; })
+                                            } else {
+                                              s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_ident_continue expects (Int)"))
+                                            }
+                                          } else {
+                                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: byte_is_ascii_ident_continue expects (Int)"))
+                                          }
+                                        } else {
+                                          if all_i64 == true {
+                                            let tmp_id: Text = int_to_text(nt);
+                                            let tmp: Text = text_concat("%t", tmp_id);
+                                            let call_head: Text = text_concat(text_concat(text_concat("  ", tmp), " = call i64 @"), fname);
+                                            let inst: Text = text_concat(text_concat(call_head, "("), text_concat(at, ")"));
+                                            let out2: Text = s1_cg_line(ot, inst);
+                                            s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; ty: "i64"; s1_ty: s1_cg_s1_ty_some(s1_cg_s1_type_prim("Int")); bb: bt; next_tmp: nt + 1; })
+                                          } else {
+                                            s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: call expects i64 args in v0"))
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
+                        }
                         }
                         }
                       }
@@ -1220,11 +1635,19 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                       match s0.s1_ty {
                         None => 0;
                         Some(st0) => {
-                          if s1_cg_type_is_option_int(st0) == true {
+                          if s1_cg_type_is_option(st0) == true {
                             enum_name = "Option";
-                            ok_payload_s1 = s1_cg_s1_type_prim("Int");
+                            match st0.args {
+                              Cons(o0) => {
+                                match o0.tail {
+                                  Nil => { ok_payload_s1 = o0.head; have_enum = true; 0 };
+                                  _ => 0;
+                                };
+                                0
+                              };
+                              _ => 0;
+                            };
                             err_payload_s1 = s1_cg_s1_type_prim("Int");
-                            have_enum = true;
                             0
                           } else {
                             if s1_cg_type_is_result(st0) == true {
@@ -1255,7 +1678,7 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                       };
 
                       if have_enum == false {
-                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match scrutinee must be Option<Int> or Result<T,E> in v0.4"))
+                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: match scrutinee must be Option<T> or Result<T,E> in v0.4"))
                       } else {
                         // Parse patterns.
                         let a0_wild: Bool = false;
@@ -1408,8 +1831,9 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                   let bind_llvm_ty: Text = "i64";
                                   let bind_s1_ty: S1Type = s1_cg_s1_type_prim("Int");
                                   if enum_name == "Option" {
-                                    bind_llvm_ty = "i64";
-                                    bind_s1_ty = s1_cg_s1_type_prim("Int");
+                                    let pl: S1Type = ok_payload_s1;
+                                    if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
+                                    if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
                                     0
                                   } else {
                                     // Result: Ok uses ok_payload_s1; Err uses err_payload_s1.
@@ -1465,8 +1889,9 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                       let bind_llvm_ty: Text = "i64";
                                       let bind_s1_ty: S1Type = s1_cg_s1_type_prim("Int");
                                       if enum_name == "Option" {
-                                        bind_llvm_ty = "i64";
-                                        bind_s1_ty = s1_cg_s1_type_prim("Int");
+                                        let pl: S1Type = ok_payload_s1;
+                                        if s1_cg_type_is_plain_int(pl) == true { bind_llvm_ty = "i64"; bind_s1_ty = s1_cg_s1_type_prim("Int"); 0 } else { 0 };
+                                        if s1_cg_type_is_plain_text(pl) == true { bind_llvm_ty = "i8*"; bind_s1_ty = s1_cg_s1_type_prim("Text"); 0 } else { 0 };
                                         0
                                       } else {
                                         let pl: S1Type = ok_payload_s1;
