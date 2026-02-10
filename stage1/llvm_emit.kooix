@@ -381,12 +381,28 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         let out2: Text = s1_cg_line(r.text, inst);
                         s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; ty: "i1"; bb: r.bb; next_tmp: r.next_tmp + 1; })
                       } else {
-                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: == expects i64/i1 operands"))
-                      }
-                    }
-                  } else {
-                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: == expects same-typed operands"))
-                  }
+                        if l.ty == "i8*" {
+                          let cmp_id: Text = int_to_text(r.next_tmp);
+                          let cmp: Text = text_concat("%t", cmp_id);
+                          let inst0: Text = text_concat(text_concat(text_concat("  ", cmp), " = call i32 @strcmp(i8* "), l.value);
+                          let inst1: Text = text_concat(inst0, ", i8* ");
+                          let inst2: Text = text_concat(inst1, r.value);
+                          let inst_cmp: Text = text_concat(inst2, ")");
+                          let out2: Text = s1_cg_line(r.text, inst_cmp);
+
+                          let tmp_id: Text = int_to_text(r.next_tmp + 1);
+                          let tmp: Text = text_concat("%t", tmp_id);
+                          let inst_eq: Text = text_concat(text_concat(text_concat(text_concat("  ", tmp), " = icmp eq i32 "), cmp), ", 0");
+                          let out3: Text = s1_cg_line(out2, inst_eq);
+                          s1_cg_expr_ok(S1CgExprOut { text: out3; value: tmp; ty: "i1"; bb: r.bb; next_tmp: r.next_tmp + 2; })
+	                        } else {
+	                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: == expects i64/i1/Text operands"))
+	                        }
+	                      }
+	                    }
+	                  } else {
+	                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: == expects same-typed operands"))
+	                  }
                 };
               }
             };
@@ -416,12 +432,28 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                         let out2: Text = s1_cg_line(r.text, inst);
                         s1_cg_expr_ok(S1CgExprOut { text: out2; value: tmp; ty: "i1"; bb: r.bb; next_tmp: r.next_tmp + 1; })
                       } else {
-                        s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: != expects i64/i1 operands"))
-                      }
-                    }
-                  } else {
-                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: != expects same-typed operands"))
-                  }
+                        if l.ty == "i8*" {
+                          let cmp_id: Text = int_to_text(r.next_tmp);
+                          let cmp: Text = text_concat("%t", cmp_id);
+                          let inst0: Text = text_concat(text_concat(text_concat("  ", cmp), " = call i32 @strcmp(i8* "), l.value);
+                          let inst1: Text = text_concat(inst0, ", i8* ");
+                          let inst2: Text = text_concat(inst1, r.value);
+                          let inst_cmp: Text = text_concat(inst2, ")");
+                          let out2: Text = s1_cg_line(r.text, inst_cmp);
+
+                          let tmp_id: Text = int_to_text(r.next_tmp + 1);
+                          let tmp: Text = text_concat("%t", tmp_id);
+                          let inst_ne: Text = text_concat(text_concat(text_concat(text_concat("  ", tmp), " = icmp ne i32 "), cmp), ", 0");
+                          let out3: Text = s1_cg_line(out2, inst_ne);
+                          s1_cg_expr_ok(S1CgExprOut { text: out3; value: tmp; ty: "i1"; bb: r.bb; next_tmp: r.next_tmp + 2; })
+	                        } else {
+	                          s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: != expects i64/i1/Text operands"))
+	                        }
+	                      }
+	                    }
+	                  } else {
+	                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: != expects same-typed operands"))
+	                  }
                 };
               }
             };

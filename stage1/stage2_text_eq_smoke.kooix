@@ -1,0 +1,8 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let a: Text = "hi";
+  let b: Text = "hi";
+  if a == b { 0 } else { 1 }
+};
+
