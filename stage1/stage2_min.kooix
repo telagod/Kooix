@@ -5,19 +5,23 @@ import "../stdlib/prelude";
 // - Int-only functions
 // - `+`, `==`, `!=`
 // - direct calls
-// - `let`, assignment, `while`, `if` expression
+// - `let`, assignment, `while`, `if` expression (including stmtful branches)
 
 fn add2(x: Int, y: Int) -> Int { x + y };
 
-fn loop_to(n: Int) -> Int {
-  let i: Int = 0;
-  while i != n {
-    i = i + 1;
-  };
-  i
-};
-
 fn main() -> Int {
-  let v: Int = loop_to(add2(7, 3));
-  if v == 10 { 0 } else { 1 }
+  let i: Int = 0;
+  let sum: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    if i == 10 {
+      done = true;
+      0
+    } else {
+      sum = sum + i;
+      i = i + 1;
+      0
+    }
+  };
+  if sum == 45 { 0 } else { 1 }
 };

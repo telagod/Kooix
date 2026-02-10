@@ -452,7 +452,6 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Ex
       }
     };
     If(i) => {
-      // v0: expression-only branches (no stmts); both branches must return i64.
       let c_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out, env, next_tmp, i.cond);
       match c_r {
         Err(e1) => s1_cg_expr_err(e1);
@@ -461,44 +460,53 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Ex
             match i.else_block {
               None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if expression requires else branch in v0"));
               Some(else_b) => {
-                match i.then_block.stmts {
-                  Nil => {
-                    match else_b.stmts {
-                      Nil => {
-                        match i.then_block.result {
-                          None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-then block has no value"));
-                          Some(then_e) => {
-                            match else_b.result {
-                              None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-else block has no value"));
-                              Some(else_e) => {
-                                // Allocate labels.
-                                let then_id: Text = int_to_text(c0.next_tmp);
-                                let then_lbl: Text = text_concat("then", then_id);
-                                let else_id: Text = int_to_text(c0.next_tmp + 1);
-                                let else_lbl: Text = text_concat("else", else_id);
-                                let join_id: Text = int_to_text(c0.next_tmp + 2);
-                                let join_lbl: Text = text_concat("join", join_id);
-                                let nt0: Int = c0.next_tmp + 3;
+                match i.then_block.result {
+                  None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-then block has no value"));
+                  Some(then_e) => {
+                    match else_b.result {
+                      None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-else block has no value"));
+                      Some(else_e) => {
+                        // Allocate labels.
+                        let then_id: Text = int_to_text(c0.next_tmp);
+                        let then_lbl: Text = text_concat("then", then_id);
+                        let else_id: Text = int_to_text(c0.next_tmp + 1);
+                        let else_lbl: Text = text_concat("else", else_id);
+                        let join_id: Text = int_to_text(c0.next_tmp + 2);
+                        let join_lbl: Text = text_concat("join", join_id);
+                        let nt0: Int = c0.next_tmp + 3;
 
-                                let br1: Text = text_concat(text_concat("  br i1 ", c0.value), text_concat(text_concat(", label %", then_lbl), text_concat(", label %", else_lbl)));
-                                let out_br: Text = s1_cg_line(c0.text, br1);
+                        let br1: Text = text_concat(text_concat("  br i1 ", c0.value), text_concat(text_concat(", label %", then_lbl), text_concat(", label %", else_lbl)));
+                        let out_br: Text = s1_cg_line(c0.text, br1);
 
-                                let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
-                                let t_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out_then_lbl, env, nt0, then_e);
-                                match t_r {
-                                  Err(e2) => s1_cg_expr_err(e2);
-                                  Ok(t0) => {
-                                    let out_then_end: Text = s1_cg_line(t0.text, text_concat("  br label %", join_lbl));
+                        // then:
+                        let out_then_lbl: Text = s1_cg_line(out_br, text_concat(then_lbl, ":"));
+                        let tr: Result<S1CgBlockOut, S1Diagnostic> =
+                          s1_cg_emit_stmt_list_min(out_then_lbl, env, nt0, i.then_block.stmts);
+                        match tr {
+                          Err(e2) => s1_cg_expr_err(e2);
+                          Ok(tb) => {
+                            let t_r: Result<S1CgExprOut, S1Diagnostic> =
+                              s1_cg_emit_expr_min(tb.text, tb.env, tb.next_tmp, then_e);
+                            match t_r {
+                              Err(e3) => s1_cg_expr_err(e3);
+                              Ok(t0) => {
+                                let out_then_end: Text = s1_cg_line(t0.text, text_concat("  br label %", join_lbl));
 
-                                    let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
-                                    let e_r: Result<S1CgExprOut, S1Diagnostic> = s1_cg_emit_expr_min(out_else_lbl, env, t0.next_tmp, else_e);
+                                // else:
+                                let out_else_lbl: Text = s1_cg_line(out_then_end, text_concat(else_lbl, ":"));
+                                let er: Result<S1CgBlockOut, S1Diagnostic> =
+                                  s1_cg_emit_stmt_list_min(out_else_lbl, env, t0.next_tmp, else_b.stmts);
+                                match er {
+                                  Err(e4) => s1_cg_expr_err(e4);
+                                  Ok(eb) => {
+                                    let e_r: Result<S1CgExprOut, S1Diagnostic> =
+                                      s1_cg_emit_expr_min(eb.text, eb.env, eb.next_tmp, else_e);
                                     match e_r {
-                                      Err(e3) => s1_cg_expr_err(e3);
+                                      Err(e5) => s1_cg_expr_err(e5);
                                       Ok(e0) => {
                                         if e0.ty == t0.ty {
                                           if t0.ty == "i64" {
                                             let out_else_end: Text = s1_cg_line(e0.text, text_concat("  br label %", join_lbl));
-
                                             let out_join_lbl: Text = s1_cg_line(out_else_end, text_concat(join_lbl, ":"));
                                             let phi_id: Text = int_to_text(e0.next_tmp);
                                             let phi_tmp: Text = text_concat("%t", phi_id);
@@ -507,12 +515,10 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Ex
                                             let in2: Text = text_concat(text_concat("[ ", e0.value), text_concat(text_concat(", %", else_lbl), " ]"));
                                             let inst: Text = text_concat(text_concat(p1, in1), text_concat(", ", in2));
                                             let out_phi: Text = s1_cg_line(out_join_lbl, inst);
-
                                             s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: t0.ty; next_tmp: e0.next_tmp + 1; })
                                           } else {
                                             if t0.ty == "i1" {
                                               let out_else_end: Text = s1_cg_line(e0.text, text_concat("  br label %", join_lbl));
-
                                               let out_join_lbl: Text = s1_cg_line(out_else_end, text_concat(join_lbl, ":"));
                                               let phi_id: Text = int_to_text(e0.next_tmp);
                                               let phi_tmp: Text = text_concat("%t", phi_id);
@@ -521,7 +527,6 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Ex
                                               let in2: Text = text_concat(text_concat("[ ", e0.value), text_concat(text_concat(", %", else_lbl), " ]"));
                                               let inst: Text = text_concat(text_concat(p1, in1), text_concat(", ", in2));
                                               let out_phi: Text = s1_cg_line(out_join_lbl, inst);
-
                                               s1_cg_expr_ok(S1CgExprOut { text: out_phi; value: phi_tmp; ty: t0.ty; next_tmp: e0.next_tmp + 1; })
                                             } else {
                                               s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if branch type not supported in v0"))
@@ -539,10 +544,8 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, e: S1Ex
                           };
                         }
                       };
-                      _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-else block statements not supported in v0"));
                     }
                   };
-                  _ => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: if-then block statements not supported in v0"));
                 }
               };
             }
