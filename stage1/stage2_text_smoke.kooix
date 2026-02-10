@@ -1,0 +1,7 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let s: Text = text_concat(int_to_text(40 + 2), "");
+  if text_starts_with(s, "42") { 0 } else { 1 }
+};
+
