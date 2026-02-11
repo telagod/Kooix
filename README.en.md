@@ -165,6 +165,8 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - `examples/enum_match.kooix`
   - `examples/import_main.kooix`
   - `examples/import_lib.kooix`
+  - `examples/import_alias_main.kooix`
+  - `examples/import_alias_lib.kooix`
   - `examples/stdlib_smoke.kooix`
   - `examples/namespaced_variants.kooix`
 - Grammar docs:

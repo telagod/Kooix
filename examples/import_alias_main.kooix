@@ -1,0 +1,3 @@
+import "import_alias_lib" as Lib;
+
+fn main() -> Int { Lib::helper() + 1 };
