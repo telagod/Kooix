@@ -111,6 +111,11 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD3：新增 `--strict-warnings`（可选）用于渐进收紧告警策略（CI 已额外跑 strict gate）。
   - ✅ DoD4：CI gate 扩展为 pass/warn/error 三类样例矩阵，并在 summary 分组展示结果。
 - P3（自举能力）继续扩面 `dist/kooixc1` 的真实负载编译：
-  - DoD1：从 `stage2_min` 扩到 `lexer/parser/typecheck` 子集。
-  - DoD2：保持资源可控（默认轻量链路，深链路按需开关）。
-  - DoD3：产物指纹继续稳定（沿用 stage2/stage3/stage4/stage5 gate）。
+  - ✅ DoD1：已从 `stage2_min` 扩到 `lexer/parser/typecheck` 子集（`dist/kooixc1` 可编译+链接+运行对应 smoke 目标）。
+  - ✅ DoD2：资源可控链路已验证（默认轻量链路；`CARGO_BUILD_JOBS=1` 可单线程限载；深链路由 `KX_DEEP=1` 按需开启）。
+  - ✅ DoD3：产物指纹稳定 gate 持续可用（stage2/stage3/stage4/stage5 一致性门禁仍在 CI/测试中保留）。
+  - 验证命令（2026-02-11）：`CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh`。
+- P4（下一刀）推进 `dist/kooixc1` 的编译器本体负载：
+  - DoD1：覆盖 `resolver` + `compiler_main` 关键路径 smoke（维持低资源配额）。
+  - DoD2：把“真实负载 smoke”纳入可选 CI gate（手动触发或 nightly，避免阻塞常规 PR）。
+  - DoD3：继续积累 deterministic 证据（固定输入下 bytes/hash 波动为 0）。
