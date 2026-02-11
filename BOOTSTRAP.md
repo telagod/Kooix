@@ -198,6 +198,12 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2
 KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh /tmp
 ```
 
+更深一层（产出 stage4 compiler binary，并用 stage4 再 emit stage5 IR）：
+
+```bash
+KX_DEEP=1 ./scripts/bootstrap_v0_13.sh /tmp
+```
+
 ## 余劫（主要风险）
 
 - **Backend 复杂度爆炸**：建议坚持“最小可运行子集 + 渐进覆盖”。

@@ -22,11 +22,14 @@ OUT_DIR="${1:-/tmp}"
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"
 STAGE3_IR="/tmp/kooixc_stage3_stage1_compiler.ll"
+STAGE4_IR="/tmp/kooixc_stage4_stage1_compiler.ll"
+STAGE5_IR="/tmp/kooixc_stage5_stage1_compiler.ll"
 
 STAGE2_BIN="${OUT_DIR%/}/kooixc-stage2"
 STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
+STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
 
-rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE2_IR" "$STAGE3_IR"
+rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
 
 echo "[1/3] stage1 -> stage2 IR (compile+run stage1 self-host driver)"
 cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
@@ -59,4 +62,19 @@ if [[ "${KX_SMOKE:-}" != "" ]]; then
   "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
+fi
+
+if [[ "${KX_DEEP:-}" != "" ]]; then
+  echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
+  rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
+
+  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" >/dev/null
+  test -s "$STAGE4_IR"
+  cargo run -p kooixc -j "$JOBS" -- native-llvm "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
+  test -x "$STAGE4_BIN"
+
+  "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
+  test -s "$STAGE5_IR"
+
+  echo "ok: $STAGE4_BIN"
 fi

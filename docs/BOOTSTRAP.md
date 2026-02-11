@@ -74,6 +74,12 @@
 KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh /tmp
 ```
 
+更深一层（产出 stage4 compiler binary，并用 stage4 再 emit stage5 IR）：
+
+```bash
+KX_DEEP=1 ./scripts/bootstrap_v0_13.sh /tmp
+```
+
 ### Gate 1（Stage1 落地后启用）
 
 - `kooixc0` 编译 `kooixc1`（生成可运行产物）
