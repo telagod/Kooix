@@ -205,6 +205,7 @@ KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh
 ```bash
 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 KX_SMOKE_STDLIB=1 ./scripts/bootstrap_v0_13.sh
+KX_SMOKE_HOST_READ=1 ./scripts/bootstrap_v0_13.sh
 ```
 
 可选 smoke（验证 stage1 编译器对 stage1 真实模块的编译+链接+运行能力，先从 lexer 子图开始）：

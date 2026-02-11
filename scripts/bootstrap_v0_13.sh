@@ -109,6 +109,27 @@ if [[ "${KX_SMOKE_STDLIB:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
+if [[ "${KX_SMOKE_HOST_READ:-}" != "" ]]; then
+  echo "[smoke] stage3 compiler compiles stage1/stage2_host_read_file_smoke and runs it (host_read_file)"
+  SMOKE_IR="/tmp/kooixc_stage3_stage2_host_read_file.ll"
+  SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-host-read-file"
+  rm -f "$SMOKE_IR" "$SMOKE_BIN" "/tmp/kooixc_stage2_host_read_file_in.txt"
+
+  "$STAGE3_BIN" stage1/stage2_host_read_file_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  test -s "$SMOKE_IR"
+  test -x "$SMOKE_BIN"
+  set +e
+  "$SMOKE_BIN" >/dev/null
+  code="$?"
+  set -e
+  if [[ "$code" != "0" ]]; then
+    echo "smoke failure: expected exit=0, got exit=$code ($SMOKE_BIN)" >&2
+    exit 1
+  fi
+
+  echo "ok: smoke binary ran: $SMOKE_BIN"
+fi
+
 if [[ "${KX_SMOKE_S1_LEXER:-}" != "" ]]; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_lexer_module_smoke and runs it (imports stage1/lexer)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_lexer_module_smoke.ll"
