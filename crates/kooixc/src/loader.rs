@@ -15,6 +15,25 @@ pub struct SourceFile {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportEdge {
+    pub raw: String,
+    pub resolved: PathBuf,
+    pub ns: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleNode {
+    pub path: PathBuf,
+    pub imports: Vec<ImportEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleGraph {
+    pub entry: PathBuf,
+    pub modules: Vec<ModuleNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceMap {
     pub combined: String,
     pub files: Vec<SourceFile>,
@@ -29,22 +48,37 @@ impl SourceMap {
 }
 
 pub fn load_source_map(entry: &Path) -> Result<SourceMap, Vec<Diagnostic>> {
+    let (map, _) = load_source_map_with_module_graph(entry)?;
+    Ok(map)
+}
+
+pub fn load_source_map_with_module_graph(
+    entry: &Path,
+) -> Result<(SourceMap, ModuleGraph), Vec<Diagnostic>> {
     let mut loader = Loader {
         combined: String::new(),
         files: Vec::new(),
+        modules: Vec::new(),
         visited: HashSet::new(),
     };
 
     loader.load_file(entry)?;
-    Ok(SourceMap {
-        combined: loader.combined,
-        files: loader.files,
-    })
+    Ok((
+        SourceMap {
+            combined: loader.combined,
+            files: loader.files,
+        },
+        ModuleGraph {
+            entry: entry.to_path_buf(),
+            modules: loader.modules,
+        },
+    ))
 }
 
 struct Loader {
     combined: String,
     files: Vec<SourceFile>,
+    modules: Vec<ModuleNode>,
     visited: HashSet<PathBuf>,
 }
 
@@ -54,7 +88,7 @@ impl Loader {
         if self.visited.contains(&canonical) {
             return Ok(());
         }
-        self.visited.insert(canonical);
+        self.visited.insert(canonical.clone());
 
         let source = fs::read_to_string(path).map_err(|error| {
             vec![Diagnostic::error(
@@ -65,14 +99,25 @@ impl Loader {
 
         let tokens =
             lexer::lex(&source).map_err(|error| vec![qualify_diagnostic(path, &source, error)])?;
-        let imports = collect_import_paths(&tokens)
+        let imports = collect_import_specs(&tokens)
             .map_err(|error| vec![qualify_diagnostic(path, &source, error)])?;
 
         let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
+        let mut edges = Vec::new();
         for import in imports {
-            let import_path = resolve_import_path(base_dir, &import);
+            let import_path = resolve_import_path(base_dir, &import.path);
+            edges.push(ImportEdge {
+                raw: import.path,
+                resolved: import_path.clone(),
+                ns: import.ns,
+            });
             self.load_file(&import_path)?;
         }
+
+        self.modules.push(ModuleNode {
+            path: canonical,
+            imports: edges,
+        });
 
         self.append_file(path, source);
         Ok(())
@@ -99,8 +144,14 @@ impl Loader {
     }
 }
 
-fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
-    let mut imports = Vec::new();
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImportSpec {
+    path: String,
+    ns: Option<String>,
+}
+
+fn collect_import_specs(tokens: &[Token]) -> Result<Vec<ImportSpec>, Diagnostic> {
+    let mut imports: Vec<ImportSpec> = Vec::new();
     let mut depth: i32 = 0;
     let mut idx = 0usize;
 
@@ -131,6 +182,7 @@ fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
                         path_token.span,
                     ));
                 };
+                let mut ns = None;
                 let next = tokens.get(idx + 2).map(|token| &token.kind);
                 let (end_idx, ok) = match next {
                     Some(TokenKind::Semicolon) => (idx + 3, true),
@@ -149,6 +201,9 @@ fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
                                 ),
                                 ns_token.span,
                             ));
+                        }
+                        if let TokenKind::Ident(name) = &ns_token.kind {
+                            ns = Some(name.clone());
                         }
                         if !matches!(
                             tokens.get(idx + 4).map(|token| &token.kind),
@@ -171,7 +226,10 @@ fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
                     ));
                 }
 
-                imports.push(path.clone());
+                imports.push(ImportSpec {
+                    path: path.clone(),
+                    ns,
+                });
                 idx = end_idx;
                 continue;
             }

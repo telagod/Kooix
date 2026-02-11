@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use kooixc::loader::load_source_map;
+use kooixc::loader::{load_source_map, load_source_map_with_module_graph};
 
 fn make_temp_dir(suffix: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -81,6 +81,41 @@ fn import_errors_include_path_context() {
     assert!(
         message.contains(&main.display().to_string()),
         "message should include file path: {message}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn module_graph_tracks_import_aliases() {
+    let dir = make_temp_dir("graph-alias");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::helper() + 1 };",
+    )
+    .expect("write main");
+
+    let (_map, graph) =
+        load_source_map_with_module_graph(&main).expect("load should succeed with module graph");
+
+    let main_node = graph
+        .modules
+        .iter()
+        .find(|node| node.path.file_name().and_then(|name| name.to_str()) == Some("main.kooix"))
+        .expect("main module should exist in graph");
+    assert_eq!(main_node.imports.len(), 1);
+    assert_eq!(main_node.imports[0].raw, "lib");
+    assert_eq!(main_node.imports[0].ns.as_deref(), Some("Lib"));
+    assert_eq!(
+        main_node.imports[0]
+            .resolved
+            .file_name()
+            .and_then(|name| name.to_str()),
+        Some("lib.kooix")
     );
 
     let _ = fs::remove_dir_all(&dir);
