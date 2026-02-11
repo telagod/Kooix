@@ -1,0 +1,25 @@
+import "../stdlib/prelude";
+import "../stage1/source_map";
+
+fn main() -> Int {
+  let r: Result<List<Text>, Text> =
+    s1_sm_collect_imports("import \"../stdlib/prelude\" as P; fn main() -> Int;");
+  match r {
+    Err(_e) => 1;
+    Ok(imps) => {
+      match imps {
+        Nil => 2;
+        Cons(c0) => {
+          if c0.head == "../stdlib/prelude" {
+            match c0.tail {
+              Nil => 0;
+              _ => 3;
+            }
+          } else {
+            4
+          }
+        };
+      }
+    };
+  }
+};
