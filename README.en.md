@@ -174,6 +174,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - AI v1: `docs/Grammar-AI-v1.ebnf`
   - Mapping: `docs/Grammar-Mapping.md`
   - Positive/negative examples: `docs/Grammar-Examples.md`
+  - Module system design draft: `docs/MODULES-v0.md`
 - Toward self-hosting:
   - Bootstrap gates and stage artifacts: `docs/BOOTSTRAP.md`
   - Roadmap and milestones: `docs/ROADMAP-SELFHOST.md`

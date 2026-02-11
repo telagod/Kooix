@@ -123,6 +123,7 @@ agent <name>(<params>) -> <TypeRef>
 - `docs/Grammar-AI-v1.ebnf`：AI 原生扩展目标语法
 - `docs/Grammar-Mapping.md`：语法与 AST/HIR/MIR/Sema 映射
 - `docs/Grammar-Examples.md`：正反例与预期错误类别
+- `docs/MODULES-v0.md`：module/namespace/export 的最小演进方案（设计草案）
 
 ## 变更历史
 

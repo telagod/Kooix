@@ -172,6 +172,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - AI v1: `docs/Grammar-AI-v1.ebnf`
   - 映射说明: `docs/Grammar-Mapping.md`
   - 正反例: `docs/Grammar-Examples.md`
+  - 模块系统设计草案: `docs/MODULES-v0.md`
 - 自举路线：
   - Bootstrap 门禁与阶段产物：`docs/BOOTSTRAP.md`
   - 自举路线图与里程碑：`docs/ROADMAP-SELFHOST.md`
