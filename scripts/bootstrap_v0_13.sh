@@ -25,21 +25,24 @@ STAGE3_IR="/tmp/kooixc_stage3_stage1_compiler.ll"
 STAGE4_IR="/tmp/kooixc_stage4_stage1_compiler.ll"
 STAGE5_IR="/tmp/kooixc_stage5_stage1_compiler.ll"
 
+STAGE2_BIN_SRC="/tmp/kooixc_stage2_stage1_compiler"
 STAGE2_BIN="${OUT_DIR%/}/kooixc-stage2"
 STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
 STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
 
-rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
+rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
 
-echo "[1/3] stage1 -> stage2 IR (compile+run stage1 self-host driver)"
+echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
 cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
 test -s "$STAGE2_IR"
+test -x "$STAGE2_BIN_SRC"
 
-echo "[2/3] stage2 IR -> stage2 compiler (native-llvm link)"
-cargo run -p kooixc -j "$JOBS" -- native-llvm "$STAGE2_IR" "$STAGE2_BIN" >/dev/null
+if [[ "$STAGE2_BIN" != "$STAGE2_BIN_SRC" ]]; then
+  cp "$STAGE2_BIN_SRC" "$STAGE2_BIN"
+fi
 test -x "$STAGE2_BIN"
 
-echo "[3/3] stage2 compiler -> stage3 IR -> stage3 compiler"
+echo "[2/2] stage2 compiler -> stage3 IR -> stage3 compiler"
 "$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
 test -s "$STAGE3_IR"
 test -x "$STAGE3_BIN"

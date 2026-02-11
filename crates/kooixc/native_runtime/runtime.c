@@ -136,6 +136,12 @@ static int kx_file_exists(const char* path) {
 }
 
 static char* kx_find_runtime_c_path(void) {
+  // When this runtime is compiled into a binary, __FILE__ points at the runtime.c path used during
+  // compilation. This is the most reliable way to locate runtime.c for self-linking stages.
+  if (kx_file_exists(__FILE__)) {
+    return kx_strdup(__FILE__);
+  }
+
   const char* env = getenv("KX_RUNTIME_C");
   if (env && kx_file_exists(env)) {
     return kx_strdup(env);

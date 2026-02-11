@@ -3,9 +3,9 @@ import "diag";
 import "llvm_emit";
 
 fn main() -> Int
-intent "Stage1 self-host bootstrap (v0.12): emit stage1/compiler_main LLVM IR and write to disk"
+intent "Stage1 self-host bootstrap (v0.14): emit stage1/compiler_main LLVM IR and write to disk; also link stage2 compiler binary"
 evidence {
-  trace "stage1.self_host.v0_12.stage1_compiler";
+  trace "stage1.self_host.v0_14.stage1_compiler";
   metrics [stage1_self_host_stage1_compiler_calls];
 }
 {
@@ -31,7 +31,20 @@ evidence {
           let w: Result<Int, Text> =
             host_write_file("/tmp/kooixc_stage2_stage1_compiler.ll", ir);
           match w {
-            Ok(_n) => 0;
+            Ok(_n) => {
+              host_eprintln("self_host: link /tmp/kooixc_stage2_stage1_compiler");
+              let l: Result<Int, Text> = host_link_llvm_ir_file(
+                "/tmp/kooixc_stage2_stage1_compiler.ll",
+                "/tmp/kooixc_stage2_stage1_compiler"
+              );
+              match l {
+                Ok(_k) => 0;
+                Err(msg2) => {
+                  host_eprintln(msg2);
+                  5
+                };
+              }
+            };
             Err(msg) => {
               host_eprintln(msg);
               4

@@ -3675,7 +3675,9 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         return;
     }
 
-    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_stage1_compiler.ll.
+    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to
+    // /tmp/kooixc_stage2_stage1_compiler.ll and links stage2 compiler binary at
+    // /tmp/kooixc_stage2_stage1_compiler.
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("stage1/self_host_stage1_compiler_main.kooix");
     let source_map = load_source_map(&entry)
@@ -3684,12 +3686,16 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-13-stage1-compiler-main");
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler");
     let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
     let _ = std::fs::remove_file("/tmp/kooixc_stage4_stage1_compiler.ll");
 
     let run_output = compile_and_run_native_source(&source_map.combined, &output)
         .expect("stage1 self-host stage1-compiler driver should run");
     assert_eq!(run_output.status_code, Some(0));
+
+    let stage2 = std::path::PathBuf::from("/tmp/kooixc_stage2_stage1_compiler");
+    assert!(stage2.exists(), "stage2 compiler binary should exist");
 
     let ir = std::fs::read_to_string("/tmp/kooixc_stage2_stage1_compiler.ll")
         .expect("stage1 self-host driver should write /tmp/kooixc_stage2_stage1_compiler.ll");
@@ -3730,19 +3736,21 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     );
     assert!(ir.len() > 100_000, "emitted LLVM IR should be non-trivial");
 
-    // Link+run the emitted LLVM IR as a standalone Stage2 compiler binary.
-    let stage2 = std::env::temp_dir().join("kooixc-stage2-from-stage1-ll-stage1-compiler-main");
-    let _ = std::fs::remove_file(&stage2);
-    compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
-
     let args: Vec<String> = vec![
         "stage1/compiler_main.kooix".to_string(),
         "/tmp/kooixc_stage3_stage1_compiler.ll".to_string(),
+        std::env::temp_dir()
+            .join("kooixc-stage3-from-stage2-stage1-compiler-main")
+            .to_string_lossy()
+            .to_string(),
     ];
     let stage2_out =
         run_executable_with_args_and_stdin_and_timeout(&stage2, &args, None, Some(120_000))
             .expect("stage2 compiler binary should run");
     assert_eq!(stage2_out.status_code, Some(0));
+
+    let stage3 = std::path::PathBuf::from(&args[2]);
+    assert!(stage3.exists(), "stage3 compiler binary should exist");
 
     let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
         .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler.ll");
@@ -3794,12 +3802,6 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler_2.ll");
     }
 
-    // (Optional deeper step) Link+run the stage3 LLVM IR as a standalone binary and emit stage4 IR.
-    let stage3 = std::env::temp_dir().join("kooixc-stage3-from-stage2-ll-stage1-compiler-main");
-    let _ = std::fs::remove_file(&stage3);
-    compile_llvm_ir_to_executable(&ir2, &stage3)
-        .expect("native-llvm build for stage3 should succeed");
-
     let args_stage3: Vec<String> = vec![
         "stage1/compiler_main.kooix".to_string(),
         "/tmp/kooixc_stage4_stage1_compiler.ll".to_string(),
@@ -3830,13 +3832,26 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         "stage4 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"
     );
 
-    // Optional deep gate: link stage4 IR into a stage4 compiler binary, then run it to emit stage5 IR.
-    // Kept behind an env flag since it adds another native toolchain roundtrip.
+    // Optional deep gate: run stage3 compiler again, this time linking a stage4 compiler binary
+    // and using it to emit stage5 IR.
     if std::env::var_os("KX_DEEP").is_some() {
-        let stage4 = std::env::temp_dir().join("kooixc-stage4-from-stage3-ll-stage1-compiler-main");
+        let stage4 = std::env::temp_dir().join("kooixc-stage4-from-stage3-stage1-compiler-main");
         let _ = std::fs::remove_file(&stage4);
-        compile_llvm_ir_to_executable(&ir3, &stage4)
-            .expect("native-llvm build for stage4 should succeed");
+
+        let args_stage3_link: Vec<String> = vec![
+            "stage1/compiler_main.kooix".to_string(),
+            "/tmp/kooixc_stage4_stage1_compiler.ll".to_string(),
+            stage4.to_string_lossy().to_string(),
+        ];
+        let stage3_link_out = run_executable_with_args_and_stdin_and_timeout(
+            &stage3,
+            &args_stage3_link,
+            None,
+            Some(120_000),
+        )
+        .expect("stage3 compiler should link stage4 compiler");
+        assert_eq!(stage3_link_out.status_code, Some(0));
+        assert!(stage4.exists(), "stage4 compiler binary should exist");
 
         let _ = std::fs::remove_file("/tmp/kooixc_stage5_stage1_compiler.ll");
         let args_stage4: Vec<String> = vec![
@@ -3873,6 +3888,7 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     let _ = std::fs::remove_file(&stage2);
     let _ = std::fs::remove_file(&stage3);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler");
     let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
     let _ = std::fs::remove_file("/tmp/kooixc_stage4_stage1_compiler.ll");
 }
