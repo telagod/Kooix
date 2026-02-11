@@ -44,7 +44,9 @@ Kooix 已完成一条可运行的最小编译链路：
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
 - CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（从 LLVM IR 文件直接产出 native bin）。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
-- 多文件加载：顶层 `import "path";` / `import "path" as Foo;`（include 风格 loader 递归展开并拼接 source；`as` 仅声明“可选 namespace 前缀”，当前不形成真正 module/namespace/export 系统；语义分析前会将 `Foo::bar` / `Foo::T` 归一化为 `bar` / `T`）。
+- 多文件加载（include-style）：顶层 `import "path";` / `import "path" as Foo;`
+  - 编译/解释执行主链路仍是“递归展开 + 拼接 source + normalize 剥离 namespace 前缀”的兼容语义（保持 Stage1 v0.x 自举链稳定）。
+  - 已具备 module-aware semantic check 原型：库 API `check_entry_modules` 按文件构建 `ModuleGraph` 并做 per-module sema；支持检查 `Foo::bar(...)` / `Foo::T` / `Foo::Enum::Variant` 等限定引用（内部重写为 `Foo__bar` / `Foo__T`，并注入 stub 以隔离跨文件重名）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper；以及 `fs_read_text/fs_write_text/args_len/args_get` 薄封装）。
 - host intrinsics：`host_load_source_map`（兼容 loader）与 `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。另：Stage1 已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（Stage1 compiler driver 与 self-host drivers 已切换到此实现）。
 - 自举产物：`./scripts/bootstrap_v0_13.sh` 可产出 `dist/kooixc1`（stage3 compiler binary，可用于编译+链接 Kooix 程序）。
@@ -54,7 +56,7 @@ Kooix 已完成一条可运行的最小编译链路：
 
 ### 测试状态
 
-- 推荐回归（避免 `llc/clang` 并行把机器打满）：`cargo test -p kooixc -j 2 -- --test-threads=1`
+- 推荐回归（避免 `llc/clang` 并行把机器打满）：`cargo test -p kooixc -j 1 -- --test-threads=1`（需要更快可再加大 `-j`）
 - 结果：本地/CI 通过（以 GitHub Actions 为准）
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
@@ -87,6 +89,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.5: enum + match（类型校验 + interpreter）
 - ✅ Phase 8.6: 最小 import 多文件加载（include 风格）
 - ✅ Phase 8.6.1: import namespace 前缀（`import "path" as Foo;` + `Foo::bar`/`Foo::T` 归一化）
+- ✅ Phase 8.6.2: module-aware semantic check 原型（`check_entry_modules`：qualified fn/type/record lit/enum variant）
 - ✅ Phase 8.7: 预置 stdlib（prelude）+ call arg expected-type 推导
 - ✅ Phase 8.8: enum variant namespacing（`Enum.Variant`）+ 跨 enum 重名放开
 - ✅ Phase 8.9: 函数泛型语法 + 显式 call type args（最小子集）
@@ -188,7 +191,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 - 完整表达式系统与类型推导（当前仅实现函数体最小子集）
 - 逻辑与比较运算符：表达式暂不支持 `< <= > >= && ||`（`ensures` 的 predicate 比较单独支持）
 - 更完整的函数体 MIR/LLVM lowering 覆盖与运行语义（当前仅最小子集）
-- 完整模块系统 / 包管理（当前 `import` 仅 include 风格，未做 namespace/export）
+- 完整模块系统 / 包管理（当前编译主链路仍是 include-style；但已具备 module-aware semantic check 原型，可检查 `Foo::...` 限定引用，尚未落到完整 lowering/codegen）
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
 - 运行时与标准库设计
 
@@ -200,7 +203,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 1. Kooix-Core runtime：VM/解释器 + 最小 stdlib（为 self-host 做准备）
 2. 错误处理与集合：`Result/Option` 约定 + 最小 `Vec/Map`（先 runtime/stdlib，后语法糖如 `?`）
-3. 模块系统演进（namespace/export/依赖图/增量编译）
+3. 模块系统演进（从 module-aware check 走向真正 namespace/export/依赖图/增量编译）
 4. 约束系统演进（trait-like bounds / where 规范化 / 约束求解）
 5. 诊断分级与 CI 门禁（warning 策略可配置）
 

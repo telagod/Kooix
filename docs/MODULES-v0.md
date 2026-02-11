@@ -2,12 +2,15 @@
 
 ## Current State (as of 2026-02-11)
 
-Kooix currently uses **include-style** multi-file loading:
+Kooix currently has two “import semantics” layers:
 
-- `import "path";` recursively expands imported files and concatenates sources.
-- `import "path" as Foo;` is accepted, but today it is **syntax-only**:
-  - `Foo::bar` / `Foo::T` are parsed, then **normalized** (prefix stripped) before semantic checks.
-  - There is **no real module/namespace/export** yet.
+- **Main compile/run pipeline (compat)**: include-style multi-file loading
+  - `import "path";` recursively expands imported files and concatenates sources.
+  - `import "path" as Foo;` is accepted, and `Foo::...` prefixes are currently **normalized away** before semantic checks (to keep the Stage1 v0.x bootstrap chain stable).
+- **Module-aware semantic check (prototype)**: per-file semantic checks via `check_entry_modules`
+  - Builds a `ModuleGraph` and type-checks each file’s `Program` separately.
+  - Resolves qualified references like `Foo::bar(...)`, `Foo::T` (including record literals), and `Foo::Enum::Variant`.
+  - Internally rewrites to collision-free names (e.g. `Foo__bar`, `Foo__T`) and injects imported stubs so each module can be checked in isolation.
 
 This is intentional: it keeps the bootstrap chain small while leaving syntax space for future evolution.
 
@@ -63,7 +66,10 @@ This split allows gradual migration:
 Status:
 
 - ✅ Loader now exposes a lightweight `ModuleGraph` and can parse each loaded file into its own `Program` (`load_module_programs`).
-- ✅ A prototype `check_entry_modules` API can run semantic checks per-file (and currently supports rewriting `Foo::bar(...)` into an internal name + injecting imported stubs for qualified calls).
+- ✅ A prototype `check_entry_modules` API can run semantic checks per-file:
+  - qualified function calls: `Foo::bar(...)`
+  - qualified types / record literals: `Foo::T` / `Foo::T { ... }`
+  - qualified enum variants (patterns + constructors): `Foo::Enum::Variant`
 
 ### Step 2: Name resolution rules
 
@@ -89,6 +95,6 @@ Status:
 ## Stage1 Notes
 
 Stage1 already parses `import ... as <ns>` and uses `ns::Name` in some places.
-In Stage0 today we normalize away `ns::` prefixes to keep Stage1 running under include-style semantics.
+In the main Stage0 pipeline today we normalize away `ns::` prefixes to keep Stage1 running under include-style semantics.
 
 Once Stage0 implements real modules, Stage1 can migrate gradually by switching imports to the namespace form.
