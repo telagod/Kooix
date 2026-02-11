@@ -3694,6 +3694,7 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
     let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage4_stage1_compiler.ll");
 
     let run_output = compile_and_run_native_source(&source_map.combined, &output)
         .expect("stage1 self-host stage1-compiler driver should run");
@@ -3732,10 +3733,34 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         "stage3-emitted LLVM IR should be non-trivial"
     );
 
+    // (Optional deeper step) Link+run the stage3 LLVM IR as a standalone binary and emit stage4 IR.
+    let stage3 = std::env::temp_dir().join("kooixc-stage3-from-stage2-ll-stage1-compiler-main");
+    let _ = std::fs::remove_file(&stage3);
+    compile_llvm_ir_to_executable(&ir2, &stage3).expect("native-llvm build for stage3 should succeed");
+
+    let args_stage3: Vec<String> = vec![
+        "stage1/compiler_main.kooix".to_string(),
+        "/tmp/kooixc_stage4_stage1_compiler.ll".to_string(),
+    ];
+    let stage3_out =
+        run_executable_with_args_and_stdin_and_timeout(&stage3, &args_stage3, None, Some(120_000))
+            .expect("stage3 compiler binary should run");
+    assert_eq!(stage3_out.status_code, Some(0));
+
+    let ir3 = std::fs::read_to_string("/tmp/kooixc_stage4_stage1_compiler.ll")
+        .expect("stage3 compiler should write /tmp/kooixc_stage4_stage1_compiler.ll");
+    assert!(
+        ir3.contains("define i64 @kx_program_main"),
+        "stage4-emitted LLVM IR should contain entrypoint"
+    );
+    assert!(ir3.len() > 100_000, "stage4-emitted LLVM IR should be non-trivial");
+
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file(&stage2);
+    let _ = std::fs::remove_file(&stage3);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2_stage1_compiler.ll");
     let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage4_stage1_compiler.ll");
 }
 
 #[test]

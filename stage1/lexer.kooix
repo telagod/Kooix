@@ -50,6 +50,78 @@ fn s1_keyword_or_ident(lexeme: Text) -> S1TokenKind {
   }
 };
 
+fn s1_lex_unescape_string(raw: Text, base: Int) -> Result<Text, S1Diagnostic> {
+  let out: Text = "";
+  let ot: Text = out;
+  let i: Int = 0;
+  let n: Int = text_len(raw);
+  let done: Bool = false;
+  let ok: Bool = true;
+  let diag: S1Diagnostic = s1_diag(Error, base, base, "lexer: invalid escape sequence");
+
+  while done == false {
+    if i == n {
+      done = true;
+      0
+    } else {
+      match text_byte_at(raw, i) {
+        None => {
+          done = true;
+          0
+        };
+        Some(b) => {
+          if b == 92 {
+            match text_byte_at(raw, i + 1) {
+              None => {
+                ok = false;
+                diag = s1_diag(Error, base + i, base + i + 1, "lexer: invalid escape sequence");
+                done = true;
+                0
+              };
+              Some(b2) => {
+                if b2 == 110 { ot = text_concat(ot, "\n"); i = i + 2; 0 } else {
+                  if b2 == 114 { ot = text_concat(ot, "\r"); i = i + 2; 0 } else {
+                    if b2 == 116 { ot = text_concat(ot, "\t"); i = i + 2; 0 } else {
+                      if b2 == 34 { ot = text_concat(ot, "\""); i = i + 2; 0 } else {
+                        if b2 == 92 { ot = text_concat(ot, "\\"); i = i + 2; 0 } else {
+                          ok = false;
+                          diag = s1_diag(Error, base + i, base + i + 2, "lexer: unknown escape sequence");
+                          done = true;
+                          0
+                        }
+                      }
+                    }
+                  }
+                };
+                0
+              };
+            }
+          } else {
+            match text_slice(raw, i, i + 1) {
+              None => {
+                ok = false;
+                diag = s1_diag(Error, base + i, base + i + 1, "lexer: invalid string slice");
+                done = true;
+                0
+              };
+              Some(ch) => {
+                ot = text_concat(ot, ch);
+                i = i + 1;
+                0
+              };
+            }
+          };
+          0
+        };
+      }
+    }
+  };
+
+  let r: Result<Text, S1Diagnostic> = Err(diag);
+  if ok == true { r = Ok(ot); 0 } else { r = Err(diag); 0 };
+  r
+};
+
 fn s1_lex(source: Text) -> Result<List<S1Token>, S1Diagnostic>
 intent "Stage1 lexer (pure): source -> tokens"
 evidence {
@@ -156,7 +228,7 @@ evidence {
           };
           Some(b0) => {
             if b0 == 34 {
-              // String literal: "...." (no escapes in v0).
+              // String literal: "...." (supports basic escapes).
               let start: Int = i;
               let j: Int = i + 1;
               let scanning: Bool = true;
@@ -180,13 +252,30 @@ evidence {
                       0
                     };
                     Some(b1) => {
-                      if b1 == 34 {
-                        closed = true;
-                        scanning = false;
-                        0
+                      if b1 == 92 {
+                        // Skip escaped byte.
+                        match text_byte_at(source, j + 1) {
+                          None => {
+                            scanning = false;
+                            ok = false;
+                            diag = s1_diag(Error, start, n, "lexer: unterminated string literal");
+                            running = false;
+                            0
+                          };
+                          Some(_b2) => {
+                            j = j + 2;
+                            0
+                          };
+                        }
                       } else {
-                        j = j + 1;
-                        0
+                        if b1 == 34 {
+                          closed = true;
+                          scanning = false;
+                          0
+                        } else {
+                          j = j + 1;
+                          0
+                        }
                       }
                     };
                   }
@@ -207,15 +296,27 @@ evidence {
                       running = false;
                       0
                     };
-                    Some(content) => {
-                      let tok: S1Token = S1Token {
-                        kind: String(content);
-                        span: S1Span { start: start; end: end; };
-                      };
-                      tokens_rev =
-                        Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
-                      i = end;
-                      0
+                    Some(content_raw) => {
+                      let unesc_r: Result<Text, S1Diagnostic> =
+                        s1_lex_unescape_string(content_raw, content_start);
+                      match unesc_r {
+                        Err(e) => {
+                          ok = false;
+                          diag = e;
+                          running = false;
+                          0
+                        };
+                        Ok(content) => {
+                          let tok: S1Token = S1Token {
+                            kind: String(content);
+                            span: S1Span { start: start; end: end; };
+                          };
+                          tokens_rev =
+                            Cons(ListCons<S1Token> { head: tok; tail: tokens_rev; });
+                          i = end;
+                          0
+                        };
+                      }
                     };
                   }
                 } else {
