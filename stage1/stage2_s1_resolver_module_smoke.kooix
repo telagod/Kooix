@@ -1,0 +1,27 @@
+import "../stdlib/prelude";
+import "ast";
+import "lexer";
+import "parser";
+import "resolver";
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { 0 };";
+  let r1: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match r1 {
+    Err(_e1) => 100;
+    Ok(ts) => {
+      let r2: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match r2 {
+        Err(_e2) => 101;
+        Ok(p) => {
+          let r3: Result<S1Program, S1Diagnostic> = s1_resolve_program(p);
+          match r3 {
+            Err(_e3) => 102;
+            Ok(_p2) => 0;
+          }
+        };
+      }
+    };
+  }
+};
+
