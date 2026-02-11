@@ -129,6 +129,7 @@ cargo run -p kooixc -- native stage1/compiler_pure_main.kooix "$out" --run
 - v0.11 import loader smoke（include 风格 `import "path";`）：`stage1/self_host_import_main.kooix` → `/tmp/kooixc_stage2_import.ll`（目标：`stage1/stage2_import_smoke.kooix` + `stage1/stage2_import_lib.kooix`）
 - v0.12 stage1 compiler IR emit：`stage1/self_host_stage1_compiler_main.kooix` → `/tmp/kooixc_stage2_stage1_compiler.ll`（LLVM emitter 改为 chunk join，避免 `text_concat` 二次方内存爆炸）
 - v0.13 stage2 self-emit：运行 v0.12 产出的 stage2 compiler，再次对 `stage1/compiler_main.kooix` 生成 IR → `/tmp/kooixc_stage3_stage1_compiler.ll`
+- v0.13+（深一层验证）：将 stage3 IR 链接为 stage3 compiler，再次自编译 emit stage4 IR → `/tmp/kooixc_stage4_stage1_compiler.ll`（测试中同时打印每一阶段 IR 的 bytes + fnv1a64 指纹，便于追踪稳定性）
   - Stage1 compiler driver（可带 argv）：`stage1/compiler_main.kooix` 现在支持 `argv[1]=entry.kooix`、`argv[2]=out.ll`（省略则走默认值）。
 补充：native runtime 增加 `kx_runtime_init`（best-effort 提升 stack limit）；Stage0/Stage1 的 LLVM emitter 会在 `main` 开头调用，避免自举链路深递归时栈溢出。
 补充：native runtime 现在提供 `main(argc, argv)` wrapper，调用 LLVM 中的 `kx_program_main`（对应 Kooix 的 `fn main()`），从而暴露 `host_argc/host_argv` 供 stage2/stage3 compiler 做 CLI。

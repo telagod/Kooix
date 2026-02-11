@@ -3702,6 +3702,11 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir = std::fs::read_to_string("/tmp/kooixc_stage2_stage1_compiler.ll")
         .expect("stage1 self-host driver should write /tmp/kooixc_stage2_stage1_compiler.ll");
+    eprintln!(
+        "bootstrap v0.13: stage2 IR bytes={} fnv1a64={:016x}",
+        ir.len(),
+        fnv1a64(ir.as_bytes())
+    );
     assert!(
         ir.contains("define i64 @kx_program_main"),
         "emitted LLVM IR should contain entrypoint"
@@ -3724,6 +3729,11 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
         .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler.ll");
+    eprintln!(
+        "bootstrap v0.13: stage3 IR bytes={} fnv1a64={:016x}",
+        ir2.len(),
+        fnv1a64(ir2.as_bytes())
+    );
     assert!(
         ir2.contains("define i64 @kx_program_main"),
         "stage3-emitted LLVM IR should contain entrypoint"
@@ -3749,6 +3759,11 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir3 = std::fs::read_to_string("/tmp/kooixc_stage4_stage1_compiler.ll")
         .expect("stage3 compiler should write /tmp/kooixc_stage4_stage1_compiler.ll");
+    eprintln!(
+        "bootstrap v0.13: stage4 IR bytes={} fnv1a64={:016x}",
+        ir3.len(),
+        fnv1a64(ir3.as_bytes())
+    );
     assert!(
         ir3.contains("define i64 @kx_program_main"),
         "stage4-emitted LLVM IR should contain entrypoint"
@@ -4081,4 +4096,14 @@ fn tool_exists(tool: &str) -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    // FNV-1a 64-bit, used as a cheap deterministic fingerprint for emitted IR.
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for b in bytes {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
