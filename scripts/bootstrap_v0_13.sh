@@ -40,10 +40,8 @@ cargo run -p kooixc -j "$JOBS" -- native-llvm "$STAGE2_IR" "$STAGE2_BIN" >/dev/n
 test -x "$STAGE2_BIN"
 
 echo "[3/3] stage2 compiler -> stage3 IR -> stage3 compiler"
-"$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" >/dev/null
+"$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
 test -s "$STAGE3_IR"
-
-cargo run -p kooixc -j "$JOBS" -- native-llvm "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
 test -x "$STAGE3_BIN"
 
 echo "ok: $STAGE3_BIN"
@@ -54,10 +52,8 @@ if [[ "${KX_SMOKE:-}" != "" ]]; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-min"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_min.kooix "$SMOKE_IR" >/dev/null
+  "$STAGE3_BIN" stage1/stage2_min.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
-
-  cargo run -p kooixc -j "$JOBS" -- native-llvm "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -x "$SMOKE_BIN"
   "$SMOKE_BIN" >/dev/null
 
@@ -68,9 +64,8 @@ if [[ "${KX_DEEP:-}" != "" ]]; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
 
-  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" >/dev/null
+  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
   test -s "$STAGE4_IR"
-  cargo run -p kooixc -j "$JOBS" -- native-llvm "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
   test -x "$STAGE4_BIN"
 
   "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null

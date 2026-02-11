@@ -2447,6 +2447,29 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                               s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_write_file expects (Text, Text)"))
                             }
                           } else {
+                            if fname == "host_link_llvm_ir_file" {
+                              if argc == 2 {
+                                if a_ty == "i8*" {
+                                  if b_ty == "i8*" {
+                                    let raw_id: Text = int_to_text(nt);
+                                    let raw: Text = text_concat("%t", raw_id);
+                                    let inst: Text = text_concat(text_concat("  ", raw), text_concat(" = call i8* @kx_host_link_llvm_ir_file(i8* ", text_concat(a_val, text_concat(", i8* ", text_concat(b_val, ")")))));
+                                    let out2: Text = s1_cg_line(ot, inst);
+                                    let cast_id: Text = int_to_text(nt + 1);
+                                    let cast: Text = text_concat("%t", cast_id);
+                                    let out3: Text = s1_cg_line(out2, text_concat(text_concat(text_concat("  ", cast), " = bitcast i8* "), text_concat(raw, " to %Result*")));
+                                    let st: S1Type = s1_cg_s1_type_result(s1_cg_s1_type_prim("Int"), s1_cg_s1_type_prim("Text"));
+                                    s1_cg_expr_ok(S1CgExprOut { text: out3; value: cast; ty: "%Result*"; s1_ty: s1_cg_s1_ty_some(st); bb: bt; next_tmp: nt + 2; })
+                                  } else {
+                                    s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_link_llvm_ir_file expects (Text, Text)"))
+                                  }
+                                } else {
+                                  s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_link_llvm_ir_file expects (Text, Text)"))
+                                }
+                              } else {
+                                s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: host_link_llvm_ir_file expects (Text, Text)"))
+                              }
+                            } else {
                             if fname == "host_eprintln" {
                               if argc == 1 {
                                 if a_ty == "i8*" {
@@ -2762,12 +2785,13 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                                                 s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: call arg types mismatch in v0 subset"))
                                               }
                                             };
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
+                              }
+                            }
+                            }
+                          }
+                        }
+                      }
+                    }
                               }
                             }
                           }
@@ -4625,6 +4649,7 @@ fn s1_cg_emit_prelude(strs: List<S1CgStrConst>) -> Text {
   ot = s1_cg_line(ot, "declare i8* @kx_host_load_source_map(i8*)");
   ot = s1_cg_line(ot, "declare void @kx_host_eprintln(i8*)");
   ot = s1_cg_line(ot, "declare i8* @kx_host_write_file(i8*, i8*)");
+  ot = s1_cg_line(ot, "declare i8* @kx_host_link_llvm_ir_file(i8*, i8*)");
   ot = s1_cg_line(ot, "declare i64 @kx_host_argc()");
   ot = s1_cg_line(ot, "declare i8* @kx_host_argv(i64)");
   ot = s1_cg_line(ot, "declare i8* @kx_text_concat(i8*, i8*)");

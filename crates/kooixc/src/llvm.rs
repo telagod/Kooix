@@ -36,6 +36,7 @@ pub fn emit_program(program: &MirProgram) -> String {
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
     output.push_str("declare i8* @kx_host_write_file(i8*, i8*)\n\n");
+    output.push_str("declare i8* @kx_host_link_llvm_ir_file(i8*, i8*)\n\n");
     output.push_str("declare i64 @kx_host_argc()\n");
     output.push_str("declare i8* @kx_host_argv(i64)\n\n");
     output.push_str("declare i8* @kx_text_concat(i8*, i8*)\n");
@@ -969,6 +970,44 @@ impl<'a> FunctionEmitter<'a> {
                 let _ = writeln!(
                     output,
                     "  {raw} = call i8* @kx_host_write_file(i8* {pv}, i8* {cv})"
+                );
+                let res_ty = llvm_type(
+                    &TypeRef {
+                        name: "Result".to_string(),
+                        args: Vec::new(),
+                    },
+                    self.records,
+                    self.enums,
+                );
+                let cast = self.fresh_tmp();
+                let _ = writeln!(output, "  {cast} = bitcast i8* {raw} to {res_ty}");
+                Some(cast)
+            }
+            "host_link_llvm_ir_file" => {
+                // Runtime native toolchain: compile+link LLVM IR file into an executable, returns Result<Int, Text>.
+                let [ir_path, out_path] = args else {
+                    return Some("null".to_string());
+                };
+                let ir_val = self.emit_operand_value(
+                    ir_path,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let out_val = self.emit_operand_value(
+                    out_path,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let raw = self.fresh_tmp();
+                let _ = writeln!(
+                    output,
+                    "  {raw} = call i8* @kx_host_link_llvm_ir_file(i8* {ir_val}, i8* {out_val})"
                 );
                 let res_ty = llvm_type(
                     &TypeRef {

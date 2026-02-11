@@ -499,6 +499,33 @@ fn eval_intrinsic_function(
                 )))),
             }
         }
+        "host_link_llvm_ir_file" => {
+            let [Value::Text(ir_path), Value::Text(out_path)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_link_llvm_ir_file expects (Text, Text)",
+                    function.span,
+                )));
+            };
+
+            let ir = match std::fs::read_to_string(ir_path) {
+                Ok(ir) => ir,
+                Err(error) => {
+                    return Some(Ok(result_err(Value::Text(format!(
+                        "failed to read llvm ir file '{ir_path}': {error}"
+                    )))));
+                }
+            };
+
+            match crate::native::compile_llvm_ir_to_executable(
+                &ir,
+                &std::path::PathBuf::from(out_path),
+            ) {
+                Ok(()) => Ok(result_ok(Value::Int(0))),
+                Err(error) => Ok(result_err(Value::Text(format!(
+                    "failed to link llvm ir '{ir_path}' to '{out_path}': {error}"
+                )))),
+            }
+        }
         "host_argc" => {
             if !args.is_empty() {
                 return Some(Err(Diagnostic::error(

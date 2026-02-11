@@ -32,6 +32,10 @@ fn host_eprintln(s: Text) -> Unit;
 // Returns Ok(0) on success, Err(message) on failure.
 fn host_write_file(path: Text, content: Text) -> Result<Int, Text>;
 
+// Host-only native toolchain helper: compile+link LLVM IR file into a native executable.
+// Returns Ok(0) on success, Err(message) on failure.
+fn host_link_llvm_ir_file(ir_path: Text, out_path: Text) -> Result<Int, Text>;
+
 // Host-only argv access (native/runtime). Indexing follows C argv semantics:
 // - argv[0] is the program path/name
 // - argv[1..] are user-provided arguments

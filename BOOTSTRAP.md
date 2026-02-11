@@ -132,7 +132,7 @@ cargo run -p kooixc -- native stage1/compiler_pure_main.kooix "$out" --run
 - v0.13+（深一层验证）：将 stage3 IR 链接为 stage3 compiler，再次自编译 emit stage4 IR → `/tmp/kooixc_stage4_stage1_compiler.ll`（测试中同时打印每一阶段 IR 的 bytes + fnv1a64 指纹，并断言 stage2/stage3/stage4 指纹一致，作为最小可复现信号）
   - 可选门禁：设置 `KX_DETERMINISM=1` 时，stage2 compiler 会额外再跑一遍 emit stage3 IR，并断言跨进程输出指纹一致（避免默认测试路径过重）
   - 可选门禁：设置 `KX_GOLDEN=1` 时，将 stage2 IR 的 bytes + fnv1a64 与 `crates/kooixc/tests/fixtures/bootstrap_v0_13_stage1_compiler_ir.txt` 对比；用 `KX_UPDATE_GOLDENS=1` 更新 golden
-  - Stage1 compiler driver（可带 argv）：`stage1/compiler_main.kooix` 现在支持 `argv[1]=entry.kooix`、`argv[2]=out.ll`（省略则走默认值）。
+  - Stage1 compiler driver（可带 argv）：`stage1/compiler_main.kooix` 现在支持 `argv[1]=entry.kooix`、`argv[2]=out.ll`、可选 `argv[3]=out.exe`（指定时会在写出 IR 后调用 `host_link_llvm_ir_file` 直接链接生成二进制；省略则走默认值）。
 补充：native runtime 增加 `kx_runtime_init`（best-effort 提升 stack limit）；Stage0/Stage1 的 LLVM emitter 会在 `main` 开头调用，避免自举链路深递归时栈溢出。
 补充：native runtime 现在提供 `main(argc, argv)` wrapper，调用 LLVM 中的 `kx_program_main`（对应 Kooix 的 `fn main()`），从而暴露 `host_argc/host_argv` 供 stage2/stage3 compiler 做 CLI。
 补充：`kooixc(stage0)` 已可对 `stage1/self_host_main.kooix` 做 `check` 并通过（L1 Self-Check 局部闭环）。

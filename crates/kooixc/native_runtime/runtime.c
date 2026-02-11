@@ -27,6 +27,9 @@ typedef struct KxStrNode {
 static int kx_argc = 0;
 static char** kx_argv = NULL;
 
+// Forward declarations for helpers used before their definitions.
+static char* kx_prefix_up(const char* path, int up_levels);
+
 // Best-effort: increase stack limit for deeply recursive Stage1 tooling when running as a native
 // executable. No-op if unsupported or if raising the limit fails.
 void kx_runtime_init(void) {
@@ -92,6 +95,74 @@ static char* kx_strcat3(const char* a, const char* b, const char* c) {
   }
   char* out = kx_strcat2(ab, c);
   return out;
+}
+
+static char* kx_shell_quote(const char* s) {
+  // Single-quote shell escaping: wrap with '...' and escape embedded ' as '\''.
+  if (!s) {
+    return kx_strdup("''");
+  }
+  size_t n = strlen(s);
+  // Worst case: every byte is a quote -> expands to 4 bytes + surrounding quotes.
+  char* out = (char*)malloc(n * 4 + 3);
+  if (!out) {
+    return NULL;
+  }
+  size_t j = 0;
+  out[j++] = '\'';
+  for (size_t i = 0; i < n; i++) {
+    if (s[i] == '\'') {
+      memcpy(out + j, "'\\''", 4);
+      j += 4;
+    } else {
+      out[j++] = s[i];
+    }
+  }
+  out[j++] = '\'';
+  out[j] = '\0';
+  return out;
+}
+
+static int kx_file_exists(const char* path) {
+  if (!path) {
+    return 0;
+  }
+  FILE* f = fopen(path, "rb");
+  if (f) {
+    fclose(f);
+    return 1;
+  }
+  return 0;
+}
+
+static char* kx_find_runtime_c_path(void) {
+  const char* env = getenv("KX_RUNTIME_C");
+  if (env && kx_file_exists(env)) {
+    return kx_strdup(env);
+  }
+
+  const char* rels[] = {
+      "native_runtime/runtime.c",
+      "crates/kooixc/native_runtime/runtime.c",
+  };
+  for (size_t idx = 0; idx < sizeof(rels) / sizeof(rels[0]); idx++) {
+    const char* rel = rels[idx];
+    if (kx_file_exists(rel)) {
+      return kx_strdup(rel);
+    }
+    for (int up = 1; up <= 8; up++) {
+      char* candidate = kx_prefix_up(rel, up);
+      if (!candidate) {
+        break;
+      }
+      if (kx_file_exists(candidate)) {
+        return candidate; // already allocated
+      }
+      free(candidate);
+    }
+  }
+
+  return NULL;
 }
 
 static int kx_has_extension(const char* path) {
@@ -497,6 +568,94 @@ KxEnum* kx_host_write_file(const char* path, const char* content) {
         (uint64_t)(uintptr_t)kx_strcat3("failed to write file: ", path, "");
     return out;
   }
+
+  out->tag = 0; // Ok
+  out->payload = 0; // Int(0)
+  return out;
+}
+
+KxEnum* kx_host_link_llvm_ir_file(const char* ir_path, const char* out_path) {
+  KxEnum* out = (KxEnum*)malloc(sizeof(KxEnum));
+  if (!out) {
+    return NULL;
+  }
+
+  if (!ir_path) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: ir_path is null");
+    return out;
+  }
+  if (!out_path) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: out_path is null");
+    return out;
+  }
+
+  char* runtime_c = kx_find_runtime_c_path();
+  if (!runtime_c) {
+    out->tag = 1; // Err
+    out->payload =
+        (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: could not locate runtime.c (set KX_RUNTIME_C)");
+    return out;
+  }
+
+  char* obj_path = kx_strcat2(out_path, ".o");
+  if (!obj_path) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: out of memory");
+    return out;
+  }
+
+  char* q_ir = kx_shell_quote(ir_path);
+  char* q_obj = kx_shell_quote(obj_path);
+  char* q_out = kx_shell_quote(out_path);
+  char* q_runtime = kx_shell_quote(runtime_c);
+  if (!q_ir || !q_obj || !q_out || !q_runtime) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: out of memory");
+    return out;
+  }
+
+  size_t cmd1_len = strlen("llc -filetype=obj -relocation-model=pic ") + strlen(q_ir) +
+                    strlen(" -o ") + strlen(q_obj) + 1;
+  char* cmd1 = (char*)malloc(cmd1_len);
+  if (!cmd1) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: out of memory");
+    return out;
+  }
+  snprintf(cmd1, cmd1_len, "llc -filetype=obj -relocation-model=pic %s -o %s", q_ir, q_obj);
+
+  size_t cmd2_len = strlen("clang ") + strlen(q_obj) + 1 + strlen(q_runtime) + strlen(" -o ") +
+                    strlen(q_out) + 1;
+  char* cmd2 = (char*)malloc(cmd2_len);
+  if (!cmd2) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_link_llvm_ir_file: out of memory");
+    return out;
+  }
+  snprintf(cmd2, cmd2_len, "clang %s %s -o %s", q_obj, q_runtime, q_out);
+
+  int rc1 = system(cmd1);
+  if (rc1 != 0) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "host_link_llvm_ir_file: llc failed (rc=%d)", rc1);
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup(msg);
+    return out;
+  }
+
+  int rc2 = system(cmd2);
+  if (rc2 != 0) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "host_link_llvm_ir_file: clang failed (rc=%d)", rc2);
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup(msg);
+    return out;
+  }
+
+  // Best-effort cleanup.
+  (void)remove(obj_path);
 
   out->tag = 0; // Ok
   out->payload = 0; // Int(0)

@@ -3980,6 +3980,65 @@ fn main() -> Int {
 }
 
 #[test]
+fn native_host_link_llvm_ir_file_works() {
+    if cfg!(windows) {
+        return;
+    }
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let ir = emit_llvm_ir_source("fn main() -> Int { 7 };").expect("emit llvm ir should work");
+    let ir_path = std::env::temp_dir().join("kooixc-host-link-in.ll");
+    let out_exe = std::env::temp_dir().join("kooixc-host-link-out");
+    let _ = std::fs::remove_file(&ir_path);
+    let _ = std::fs::remove_file(&out_exe);
+    std::fs::write(&ir_path, ir.as_bytes()).expect("write input llvm ir");
+
+    let source = format!(
+        r#"
+enum Result<T, E> {{ Ok(T); Err(E); }};
+
+fn host_link_llvm_ir_file(ir_path: Text, out_path: Text) -> Result<Int, Text>;
+fn host_eprintln(s: Text) -> Unit;
+
+fn main() -> Int {{
+  let r: Result<Int, Text> = host_link_llvm_ir_file("{ir_path}", "{out_exe}");
+  match r {{
+    Ok(_n) => 0;
+    Err(m) => {{ host_eprintln(m); 3 }};
+  }}
+}};
+"#,
+        ir_path = ir_path.to_string_lossy(),
+        out_exe = out_exe.to_string_lossy()
+    );
+
+    let output = std::env::temp_dir().join("kooixc-native-host-link-smoke");
+    let _ = std::fs::remove_file(&output);
+    let run_output = compile_and_run_native_source_with_args_stdin_and_timeout(
+        &source,
+        &output,
+        &Vec::<String>::new(),
+        None,
+        Some(120_000),
+    )
+    .expect("compile+run host_link program should work");
+    assert_eq!(run_output.status_code, Some(0));
+
+    assert!(out_exe.exists(), "linked output executable should exist");
+    let args: Vec<String> = vec![];
+    let exe_out =
+        run_executable_with_args_and_stdin_and_timeout(&out_exe, &args, None, Some(60_000))
+            .expect("linked executable should run");
+    assert_eq!(exe_out.status_code, Some(7));
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&ir_path);
+    let _ = std::fs::remove_file(&out_exe);
+}
+
+#[test]
 fn compiles_and_runs_native_binary_with_stdin() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

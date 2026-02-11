@@ -3,7 +3,7 @@ import "diag";
 import "llvm_emit";
 
 fn main() -> Int
-intent "Stage1 compiler bootstrap: emit LLVM IR for entry file and write to disk (argv: [entry.kooix] [out.ll])"
+intent "Stage1 compiler bootstrap: emit LLVM IR for entry file and write to disk (argv: [entry.kooix] [out.ll] [out.exe])"
 evidence {
   trace "stage1.main.v0_13";
   metrics [stage1_main_calls];
@@ -12,6 +12,8 @@ evidence {
   let argc: Int = host_argc();
   let entry_path: Text = "stage1/compiler_main.kooix";
   let out_path: Text = "/tmp/kooixc_stage3_stage1_compiler.ll";
+  let out_exe_path: Text = "";
+  let do_link: Bool = false;
   let ok_args: Bool = true;
 
   if argc == 1 {
@@ -26,22 +28,30 @@ evidence {
         out_path = host_argv(2);
         0
       } else {
-        ok_args = false;
-        0
+        if argc == 4 {
+          entry_path = host_argv(1);
+          out_path = host_argv(2);
+          out_exe_path = host_argv(3);
+          do_link = true;
+          0
+        } else {
+          ok_args = false;
+          0
+        }
       }
     }
   };
 
   if ok_args == false {
-    host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll]");
+    host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll] [out.exe]");
     2
   } else {
     if entry_path == "--help" {
-      host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll]");
+      host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll] [out.exe]");
       0
     } else {
       if entry_path == "-h" {
-        host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll]");
+        host_eprintln("usage: stage1-compiler [entry.kooix] [out.ll] [out.exe]");
         0
       } else {
         let src_r: Result<Text, Text> = host_load_source_map(entry_path);
@@ -60,7 +70,20 @@ evidence {
               Ok(ir) => {
                 let w: Result<Int, Text> = host_write_file(out_path, ir);
                 match w {
-                  Ok(_n) => 0;
+                  Ok(_n) => {
+                    if do_link == false {
+                      0
+                    } else {
+                      let l: Result<Int, Text> = host_link_llvm_ir_file(out_path, out_exe_path);
+                      match l {
+                        Ok(_k) => 0;
+                        Err(msg2) => {
+                          host_eprintln(msg2);
+                          5
+                        };
+                      }
+                    }
+                  };
                   Err(msg) => {
                     host_eprintln(msg);
                     4
