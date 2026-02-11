@@ -203,6 +203,127 @@ fn check_entry_modules_isolates_duplicate_names_across_files() {
 }
 
 #[test]
+fn check_entry_modules_isolates_duplicate_function_names_with_namespace_import() {
+    let dir = make_temp_dir("module-check-dup-fn-ns");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(
+        &main,
+        r#"import "lib" as Lib;
+
+fn helper() -> Int { 1 };
+fn main() -> Int { Lib::helper() + helper() };"#,
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| {
+            diagnostic.severity == Severity::Error
+                && diagnostic.message.contains("duplicate function")
+        }));
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| { diagnostic.severity == Severity::Error }));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_entry_modules_isolates_duplicate_record_names_with_namespace_import() {
+    let dir = make_temp_dir("module-check-dup-record-ns");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &lib,
+        "record Answer { x: Int; };
+",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        r#"import "lib" as Lib;
+
+record Answer { y: Int; };
+fn from_lib(a: Lib::Answer) -> Int { a.x };
+fn from_local(a: Answer) -> Int { a.y };
+fn main() -> Int { from_lib(Lib::Answer { x: 7; }) + from_local(Answer { y: 1; }) };"#,
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| {
+            diagnostic.severity == Severity::Error
+                && diagnostic.message.contains("duplicate record")
+        }));
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| { diagnostic.severity == Severity::Error }));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_entry_modules_isolates_duplicate_enum_names_with_namespace_import() {
+    let dir = make_temp_dir("module-check-dup-enum-ns");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &lib,
+        "enum Option<T> { Some(T); None; };
+fn mk(x: Int) -> Option<Int> { Option.Some(x) };",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        r#"import "lib" as Lib;
+
+enum Option<T> { Some(T); None; };
+fn local_default() -> Option<Int> { Option.None };
+fn main() -> Int {
+  let o: Lib::Option<Int> = Lib::mk(7);
+  let d: Option<Int> = local_default();
+  match o {
+    Lib::Option::Some(v) => v;
+    Lib::Option::None => match d {
+      Option::Some(x) => x;
+      Option::None => 0;
+    };
+  }
+};"#,
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| {
+            diagnostic.severity == Severity::Error && diagnostic.message.contains("duplicate enum")
+        }));
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| { diagnostic.severity == Severity::Error }));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn check_entry_modules_resolves_qualified_import_function_calls() {
     let dir = make_temp_dir("module-check-qualified-call");
     let lib = dir.join("lib.kooix");
