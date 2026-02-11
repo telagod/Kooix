@@ -3702,10 +3702,11 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir = std::fs::read_to_string("/tmp/kooixc_stage2_stage1_compiler.ll")
         .expect("stage1 self-host driver should write /tmp/kooixc_stage2_stage1_compiler.ll");
+    let stage2_hash = fnv1a64(ir.as_bytes());
     eprintln!(
         "bootstrap v0.13: stage2 IR bytes={} fnv1a64={:016x}",
         ir.len(),
-        fnv1a64(ir.as_bytes())
+        stage2_hash
     );
     assert!(
         ir.contains("define i64 @kx_program_main"),
@@ -3729,10 +3730,11 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
         .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler.ll");
+    let stage3_hash = fnv1a64(ir2.as_bytes());
     eprintln!(
         "bootstrap v0.13: stage3 IR bytes={} fnv1a64={:016x}",
         ir2.len(),
-        fnv1a64(ir2.as_bytes())
+        stage3_hash
     );
     assert!(
         ir2.contains("define i64 @kx_program_main"),
@@ -3741,6 +3743,10 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     assert!(
         ir2.len() > 100_000,
         "stage3-emitted LLVM IR should be non-trivial"
+    );
+    assert_eq!(
+        stage3_hash, stage2_hash,
+        "stage3 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"
     );
 
     // (Optional deeper step) Link+run the stage3 LLVM IR as a standalone binary and emit stage4 IR.
@@ -3759,16 +3765,21 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
 
     let ir3 = std::fs::read_to_string("/tmp/kooixc_stage4_stage1_compiler.ll")
         .expect("stage3 compiler should write /tmp/kooixc_stage4_stage1_compiler.ll");
+    let stage4_hash = fnv1a64(ir3.as_bytes());
     eprintln!(
         "bootstrap v0.13: stage4 IR bytes={} fnv1a64={:016x}",
         ir3.len(),
-        fnv1a64(ir3.as_bytes())
+        stage4_hash
     );
     assert!(
         ir3.contains("define i64 @kx_program_main"),
         "stage4-emitted LLVM IR should contain entrypoint"
     );
     assert!(ir3.len() > 100_000, "stage4-emitted LLVM IR should be non-trivial");
+    assert_eq!(
+        stage4_hash, stage2_hash,
+        "stage4 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"
+    );
 
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file(&stage2);
