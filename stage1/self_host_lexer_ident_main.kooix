@@ -1,6 +1,7 @@
 import "../stdlib/prelude";
 import "diag";
 import "llvm_emit";
+import "source_map";
 
 fn main() -> Int
 intent "Stage1 self-host bootstrap (v0.8): emit stage2_lexer_ident_smoke LLVM IR and write to disk"
@@ -9,7 +10,7 @@ evidence {
   metrics [stage1_self_host_lexer_ident_calls];
 }
 {
-  let src_r: Result<Text, Text> = host_load_source_map("stage1/stage2_lexer_ident_smoke.kooix");
+  let src_r: Result<Text, Text> = s1_load_source_map("stage1/stage2_lexer_ident_smoke.kooix");
   match src_r {
     Err(m) => {
       host_eprintln(m);
@@ -36,4 +37,3 @@ evidence {
     };
   }
 };
-

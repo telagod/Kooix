@@ -1,9 +1,10 @@
 import "../stdlib/prelude";
 import "diag";
 import "lexer";
+import "source_map";
 
 fn main() -> Int {
-  let src_r: Result<Text, Text> = host_load_source_map("stage1/compiler_main.kooix");
+  let src_r: Result<Text, Text> = s1_load_source_map("stage1/compiler_main.kooix");
   match src_r {
     Err(m) => { host_eprintln(m); 2 };
     Ok(src) => {
@@ -24,4 +25,3 @@ fn main() -> Int {
     };
   }
 };
-
