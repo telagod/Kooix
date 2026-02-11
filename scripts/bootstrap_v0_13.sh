@@ -45,3 +45,18 @@ test -x "$STAGE3_BIN"
 
 echo "ok: $STAGE3_BIN"
 
+if [[ "${KX_SMOKE:-}" != "" ]]; then
+  echo "[smoke] stage3 compiler compiles stage2_min and runs it"
+  SMOKE_IR="/tmp/kooixc_stage3_stage2_min.ll"
+  SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-min"
+  rm -f "$SMOKE_IR" "$SMOKE_BIN"
+
+  "$STAGE3_BIN" stage1/stage2_min.kooix "$SMOKE_IR" >/dev/null
+  test -s "$SMOKE_IR"
+
+  cargo run -p kooixc -j "$JOBS" -- native-llvm "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  test -x "$SMOKE_BIN"
+  "$SMOKE_BIN" >/dev/null
+
+  echo "ok: smoke binary ran: $SMOKE_BIN"
+fi

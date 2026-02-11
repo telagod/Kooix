@@ -68,6 +68,12 @@
 # 产物：/tmp/kooixc-stage3
 ```
 
+可选 smoke（验证 stage3 compiler 可以编译 `stage1/stage2_min.kooix` 并运行产物）：
+
+```bash
+KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh /tmp
+```
+
 ### Gate 1（Stage1 落地后启用）
 
 - `kooixc0` 编译 `kooixc1`（生成可运行产物）

@@ -192,6 +192,12 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2
 # 产物：/tmp/kooixc-stage3
 ```
 
+可选 smoke（验证 stage3 compiler 可以编译 `stage1/stage2_min.kooix` 并运行产物）：
+
+```bash
+KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh /tmp
+```
+
 ## 余劫（主要风险）
 
 - **Backend 复杂度爆炸**：建议坚持“最小可运行子集 + 渐进覆盖”。
