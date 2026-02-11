@@ -45,7 +45,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - CLI 能力：`check`、`check-modules`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（`check-modules` 支持 `--json` / `--pretty`；`native-llvm` 可从 LLVM IR 文件直接产出 native bin）。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载（include-style）：顶层 `import "path";` / `import "path" as Foo;`
-  - 编译/解释执行主链路仍是“递归展开 + 拼接 source + normalize 剥离 namespace 前缀”的兼容语义（保持 Stage1 v0.x 自举链稳定）。
+  - 编译/解释执行主链路仍是 include-style（递归展开 + 拼接 source）的兼容语义；`Foo::...` 现已由 sema/lowering 直接解析（不再依赖 normalize 剥离 namespace 前缀）。
   - 已具备 module-aware semantic check 原型：库 API `check_entry_modules` 按文件构建 `ModuleGraph` 并做 per-module sema；支持检查 `Foo::bar(...)` / `Foo::T` / `Foo::Enum::Variant` 等限定引用（内部重写为 `Foo__bar` / `Foo__T`，并注入 stub 以隔离跨文件重名）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper；以及 `fs_read_text/fs_write_text/args_len/args_get` 薄封装）。
 - host intrinsics：`host_load_source_map`（兼容 loader）与 `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。另：Stage1 已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（Stage1 compiler driver 与 self-host drivers 已切换到此实现）。
@@ -209,7 +209,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 - 完整表达式系统与类型推导（当前仅实现函数体最小子集）
 - 逻辑与比较运算符：表达式暂不支持 `< <= > >= && ||`（`ensures` 的 predicate 比较单独支持）
 - 更完整的函数体 MIR/LLVM lowering 覆盖与运行语义（当前仅最小子集）
-- 完整模块系统 / 包管理（当前编译主链路仍是 include-style；但已具备 module-aware semantic check 原型，可检查 `Foo::...` 限定引用，尚未落到完整 lowering/codegen）
+- 完整模块系统 / 包管理（当前编译主链路仍是 include-style；虽已支持 `Foo::...` 在 sema/lowering 的直接解析，但尚未引入真正 module graph 驱动的 namespace/export/增量编译）
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
 - 运行时与标准库设计
 

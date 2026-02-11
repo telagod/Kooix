@@ -6,7 +6,7 @@ Kooix currently has two “import semantics” layers:
 
 - **Main compile/run pipeline (compat)**: include-style multi-file loading
   - `import "path";` recursively expands imported files and concatenates sources.
-  - `import "path" as Foo;` is accepted, and `Foo::...` prefixes are currently **normalized away** before semantic checks (to keep the Stage1 v0.x bootstrap chain stable).
+  - `import "path" as Foo;` is accepted, and `Foo::...` is now resolved directly in sema/lowering (no global namespace-prefix normalization required on the compile path).
 - **Module-aware semantic check (prototype)**: per-file semantic checks via `check_entry_modules`
   - Builds a `ModuleGraph` and type-checks each file’s `Program` separately.
   - Resolves qualified references like `Foo::bar(...)`, `Foo::T` (including record literals), and `Foo::Enum::Variant`.
@@ -97,6 +97,6 @@ Status:
 ## Stage1 Notes
 
 Stage1 already parses `import ... as <ns>` and uses `ns::Name` in some places.
-In the main Stage0 pipeline today we normalize away `ns::` prefixes to keep Stage1 running under include-style semantics.
+In the current Stage0 compile path, `ns::` prefixes are resolved directly by sema/lowering while keeping include-style loading semantics.
 
 Once Stage0 implements real modules, Stage1 can migrate gradually by switching imports to the namespace form.

@@ -47,7 +47,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - CLI commands: `check`, `check-modules`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (`check-modules` supports `--json` / `--pretty`; `native-llvm` builds native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading (include-style): top-level `import "path";` / `import "path" as Foo;`
-  - The main compile/run pipeline still uses the compat semantics: recursively expand imports, concatenate sources, then normalize away namespace prefixes (keeps the Stage1 v0.x bootstrap chain stable).
+  - The main compile/run pipeline still uses include-style compat semantics (recursive import expansion + concatenated source); `Foo::...` is now resolved directly in sema/lowering (no normalize prefix stripping required).
   - There is now a prototype module-aware semantic check: library API `check_entry_modules` builds a per-file `ModuleGraph` and runs semantic checks per module; it can validate qualified references like `Foo::bar(...)`, `Foo::T`, and `Foo::Enum::Variant` (internally rewritten to `Foo__bar` / `Foo__T` with injected stubs to isolate cross-file name collisions).
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers; plus thin wrappers `fs_read_text/fs_write_text/args_len/args_get`).
 - Host intrinsics: `host_load_source_map` (compat loader) plus `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file` (used for bootstrap; implemented in native runtime). Also: Stage1 now has a Kooix include loader `stage1/source_map.kooix:s1_load_source_map` (the Stage1 compiler driver and self-host drivers use this path).
@@ -208,7 +208,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 - borrow checker
 - full expression system and type inference
 - logical and comparison operators: expressions do not support `< <= > >= && ||` yet (predicate comparisons in `ensures` are separate)
-- full module system / package management (the main compile pipeline is still include-style; a module-aware semantic-check prototype exists, but lowering/codegen is not module-aware yet)
+- full module system / package management (the main compile pipeline is still include-style; `Foo::...` now resolves directly in sema/lowering, but there is still no true module-graph-driven namespace/export/incremental compilation)
 - optimizer and full LLVM codegen (current backend is text-oriented)
 - runtime and standard library design
 

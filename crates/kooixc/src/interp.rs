@@ -690,7 +690,7 @@ fn eval_expr(
                 }
             }
             Ok(Value::Record {
-                name: ty.name.clone(),
+                name: ty.head().to_string(),
                 fields: values,
             })
         }
@@ -768,6 +768,25 @@ fn eval_expr(
                         function.span,
                     )),
                 },
+                [_, enum_name, variant] => match variants.get_qualified(enum_name, variant) {
+                    Some(info) if !info.has_payload => Ok(Value::Enum {
+                        name: info.enum_name.clone(),
+                        variant: variant.clone(),
+                        payload: None,
+                    }),
+                    Some(_) => Err(Diagnostic::error(
+                        format!(
+                            "enum variant '{}' requires a payload (use '{}(...)')",
+                            segments.join("."),
+                            segments.join(".")
+                        ),
+                        function.span,
+                    )),
+                    None => Err(Diagnostic::error(
+                        format!("unknown variable '{}'", segments.join(".")),
+                        function.span,
+                    )),
+                },
                 _ => Err(Diagnostic::error(
                     format!("unknown variable '{}'", segments.join(".")),
                     function.span,
@@ -777,8 +796,15 @@ fn eval_expr(
         Expr::Call { target, args, .. } => {
             let target_display = target.join(".");
 
-            if target.len() == 1 {
-                let name = target[0].as_str();
+            let function_target = match target.as_slice() {
+                [name] => Some(name.as_str()),
+                [enum_or_ns, name] if variants.get_qualified(enum_or_ns, name).is_none() => {
+                    Some(name.as_str())
+                }
+                _ => None,
+            };
+
+            if let Some(name) = function_target {
                 if let Some(callee) = functions.get(name) {
                     let mut values = Vec::new();
                     for arg in args {
@@ -813,6 +839,18 @@ fn eval_expr(
                         ));
                     };
                     (info, variant, format!("{}.{}", enum_name, variant))
+                }
+                [_, enum_name, variant] => {
+                    let Some(info) = variants.get_qualified(enum_name, variant) else {
+                        return Err(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}'",
+                                function.name, target_display
+                            ),
+                            function.span,
+                        ));
+                    };
+                    (info, variant, target_display.clone())
                 }
                 _ => {
                     return Err(Diagnostic::error(
@@ -938,6 +976,9 @@ fn eval_expr(
                         Value::Enum { name, variant, .. } => match path.as_slice() {
                             [pat_variant] => variant == pat_variant,
                             [pat_enum, pat_variant] => name == pat_enum && variant == pat_variant,
+                            [_, pat_enum, pat_variant] => {
+                                name == pat_enum && variant == pat_variant
+                            }
                             _ => {
                                 return Err(Diagnostic::error(
                                     format!("match arm uses invalid pattern '{}'", path.join(".")),
@@ -977,6 +1018,9 @@ fn eval_expr(
                                     [pat_enum, pat_variant] => {
                                         name == pat_enum && variant == pat_variant
                                     }
+                                    [_, pat_enum, pat_variant] => {
+                                        name == pat_enum && variant == pat_variant
+                                    }
                                     _ => {
                                         env.pop_scope();
                                         return Err(Diagnostic::error(
@@ -1010,6 +1054,9 @@ fn eval_expr(
                                 let matches = match path.as_slice() {
                                     [pat_variant] => variant == pat_variant,
                                     [pat_enum, pat_variant] => {
+                                        name == pat_enum && variant == pat_variant
+                                    }
+                                    [_, pat_enum, pat_variant] => {
                                         name == pat_enum && variant == pat_variant
                                     }
                                     _ => {

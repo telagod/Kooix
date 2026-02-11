@@ -86,6 +86,13 @@ pub fn load_source_map_with_module_graph(
 pub fn load_module_programs(
     entry: &Path,
 ) -> Result<(ModuleGraph, Vec<LoadedModule>), Vec<Diagnostic>> {
+    let (_map, graph, modules) = load_module_programs_with_source_map(entry)?;
+    Ok((graph, modules))
+}
+
+pub fn load_module_programs_with_source_map(
+    entry: &Path,
+) -> Result<(SourceMap, ModuleGraph, Vec<LoadedModule>), Vec<Diagnostic>> {
     let (map, graph) = load_source_map_with_module_graph(entry)?;
 
     let mut modules = Vec::new();
@@ -100,7 +107,7 @@ pub fn load_module_programs(
         });
     }
 
-    Ok((graph, modules))
+    Ok((map, graph, modules))
 }
 
 struct Loader {

@@ -2489,9 +2489,7 @@ fn infer_expr_type_with_expected(
                         return None;
                     }
                 }
-            } else if segments.len() == 2 {
-                let enum_name = segments[0].as_str();
-                let variant = segments[1].as_str();
+            } else if let [enum_name, variant] | [_, enum_name, variant] = segments.as_slice() {
                 let Some((schema, payload)) =
                     resolve_enum_variant_qualified(enum_name, variant, declared_enum_types)
                 else {
@@ -2506,11 +2504,12 @@ fn infer_expr_type_with_expected(
                     return None;
                 };
 
+                let variant_display = segments.join(".");
                 if payload.is_some() {
                     diagnostics.push(Diagnostic::error(
                         format!(
-                            "function '{}' uses enum variant '{}.{}' without a payload (expected '{}.{}(<expr>)')",
-                            function.name, enum_name, variant, enum_name, variant
+                            "function '{}' uses enum variant '{}' without a payload (expected '{}(<expr>)')",
+                            function.name, variant_display, variant_display
                         ),
                         function.span,
                     ));
@@ -2557,8 +2556,18 @@ fn infer_expr_type_with_expected(
         } => {
             let target_display = target.join(".");
 
-            if target.len() == 1 {
-                let name = target[0].as_str();
+            let function_target = match target.as_slice() {
+                [name] => Some(name.as_str()),
+                [enum_or_ns, name]
+                    if resolve_enum_variant_qualified(enum_or_ns, name, declared_enum_types)
+                        .is_none() =>
+                {
+                    Some(name.as_str())
+                }
+                _ => None,
+            };
+
+            if let Some(name) = function_target {
                 if let Some(signature) = signatures.get(name) {
                     let mut expected_params: Vec<TypeRef> = signature.params.clone();
                     let mut expected_return: TypeRef = signature.return_type.clone();
@@ -2772,6 +2781,21 @@ fn infer_expr_type_with_expected(
                     } => (enum_name, schema, payload, variant.as_str()),
                 },
                 [enum_name, variant] => {
+                    let Some((schema, payload)) =
+                        resolve_enum_variant_qualified(enum_name, variant, declared_enum_types)
+                    else {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' calls unknown target '{}' in body",
+                                function.name, target_display
+                            ),
+                            function.span,
+                        ));
+                        return None;
+                    };
+                    (enum_name.as_str(), schema, payload, target_display.as_str())
+                }
+                [_, enum_name, variant] => {
                     let Some((schema, payload)) =
                         resolve_enum_variant_qualified(enum_name, variant, declared_enum_types)
                     else {
@@ -3059,6 +3083,7 @@ fn infer_expr_type_with_expected(
                         let (enum_qual, variant_name) = match path.as_slice() {
                             [variant] => (None, variant),
                             [enum_name, variant] => (Some(enum_name.as_str()), variant),
+                            [_, enum_name, variant] => (Some(enum_name.as_str()), variant),
                             _ => {
                                 diagnostics.push(Diagnostic::error(
                                     format!(

@@ -755,11 +755,11 @@ impl<'a> MirBuilder<'a> {
                                 },
                             });
                         cur_op = MirOperand::Local(temp);
-                    } else if segments.len() == 2 {
-                        // Qualified unit variant: Enum::Variant
-                        let enum_name = first.as_str();
-                        let variant_name = segments[1].as_str();
-                        let Some(enum_decl) = self.enums.get(enum_name) else {
+                    } else if let [enum_name, variant_name] | [_, enum_name, variant_name] =
+                        segments.as_slice()
+                    {
+                        // Qualified unit variant: Enum::Variant or Ns::Enum::Variant
+                        let Some(enum_decl) = self.enums.get(enum_name.as_str()) else {
                             return Err(Diagnostic::error(
                                 format!(
                                     "function '{}' uses unknown local '{}' in body",
@@ -771,7 +771,7 @@ impl<'a> MirBuilder<'a> {
                         let Some(variant) = enum_decl
                             .variants
                             .iter()
-                            .find(|variant| variant.name == variant_name)
+                            .find(|variant| variant.name == *variant_name)
                         else {
                             return Err(Diagnostic::error(
                                 format!(
@@ -970,9 +970,25 @@ impl<'a> MirBuilder<'a> {
                     ));
                 }
 
-                // Function call (unqualified only).
-                if target.len() == 1 {
-                    let callee = target[0].clone();
+                // Function call (unqualified or namespace-qualified alias).
+                let function_target = match target.as_slice() {
+                    [name] => Some(name.clone()),
+                    [enum_or_ns, name] => {
+                        let looks_like_enum_variant = self
+                            .enums
+                            .get(enum_or_ns)
+                            .map(|en| en.variants.iter().any(|variant| variant.name == *name))
+                            .unwrap_or(false);
+                        if looks_like_enum_variant {
+                            None
+                        } else {
+                            Some(name.clone())
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(callee) = function_target {
                     if let Some(signature) = self.signatures.get(&callee) {
                         if signature.has_generics {
                             return Err(Diagnostic::error(
@@ -1045,6 +1061,7 @@ impl<'a> MirBuilder<'a> {
                 let (enum_name, variant_name) = match target.as_slice() {
                     [variant] => (None, variant.as_str()),
                     [enum_name, variant] => (Some(enum_name.as_str()), variant.as_str()),
+                    [_, enum_name, variant] => (Some(enum_name.as_str()), variant.as_str()),
                     _ => {
                         return Err(Diagnostic::error(
                             format!(
@@ -1276,6 +1293,7 @@ impl<'a> MirBuilder<'a> {
                     let variant_name = match path.as_slice() {
                         [v] => v.as_str(),
                         [en, v] if en.as_str() == enum_decl.name => v.as_str(),
+                        [_, en, v] if en.as_str() == enum_decl.name => v.as_str(),
                         _ => continue,
                     };
                     if let Some(variant) = enum_decl
@@ -1336,6 +1354,18 @@ impl<'a> MirBuilder<'a> {
                     let variant_name = match path.as_slice() {
                         [v] => v.as_str(),
                         [en, v] => {
+                            if en.as_str() != enum_decl.name {
+                                return Err(Diagnostic::error(
+                                    format!(
+                                        "function '{}' match pattern targets different enum '{}'",
+                                        self.function.name, en
+                                    ),
+                                    self.function.span,
+                                ));
+                            }
+                            v.as_str()
+                        }
+                        [_, en, v] => {
                             if en.as_str() != enum_decl.name {
                                 return Err(Diagnostic::error(
                                     format!(

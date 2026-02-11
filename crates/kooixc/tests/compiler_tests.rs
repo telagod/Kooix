@@ -64,6 +64,44 @@ fn main() -> Int { return Foo::id(1); };
 }
 
 #[test]
+fn lowers_mir_with_import_namespace_qualified_function_calls() {
+    let source = r#"
+import "import_lib" as Foo;
+fn id(x: Int) -> Int { x };
+fn main() -> Int { Foo::id(1) };
+"#;
+
+    let mir = lower_to_mir_source(source).expect("mir lowering should succeed");
+    let mir_debug = format!("{mir:#?}");
+    assert!(
+        mir_debug.contains("callee: \"id\""),
+        "unexpected mir: {mir_debug}"
+    );
+}
+
+#[test]
+fn runs_interpreter_with_import_namespace_qualified_enum_variants() {
+    let source = r#"
+import "import_lib" as Foo;
+
+enum Option<T> { Some(T); None; };
+fn mk(x: Int) -> Option<Int> { Option::Some(x) };
+
+fn main() -> Int {
+  let o: Foo::Option<Int> = Foo::mk(7);
+  match o {
+    Foo::Option::Some(v) => v;
+    Foo::Option::None => 0;
+  }
+};
+"#;
+
+    let result = run_source(source).expect("run should succeed");
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.value, Value::Int(7));
+}
+
+#[test]
 fn rejects_duplicate_import_namespaces() {
     let source = r#"
 import "import_lib" as Foo;

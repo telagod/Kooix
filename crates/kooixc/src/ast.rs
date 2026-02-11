@@ -331,7 +331,7 @@ pub struct LoopSpec {
     pub stop_when: EnsureClause,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct TypeRef {
     pub name: String,
     pub args: Vec<TypeArg>,
@@ -346,9 +346,17 @@ pub enum TypeArg {
 
 impl TypeRef {
     pub fn head(&self) -> &str {
-        &self.name
+        self.name.rsplit("::").next().unwrap_or(&self.name)
     }
 }
+
+impl PartialEq for TypeRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.head() == other.head() && self.args == other.args
+    }
+}
+
+impl Eq for TypeRef {}
 
 impl fmt::Display for TypeRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
