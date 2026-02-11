@@ -3749,6 +3749,35 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         "stage3 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"
     );
 
+    // Optional determinism gate: re-run stage2 compiler in a new process and ensure the output matches.
+    // Enabled only when explicitly requested to avoid making the default test path heavier.
+    if std::env::var_os("KX_DETERMINISM").is_some() {
+        let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler_2.ll");
+        let args2: Vec<String> = vec![
+            "stage1/compiler_main.kooix".to_string(),
+            "/tmp/kooixc_stage3_stage1_compiler_2.ll".to_string(),
+        ];
+        let stage2_out_2 =
+            run_executable_with_args_and_stdin_and_timeout(&stage2, &args2, None, Some(120_000))
+                .expect("stage2 compiler binary should run (second pass)");
+        assert_eq!(stage2_out_2.status_code, Some(0));
+
+        let ir2b = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler_2.ll")
+            .expect("stage2 compiler should write /tmp/kooixc_stage3_stage1_compiler_2.ll");
+        let stage3_hash_2 = fnv1a64(ir2b.as_bytes());
+        eprintln!(
+            "bootstrap v0.13: stage3 (pass2) IR bytes={} fnv1a64={:016x}",
+            ir2b.len(),
+            stage3_hash_2
+        );
+        assert_eq!(
+            stage3_hash_2, stage3_hash,
+            "stage2 compiler should be deterministic across processes (stage3 IR fingerprint mismatch)"
+        );
+
+        let _ = std::fs::remove_file("/tmp/kooixc_stage3_stage1_compiler_2.ll");
+    }
+
     // (Optional deeper step) Link+run the stage3 LLVM IR as a standalone binary and emit stage4 IR.
     let stage3 = std::env::temp_dir().join("kooixc-stage3-from-stage2-ll-stage1-compiler-main");
     let _ = std::fs::remove_file(&stage3);
