@@ -3830,6 +3830,45 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         "stage4 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"
     );
 
+    // Optional deep gate: link stage4 IR into a stage4 compiler binary, then run it to emit stage5 IR.
+    // Kept behind an env flag since it adds another native toolchain roundtrip.
+    if std::env::var_os("KX_DEEP").is_some() {
+        let stage4 = std::env::temp_dir().join("kooixc-stage4-from-stage3-ll-stage1-compiler-main");
+        let _ = std::fs::remove_file(&stage4);
+        compile_llvm_ir_to_executable(&ir3, &stage4)
+            .expect("native-llvm build for stage4 should succeed");
+
+        let _ = std::fs::remove_file("/tmp/kooixc_stage5_stage1_compiler.ll");
+        let args_stage4: Vec<String> = vec![
+            "stage1/compiler_main.kooix".to_string(),
+            "/tmp/kooixc_stage5_stage1_compiler.ll".to_string(),
+        ];
+        let stage4_out = run_executable_with_args_and_stdin_and_timeout(
+            &stage4,
+            &args_stage4,
+            None,
+            Some(120_000),
+        )
+        .expect("stage4 compiler binary should run");
+        assert_eq!(stage4_out.status_code, Some(0));
+
+        let ir4 = std::fs::read_to_string("/tmp/kooixc_stage5_stage1_compiler.ll")
+            .expect("stage4 compiler should write /tmp/kooixc_stage5_stage1_compiler.ll");
+        let stage5_hash = fnv1a64(ir4.as_bytes());
+        eprintln!(
+            "bootstrap v0.13: stage5 IR bytes={} fnv1a64={:016x}",
+            ir4.len(),
+            stage5_hash
+        );
+        assert_eq!(
+            stage5_hash, stage2_hash,
+            "stage5 compiler should emit the same IR fingerprint as stage2 (deep reproducibility signal)"
+        );
+
+        let _ = std::fs::remove_file(&stage4);
+        let _ = std::fs::remove_file("/tmp/kooixc_stage5_stage1_compiler.ll");
+    }
+
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file(&stage2);
     let _ = std::fs::remove_file(&stage3);

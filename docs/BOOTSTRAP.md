@@ -22,6 +22,7 @@
 - 补充：bootstrap v0.13 测试已验证 stage3 LLVM IR 可链接运行并 emit stage4 LLVM IR（`/tmp/kooixc_stage4_stage1_compiler.ll`）；同时记录每一阶段 IR 的 bytes + fnv1a64 指纹，并断言 stage2/stage3/stage4 指纹一致，作为后续 deterministic build 的追踪信号。
 - 可选：设置 `KX_DETERMINISM=1` 时，测试会让 stage2 compiler 额外再跑一遍 emit stage3 IR，并断言跨进程输出指纹一致（默认关闭以降低资源占用）。
 - 可选：设置 `KX_GOLDEN=1` 时，测试会将 stage2 IR 的 bytes + fnv1a64 与 `crates/kooixc/tests/fixtures/bootstrap_v0_13_stage1_compiler_ir.txt` 对比；用 `KX_UPDATE_GOLDENS=1` 可更新该 golden。
+- 可选：设置 `KX_DEEP=1` 时，测试会额外将 stage4 IR 链接为 stage4 compiler binary，并运行它 emit stage5 IR，再对比指纹一致性（更深的可复现信号）。
 - L1 Self-Check（局部）：`kooixc0` 已可对 `stage1/self_host_main.kooix` 做 `check` 并通过（语义检查闭环起步）。
 - 结论：距离 **L2** 仍差一个可运行的 runtime/stdlib，以及更完整的 `Kooix-Core`（当前已具备 include 风格 `import` 多文件加载，但仍缺 module/namespace/export、集合与错误处理等，才能写编译器本体）。
 
