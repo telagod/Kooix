@@ -102,9 +102,24 @@ fn main() {
 
     let entry_path = Path::new(file);
     if command == "check-modules" {
+        let options = match parse_check_modules_options(&args[3..]) {
+            Ok(options) => options,
+            Err(message) => {
+                eprintln!("{message}");
+                print_usage();
+                process::exit(2);
+            }
+        };
+
         match check_entry_modules(entry_path) {
             Ok(results) => {
-                if results.iter().all(|result| result.diagnostics.is_empty()) {
+                let has_diagnostics = results.iter().any(|result| !result.diagnostics.is_empty());
+                if options.json {
+                    print_module_diagnostics_json(&results);
+                    if has_diagnostics {
+                        process::exit(1);
+                    }
+                } else if !has_diagnostics {
                     println!("ok: module semantic checks passed");
                 } else {
                     print_module_diagnostics(&results);
@@ -112,8 +127,12 @@ fn main() {
                 }
             }
             Err(errors) => {
-                for error in errors {
-                    eprintln!("error: {}", error.message);
+                if options.json {
+                    print_loader_diagnostics_json(&errors);
+                } else {
+                    for error in errors {
+                        eprintln!("error: {}", error.message);
+                    }
                 }
                 process::exit(2);
             }
@@ -311,6 +330,93 @@ fn print_module_diagnostics(results: &[ModuleCheckResult]) {
     }
 }
 
+fn print_module_diagnostics_json(results: &[ModuleCheckResult]) {
+    let mut out = String::new();
+    out.push_str("{\"ok\":");
+    out.push_str(
+        if results.iter().all(|result| result.diagnostics.is_empty()) {
+            "true"
+        } else {
+            "false"
+        },
+    );
+    out.push_str(",\"modules\":[");
+
+    for (module_index, result) in results.iter().enumerate() {
+        if module_index > 0 {
+            out.push(',');
+        }
+
+        out.push_str("{\"path\":\"");
+        out.push_str(&escape_json_string(&result.path.display().to_string()));
+        out.push_str("\",\"diagnostics\":[");
+        for (diagnostic_index, diagnostic) in result.diagnostics.iter().enumerate() {
+            if diagnostic_index > 0 {
+                out.push(',');
+            }
+
+            out.push_str("{\"severity\":\"");
+            out.push_str(diagnostic_severity_label(diagnostic.severity));
+            out.push_str("\",\"message\":\"");
+            out.push_str(&escape_json_string(&diagnostic.message));
+            out.push_str("\",\"span\":{\"start\":");
+            out.push_str(&diagnostic.span.start.to_string());
+            out.push_str(",\"end\":");
+            out.push_str(&diagnostic.span.end.to_string());
+            out.push_str("}}");
+        }
+        out.push_str("]}");
+    }
+
+    out.push_str("]}");
+    println!("{out}");
+}
+
+fn print_loader_diagnostics_json(errors: &[Diagnostic]) {
+    let mut out = String::new();
+    out.push_str("{\"ok\":false,\"phase\":\"load\",\"errors\":[");
+
+    for (index, error) in errors.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push_str("{\"severity\":\"");
+        out.push_str(diagnostic_severity_label(error.severity));
+        out.push_str("\",\"message\":\"");
+        out.push_str(&escape_json_string(&error.message));
+        out.push_str("\",\"span\":{\"start\":");
+        out.push_str(&error.span.start.to_string());
+        out.push_str(",\"end\":");
+        out.push_str(&error.span.end.to_string());
+        out.push_str("}}");
+    }
+
+    out.push_str("]}");
+    println!("{out}");
+}
+
+fn diagnostic_severity_label(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+    }
+}
+
+fn escape_json_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
 fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
     let mut line = 1;
     let mut col = 1;
@@ -330,7 +436,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|check-modules|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 
@@ -352,6 +458,30 @@ struct NativeOptions {
     run_args: Vec<String>,
     stdin_path: Option<String>,
     timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CheckModulesOptions {
+    json: bool,
+}
+
+fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, String> {
+    let mut json = false;
+
+    for arg in args {
+        if arg == "--json" {
+            json = true;
+            continue;
+        }
+
+        if arg.starts_with("--") {
+            return Err(format!("unknown check-modules option '{arg}'"));
+        }
+
+        return Err(format!("unexpected check-modules argument '{arg}'"));
+    }
+
+    Ok(CheckModulesOptions { json })
 }
 
 fn parse_native_options(args: &[String]) -> Result<NativeOptions, String> {
@@ -443,7 +573,37 @@ fn parse_native_options(args: &[String]) -> Result<NativeOptions, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_native_options, NativeOptions};
+    use super::{
+        parse_check_modules_options, parse_native_options, CheckModulesOptions, NativeOptions,
+    };
+
+    #[test]
+    fn parses_check_modules_defaults() {
+        let args: Vec<String> = vec![];
+        let options = parse_check_modules_options(&args).expect("should parse");
+        assert_eq!(options, CheckModulesOptions { json: false });
+    }
+
+    #[test]
+    fn parses_check_modules_json_option() {
+        let args = vec!["--json".to_string()];
+        let options = parse_check_modules_options(&args).expect("should parse");
+        assert_eq!(options, CheckModulesOptions { json: true });
+    }
+
+    #[test]
+    fn rejects_unknown_check_modules_option() {
+        let args = vec!["--bad".to_string()];
+        let error = parse_check_modules_options(&args).expect_err("should fail");
+        assert!(error.contains("unknown check-modules option"));
+    }
+
+    #[test]
+    fn rejects_unexpected_check_modules_argument() {
+        let args = vec!["output.json".to_string()];
+        let error = parse_check_modules_options(&args).expect_err("should fail");
+        assert!(error.contains("unexpected check-modules argument"));
+    }
 
     #[test]
     fn parses_native_defaults() {

@@ -78,3 +78,82 @@ fn check_modules_command_reports_qualified_import_errors() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn check_modules_json_output_reports_ok_state() {
+    let dir = make_temp_dir("check-modules-json-pass");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::helper() + 1 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--json")
+        .output()
+        .expect("run check-modules --json");
+
+    assert!(
+        output.status.success(),
+        "check-modules --json should pass, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":true"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"modules\""),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(stdout.contains("main.kooix"), "unexpected stdout: {stdout}");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_modules_json_output_reports_errors() {
+    let dir = make_temp_dir("check-modules-json-fail");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::missing() + 1 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--json")
+        .output()
+        .expect("run check-modules --json");
+
+    assert_eq!(output.status.code(), Some(1));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":false"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("unknown imported function 'Lib::missing'"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"severity\":\"error\""),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

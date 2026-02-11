@@ -121,6 +121,9 @@ cargo run -p kooixc -- check examples/valid.kooix
 # Module-aware semantic checks (per-file + qualified imports)
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix
 
+# Module-aware semantic checks (JSON output for CI/scripts)
+cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json
+
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix

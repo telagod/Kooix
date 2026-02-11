@@ -119,6 +119,9 @@ cargo run -p kooixc -- check examples/valid.kooix
 # 模块感知语义检查（按文件 + qualified import）
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix
 
+# 模块感知语义检查（JSON 输出，便于 CI/脚本消费）
+cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json
+
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
