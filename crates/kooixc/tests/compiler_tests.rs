@@ -3708,6 +3708,26 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         ir.len(),
         stage2_hash
     );
+
+    let golden_line = format!("bytes={} fnv1a64={:016x}\n", ir.len(), stage2_hash);
+    let golden_path = repo_root.join("crates/kooixc/tests/fixtures/bootstrap_v0_13_stage1_compiler_ir.txt");
+    if std::env::var_os("KX_UPDATE_GOLDENS").is_some() {
+        std::fs::create_dir_all(golden_path.parent().expect("golden parent")).expect("create golden dir");
+        std::fs::write(&golden_path, golden_line.as_bytes()).expect("write golden");
+        eprintln!("bootstrap v0.13: updated golden at {}", golden_path.display());
+    } else if std::env::var_os("KX_GOLDEN").is_some() {
+        let expected = std::fs::read_to_string(&golden_path).unwrap_or_else(|_| {
+            panic!(
+                "missing golden file at {} (run with KX_UPDATE_GOLDENS=1 to generate)",
+                golden_path.display()
+            )
+        });
+        assert_eq!(
+            expected, golden_line,
+            "bootstrap v0.13 golden mismatch (run with KX_UPDATE_GOLDENS=1 to update)"
+        );
+    }
+
     assert!(
         ir.contains("define i64 @kx_program_main"),
         "emitted LLVM IR should contain entrypoint"
