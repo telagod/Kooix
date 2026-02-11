@@ -60,6 +60,11 @@ This split allows gradual migration:
   - edges: imports (with optional alias)
 - Keep current combined-source path as a debug output only.
 
+Status:
+
+- ✅ Loader now exposes a lightweight `ModuleGraph` and can parse each loaded file into its own `Program` (`load_module_programs`).
+- ✅ A prototype `check_entry_modules` API can run semantic checks per-file (and currently supports rewriting `Foo::bar(...)` into an internal name + injecting imported stubs for qualified calls).
+
 ### Step 2: Name resolution rules
 
 - Maintain symbol tables keyed by `(module_id, name)`.
@@ -87,4 +92,3 @@ Stage1 already parses `import ... as <ns>` and uses `ns::Name` in some places.
 In Stage0 today we normalize away `ns::` prefixes to keep Stage1 running under include-style semantics.
 
 Once Stage0 implements real modules, Stage1 can migrate gradually by switching imports to the namespace form.
-
