@@ -164,6 +164,9 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Bootstrap: build a stage3 compiler binary
 ./scripts/bootstrap_v0_13.sh
 
+# Reuse existing dist/kooixc-stage3 (avoid rebuild, lower resource usage)
+KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
+
 # Shortest loop: use dist/kooixc1 to compile+link a program (stage2_min)
 ./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
 /tmp/kx-stage2-min

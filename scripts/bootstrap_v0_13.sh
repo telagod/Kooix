@@ -32,25 +32,36 @@ STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
 STAGE3_ALIAS="${OUT_DIR%/}/kooixc1"
 STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
 
-rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
+if [[ "${KX_REUSE_STAGE3:-}" != "" && -x "$STAGE3_BIN" ]]; then
+  echo "[reuse] using existing stage3 compiler: $STAGE3_BIN"
+else
+  if [[ "${KX_REUSE_STAGE3:-}" != "" ]]; then
+    echo "[reuse] requested but missing stage3 compiler; rebuilding: $STAGE3_BIN"
+  fi
 
-echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
-cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
-test -s "$STAGE2_IR"
-test -x "$STAGE2_BIN_SRC"
+  rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
 
-if [[ "$STAGE2_BIN" != "$STAGE2_BIN_SRC" ]]; then
-  cp "$STAGE2_BIN_SRC" "$STAGE2_BIN"
+  echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
+  cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
+  test -s "$STAGE2_IR"
+  test -x "$STAGE2_BIN_SRC"
+
+  if [[ "$STAGE2_BIN" != "$STAGE2_BIN_SRC" ]]; then
+    cp "$STAGE2_BIN_SRC" "$STAGE2_BIN"
+  fi
+  test -x "$STAGE2_BIN"
+
+  echo "[2/2] stage2 compiler -> stage3 IR -> stage3 compiler"
+  "$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
+  test -s "$STAGE3_IR"
+  test -x "$STAGE3_BIN"
+
+  echo "ok: $STAGE3_BIN"
 fi
-test -x "$STAGE2_BIN"
 
-echo "[2/2] stage2 compiler -> stage3 IR -> stage3 compiler"
-"$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
-test -s "$STAGE3_IR"
-test -x "$STAGE3_BIN"
-
-echo "ok: $STAGE3_BIN"
-cp "$STAGE3_BIN" "$STAGE3_ALIAS"
+if [[ "$STAGE3_ALIAS" != "$STAGE3_BIN" ]]; then
+  cp "$STAGE3_BIN" "$STAGE3_ALIAS"
+fi
 echo "ok: $STAGE3_ALIAS"
 
 if [[ "${KX_SMOKE_S1_CORE:-}" != "" ]]; then

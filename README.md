@@ -162,6 +162,9 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # 自举：产出 stage3 compiler（二进制）
 ./scripts/bootstrap_v0_13.sh
 
+# 复用已有 dist/kooixc-stage3（避免重复重建，降低资源占用）
+KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
+
 # 最短闭环：用 dist/kooixc1 编译并链接一个程序（stage2_min）
 ./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
 /tmp/kx-stage2-min

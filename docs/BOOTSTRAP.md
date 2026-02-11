@@ -78,6 +78,7 @@
 ```
 
 > 资源策略：`scripts/bootstrap_v0_13.sh` 默认 `CARGO_BUILD_JOBS=1`，优先保守占用。
+> 复用策略：可设置 `KX_REUSE_STAGE3=1` 直接复用已存在的 `dist/kooixc-stage3`，跳过 stage1->stage3 重建。
 
 可选 smoke（验证 stage3 compiler 可以编译 `stage1/stage2_min.kooix` 并运行产物）：
 
@@ -115,6 +116,12 @@ KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh
 
 ```bash
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
+```
+
+若已构建过 `dist/kooixc-stage3`，可复用产物跑 smoke：
+
+```bash
+CARGO_BUILD_JOBS=1 KX_REUSE_STAGE3=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
 一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环；本地默认不跑 deterministic 对比）：
