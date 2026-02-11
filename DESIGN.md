@@ -110,7 +110,7 @@ agent <name>(<params>) -> <TypeRef>
 - `native --run` 通过 `-- <args...>` 透传运行参数。
 - `native --run --stdin <file>` 支持向子进程注入 stdin（`-` 表示读取当前进程 stdin）。
 - `native --run --timeout <ms>` 支持运行超时控制，超时后强制终止子进程。
-- 支持最小 `import` 多文件加载（CLI loader 拼接源文件）；尚无 module/namespace/export 与包管理。
+- 支持最小 `import` 多文件加载（include 风格；`import "path";` / `import "path" as Foo;`；`Foo::bar`/`Foo::T` 仅作为可选 namespace 前缀在 normalize 阶段被剥离，尚无真正 module/namespace/export 与包管理）。
 
 ## 兼容与迁移
 
@@ -419,6 +419,13 @@ agent <name>(<params>) -> <TypeRef>
 - **变更理由**：自举编译器不可避免需要多文件组织（AST/lexer/parser/sema 等模块拆分）；先用 include 风格建立最短闭环，后续再演进为 module/namespace/export。
 - **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`lib.rs`、`loader.rs`、`main.rs` 与语法示例。
 - **决策依据**：保持实现可审计（无新依赖），优先提供可用的多文件工作流与更可读的 diagnostics，为后续真正模块系统打底。
+
+### 2026-02-11 - Phase 8.6.1：import namespace 前缀（语法层）+ `::` 路径分隔符
+
+- **变更内容**：`import "path" as Foo;` 声明可选 namespace 前缀；解析层新增 `as`/`::`；在语义分析前增加 normalize：将 `Foo::bar` / `Foo::T` 的 `Foo::` 前缀剥离为 `bar` / `T`；sema 增加 namespace 重名/与本地 item 冲突检查。
+- **变更理由**：在尚未引入真正 module system 的前提下，先提供“显式引用 imported symbol”的语法钩子，并为后续 module/namespace/export 演进预留语法空间。
+- **影响范围**：`token.rs`、`lexer.rs`、`ast.rs`、`parser.rs`、`loader.rs`、`normalize.rs`、`sema.rs`、文档与测试。
+- **决策依据**：将 namespace 作为纯语法前缀处理（normalize 剥离）以降低实现成本，同时通过静态检查防止明显误用（重名/冲突）。
 
 ### 2026-02-08 - Phase 8.7：stdlib prelude 起步 + call arg expected-type 推导
 

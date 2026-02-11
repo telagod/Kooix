@@ -27,6 +27,7 @@ pub struct CapabilityDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportDecl {
     pub path: String,
+    pub ns: Option<String>,
     pub span: Span,
 }
 

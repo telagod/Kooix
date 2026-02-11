@@ -28,6 +28,75 @@ fn summarize(doc: Text) -> Summary !{model(openai), net} requires [Model<"openai
 }
 
 #[test]
+fn parses_import_with_namespace_alias() {
+    let source = r#"
+import "import_lib" as Foo;
+fn main() -> Unit;
+"#;
+
+    let program = parse_source(source).expect("program should parse");
+    assert_eq!(program.items.len(), 2);
+
+    let import = match &program.items[0] {
+        Item::Import(import) => import,
+        _ => panic!("expected first item to be import"),
+    };
+
+    assert_eq!(import.path, "import_lib");
+    assert_eq!(import.ns.as_deref(), Some("Foo"));
+}
+
+#[test]
+fn accepts_import_namespace_prefix_in_paths_and_types() {
+    let source = r#"
+import "import_lib" as Foo;
+fn id(x: Foo::Int) -> Foo::Int { return x; };
+fn main() -> Int { return Foo::id(1); };
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "unexpected errors: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn rejects_duplicate_import_namespaces() {
+    let source = r#"
+import "import_lib" as Foo;
+import "import_lib" as Foo;
+fn main() -> Unit;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("duplicate import namespace 'Foo'")
+    }));
+}
+
+#[test]
+fn rejects_import_namespace_conflict_with_local_item() {
+    let source = r#"
+fn Foo() -> Unit;
+import "import_lib" as Foo;
+"#;
+
+    let diagnostics = check_source(source);
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error
+            && diagnostic
+                .message
+                .contains("import namespace 'Foo' conflicts with local item name")
+    }));
+}
+
+#[test]
 fn parses_function_with_intent_and_ensures() {
     let source = r#"
 fn score(doc: Text) -> Score intent "produce confidence score" ensures [output.confidence >= 0, output.confidence <= 1];

@@ -16,7 +16,7 @@ Item              = CapabilityDecl
 
 CapabilityDecl    = "cap" TypeRef ";" ;
 
-ImportDecl        = "import" StringLiteral ";" ;
+ImportDecl        = "import" StringLiteral [ "as" Identifier ] ";" ;
 
 (* ---------- Records ---------- *)
 
@@ -241,12 +241,16 @@ MatchExpr          = "match" Expr "{"
 MatchArm           = MatchPattern "=>" ( Block | Expr ) ";" ;
 
 MatchPattern       = "_"
-                  |  Identifier [ "." Identifier ] [ "(" Identifier ")" ]
+                  |  Identifier { PathSep Identifier } [ "(" Identifier ")" ]
                   ;
 
 CallExpr           = SymbolPath "(" [ Expr { "," Expr } ] ")" ;
 
-TypeRef           = Identifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
+PathSep           = "." | "::" ;
+
+NsIdentifier      = Identifier { "::" Identifier } ;
+
+TypeRef           = NsIdentifier [ "<" [ TypeArg { "," TypeArg } ] ">" ] ;
 
 TypeArg           = TypeRef
                   | StringLiteral
@@ -255,7 +259,7 @@ TypeArg           = TypeRef
 
 Identifier        = Letter { Letter | Digit | "_" } ;
 
-SymbolPath        = Identifier { "." Identifier } ;
+SymbolPath        = Identifier { PathSep Identifier } ;
 
 StringLiteral     = '"' { Character - '"' | EscapedChar } '"' ;
 

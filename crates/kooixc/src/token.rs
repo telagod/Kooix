@@ -4,6 +4,7 @@ use crate::error::Span;
 pub enum TokenKind {
     KwCap,
     KwImport,
+    KwAs,
     KwFn,
     KwWorkflow,
     KwAgent,
@@ -54,6 +55,7 @@ pub enum TokenKind {
     Plus,
     Dot,
     Colon,
+    ColonColon,
     Semicolon,
     Bang,
     Eq,

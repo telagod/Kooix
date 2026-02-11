@@ -65,7 +65,14 @@ impl<'a> Lexer<'a> {
                     b',' => self.single_char_token(TokenKind::Comma, start),
                     b'+' => self.single_char_token(TokenKind::Plus, start),
                     b'.' => self.single_char_token(TokenKind::Dot, start),
-                    b':' => self.single_char_token(TokenKind::Colon, start),
+                    b':' => {
+                        if self.peek_n(1) == Some(b':') {
+                            self.pos += 2;
+                            Token::new(TokenKind::ColonColon, Span::new(start, self.pos))
+                        } else {
+                            self.single_char_token(TokenKind::Colon, start)
+                        }
+                    }
                     b';' => self.single_char_token(TokenKind::Semicolon, start),
                     b'!' => {
                         if self.peek_n(1) == Some(b'=') {
@@ -150,6 +157,7 @@ impl<'a> Lexer<'a> {
         let kind = match value {
             "cap" => TokenKind::KwCap,
             "import" => TokenKind::KwImport,
+            "as" => TokenKind::KwAs,
             "fn" => TokenKind::KwFn,
             "workflow" => TokenKind::KwWorkflow,
             "agent" => TokenKind::KwAgent,

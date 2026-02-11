@@ -46,11 +46,11 @@ Kooix already has a runnable minimal compiler pipeline:
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (build native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
-- Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
+- Multi-file loading: top-level `import "path";` / `import "path" as Foo;` (include-style loader recursively expands and concatenates sources; `as` only declares an optional namespace prefix and does not form a real module/namespace/export system yet; before semantic analysis we normalize `Foo::bar` / `Foo::T` into `bar` / `T`).
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers; plus thin wrappers `fs_read_text/fs_write_text/args_len/args_get`).
 - Host intrinsics: `host_load_source_map` (compat loader) plus `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file` (used for bootstrap; implemented in native runtime). Also: Stage1 now has a Kooix include loader `stage1/source_map.kooix:s1_load_source_map` (the Stage1 compiler driver and self-host drivers use this path).
 - Bootstrap artifact: `./scripts/bootstrap_v0_13.sh` produces `dist/kooixc1` (stage3 compiler binary that can compile+link Kooix programs).
-- Enum variant namespacing: `Enum.Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).
+- Enum variant namespacing: `Enum.Variant` / `Enum::Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
 
@@ -88,6 +88,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.4: record literals + member projection (type checking + interpreter)
 - ✅ Phase 8.5: enum + match (type checking + interpreter)
 - ✅ Phase 8.6: Minimal multi-file import loading (include-style)
+- ✅ Phase 8.6.1: Import namespace prefix (`import \"path\" as Foo;` + `Foo::bar`/`Foo::T` normalization)
 - ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
 - ✅ Phase 8.8: Enum variant namespacing (`Enum.Variant`) + allow cross-enum duplicates
 - ✅ Phase 8.9: Function generics syntax + explicit call type args (minimal subset)

@@ -131,10 +131,40 @@ fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
                         path_token.span,
                     ));
                 };
-                if !matches!(
-                    tokens.get(idx + 2).map(|token| &token.kind),
-                    Some(TokenKind::Semicolon)
-                ) {
+                let next = tokens.get(idx + 2).map(|token| &token.kind);
+                let (end_idx, ok) = match next {
+                    Some(TokenKind::Semicolon) => (idx + 3, true),
+                    Some(TokenKind::KwAs) => {
+                        let Some(ns_token) = tokens.get(idx + 3) else {
+                            return Err(Diagnostic::error(
+                                "import declaration is missing a namespace after 'as'",
+                                span,
+                            ));
+                        };
+                        if !matches!(&ns_token.kind, TokenKind::Ident(_)) {
+                            return Err(Diagnostic::error(
+                                format!(
+                                    "import expects identifier after 'as', found {}",
+                                    token_kind_name(&ns_token.kind)
+                                ),
+                                ns_token.span,
+                            ));
+                        }
+                        if !matches!(
+                            tokens.get(idx + 4).map(|token| &token.kind),
+                            Some(TokenKind::Semicolon)
+                        ) {
+                            return Err(Diagnostic::error(
+                                "import declaration must end with ';'",
+                                span,
+                            ));
+                        }
+                        (idx + 5, true)
+                    }
+                    _ => (idx + 1, false),
+                };
+
+                if !ok {
                     return Err(Diagnostic::error(
                         "import declaration must end with ';'",
                         span,
@@ -142,7 +172,7 @@ fn collect_import_paths(tokens: &[Token]) -> Result<Vec<String>, Diagnostic> {
                 }
 
                 imports.push(path.clone());
-                idx += 3;
+                idx = end_idx;
                 continue;
             }
             _ => {}
@@ -173,6 +203,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
     match kind {
         TokenKind::KwCap => "'cap'",
         TokenKind::KwImport => "'import'",
+        TokenKind::KwAs => "'as'",
         TokenKind::KwFn => "'fn'",
         TokenKind::KwWorkflow => "'workflow'",
         TokenKind::KwAgent => "'agent'",
@@ -223,6 +254,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::Plus => "'+'",
         TokenKind::Dot => "'.'",
         TokenKind::Colon => "':'",
+        TokenKind::ColonColon => "'::'",
         TokenKind::Semicolon => "';'",
         TokenKind::Bang => "'!'",
         TokenKind::Eq => "'='",

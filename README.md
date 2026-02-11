@@ -44,11 +44,11 @@ Kooix 已完成一条可运行的最小编译链路：
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
 - CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（从 LLVM IR 文件直接产出 native bin）。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
-- 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
+- 多文件加载：顶层 `import "path";` / `import "path" as Foo;`（include 风格 loader 递归展开并拼接 source；`as` 仅声明“可选 namespace 前缀”，当前不形成真正 module/namespace/export 系统；语义分析前会将 `Foo::bar` / `Foo::T` 归一化为 `bar` / `T`）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper；以及 `fs_read_text/fs_write_text/args_len/args_get` 薄封装）。
 - host intrinsics：`host_load_source_map`（兼容 loader）与 `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。另：Stage1 已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（Stage1 compiler driver 与 self-host drivers 已切换到此实现）。
 - 自举产物：`./scripts/bootstrap_v0_13.sh` 可产出 `dist/kooixc1`（stage3 compiler binary，可用于编译+链接 Kooix 程序）。
-- enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
+- enum variant namespacing：支持 `Enum.Variant` / `Enum::Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
 
@@ -86,6 +86,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.4: record literal + member projection（类型校验 + interpreter）
 - ✅ Phase 8.5: enum + match（类型校验 + interpreter）
 - ✅ Phase 8.6: 最小 import 多文件加载（include 风格）
+- ✅ Phase 8.6.1: import namespace 前缀（`import "path" as Foo;` + `Foo::bar`/`Foo::T` 归一化）
 - ✅ Phase 8.7: 预置 stdlib（prelude）+ call arg expected-type 推导
 - ✅ Phase 8.8: enum variant namespacing（`Enum.Variant`）+ 跨 enum 重名放开
 - ✅ Phase 8.9: 函数泛型语法 + 显式 call type args（最小子集）

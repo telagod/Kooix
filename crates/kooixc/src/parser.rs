@@ -76,9 +76,17 @@ impl<'a> Parser<'a> {
                 self.current().span,
             ));
         };
+        let ns = if self.at_kw_as() {
+            self.expect_kw_as()?;
+            let (name, _) = self.expect_ident()?;
+            Some(name)
+        } else {
+            None
+        };
         let end = self.expect_semicolon()?.end;
         Ok(ImportDecl {
             path,
+            ns,
             span: Span::new(start, end),
         })
     }
@@ -986,7 +994,7 @@ impl<'a> Parser<'a> {
     fn parse_symbol_path(&mut self) -> Result<Vec<String>, Diagnostic> {
         let (head, _) = self.expect_ident()?;
         let mut segments = vec![head];
-        while self.at_dot() {
+        while self.at_dot() || self.at_coloncolon() {
             self.advance();
             let (segment, _) = self.expect_ident()?;
             segments.push(segment);
@@ -1063,7 +1071,7 @@ impl<'a> Parser<'a> {
                 let (head, _) = self.expect_ident()?;
                 segments.push(head);
             }
-            while self.at_dot() {
+            while self.at_dot() || self.at_coloncolon() {
                 self.advance();
                 let (segment, _) = self.expect_ident()?;
                 segments.push(segment);
@@ -1103,7 +1111,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_ref(&mut self) -> Result<TypeRef, Diagnostic> {
-        let (name, _) = self.expect_ident()?;
+        let (head, _) = self.expect_ident()?;
+        let mut name = head;
+        while self.at_coloncolon() {
+            self.advance();
+            let (segment, _) = self.expect_ident()?;
+            name.push_str("::");
+            name.push_str(&segment);
+        }
         let mut args = Vec::new();
 
         if self.at_langle() {
@@ -1348,7 +1363,7 @@ impl<'a> Parser<'a> {
 
         if let Some(first) = self.take_ident() {
             let mut segments = vec![first];
-            while self.at_dot() {
+            while self.at_dot() || self.at_coloncolon() {
                 self.advance();
                 let (next, _) = self.expect_ident()?;
                 segments.push(next);
@@ -1486,7 +1501,7 @@ impl<'a> Parser<'a> {
 
         if let Some(first) = self.take_ident() {
             let mut segments = vec![first];
-            while self.at_dot() {
+            while self.at_dot() || self.at_coloncolon() {
                 self.advance();
                 let (next, _) = self.expect_ident()?;
                 segments.push(next);
@@ -1578,10 +1593,10 @@ impl<'a> Parser<'a> {
             } else {
                 let (first, _) = self.expect_ident()?;
                 let mut path = vec![first];
-                if self.at_dot() {
+                while self.at_dot() || self.at_coloncolon() {
                     self.advance();
-                    let (second, _) = self.expect_ident()?;
-                    path.push(second);
+                    let (next, _) = self.expect_ident()?;
+                    path.push(next);
                 }
                 let bind = if self.at_lparen() {
                     self.expect_lparen()?;
@@ -1619,6 +1634,10 @@ impl<'a> Parser<'a> {
 
     fn expect_kw_import(&mut self) -> Result<Span, Diagnostic> {
         self.expect_simple(Self::at_kw_import, "'import'")
+    }
+
+    fn expect_kw_as(&mut self) -> Result<Span, Diagnostic> {
+        self.expect_simple(Self::at_kw_as, "'as'")
     }
 
     fn expect_kw_fn(&mut self) -> Result<Span, Diagnostic> {
@@ -1900,6 +1919,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::KwImport)
     }
 
+    fn at_kw_as(&self) -> bool {
+        matches!(self.current().kind, TokenKind::KwAs)
+    }
+
     fn at_kw_fn(&self) -> bool {
         matches!(self.current().kind, TokenKind::KwFn)
     }
@@ -2088,6 +2111,10 @@ impl<'a> Parser<'a> {
         matches!(self.current().kind, TokenKind::Colon)
     }
 
+    fn at_coloncolon(&self) -> bool {
+        matches!(self.current().kind, TokenKind::ColonColon)
+    }
+
     fn at_semicolon(&self) -> bool {
         matches!(self.current().kind, TokenKind::Semicolon)
     }
@@ -2201,6 +2228,7 @@ impl<'a> Parser<'a> {
         match &self.current().kind {
             TokenKind::KwCap => "'cap'",
             TokenKind::KwImport => "'import'",
+            TokenKind::KwAs => "'as'",
             TokenKind::KwFn => "'fn'",
             TokenKind::KwWorkflow => "'workflow'",
             TokenKind::KwAgent => "'agent'",
@@ -2251,6 +2279,7 @@ impl<'a> Parser<'a> {
             TokenKind::Plus => "'+'",
             TokenKind::Dot => "'.'",
             TokenKind::Colon => "':'",
+            TokenKind::ColonColon => "'::'",
             TokenKind::Semicolon => "';'",
             TokenKind::Bang => "'!'",
             TokenKind::Eq => "'='",

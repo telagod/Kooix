@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    AssignStmt, BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, LetStmt,
+    AssignStmt, BinaryOp, Block, EnsureClause, Expr, FailureAction, FailureValue, Item, LetStmt,
     MatchArmBody, MatchPattern, PredicateValue, Program, RecordGenericParam, ReturnStmt, Statement,
     TypeArg, TypeRef, WorkflowCallArg,
 };
@@ -18,8 +18,8 @@ struct InvocableSignature {
 }
 
 pub fn check_program(program: &Program) -> Vec<Diagnostic> {
+    let mut diagnostics = validate_import_namespaces(program);
     let hir = lower_program(program);
-    let mut diagnostics = Vec::new();
 
     let declared_invocable_targets: HashSet<String> = hir
         .functions
@@ -217,6 +217,58 @@ pub fn check_program(program: &Program) -> Vec<Diagnostic> {
             &declared_capability_instances,
             &mut diagnostics,
         );
+    }
+
+    diagnostics
+}
+
+fn validate_import_namespaces(program: &Program) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+
+    let mut declared_items = HashSet::new();
+    for item in &program.items {
+        match item {
+            Item::Function(f) => {
+                declared_items.insert(f.name.clone());
+            }
+            Item::Workflow(w) => {
+                declared_items.insert(w.name.clone());
+            }
+            Item::Agent(a) => {
+                declared_items.insert(a.name.clone());
+            }
+            Item::Record(r) => {
+                declared_items.insert(r.name.clone());
+            }
+            Item::Enum(e) => {
+                declared_items.insert(e.name.clone());
+            }
+            Item::Capability(_) | Item::Import(_) => {}
+        }
+    }
+
+    let mut seen = HashSet::new();
+    for item in &program.items {
+        let Item::Import(import) = item else {
+            continue;
+        };
+        let Some(ns) = &import.ns else {
+            continue;
+        };
+
+        if !seen.insert(ns.clone()) {
+            diagnostics.push(Diagnostic::error(
+                format!("duplicate import namespace '{ns}'"),
+                import.span,
+            ));
+        }
+
+        if declared_items.contains(ns) {
+            diagnostics.push(Diagnostic::error(
+                format!("import namespace '{ns}' conflicts with local item name"),
+                import.span,
+            ));
+        }
     }
 
     diagnostics

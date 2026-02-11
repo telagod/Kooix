@@ -36,6 +36,12 @@ import "import_lib";
 fn main() -> Int { helper() + 1 };
 ```
 
+```kooix
+// file: import_main.kooix (with optional namespace prefix)
+import "import_lib" as Lib;
+fn main() -> Int { Lib::helper() + 1 };
+```
+
 ### Valid: if/else expression (Kooix-Core subset)
 
 ```kooix

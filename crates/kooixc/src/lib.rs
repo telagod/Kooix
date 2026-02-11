@@ -7,6 +7,7 @@ pub mod llvm;
 pub mod loader;
 pub mod mir;
 pub mod native;
+pub mod normalize;
 pub mod parser;
 pub mod sema;
 pub mod token;
@@ -25,18 +26,21 @@ pub fn parse_source(source: &str) -> Result<Program, Vec<Diagnostic>> {
 
 pub fn check_source(source: &str) -> Vec<Diagnostic> {
     match parse_source(source) {
-        Ok(program) => sema::check_program(&program),
+        Ok(program) => {
+            let program = normalize::normalize_program(&program);
+            sema::check_program(&program)
+        }
         Err(parse_errors) => parse_errors,
     }
 }
 
 pub fn lower_source(source: &str) -> Result<HirProgram, Vec<Diagnostic>> {
-    let program = parse_source(source)?;
+    let program = normalize::normalize_program(&parse_source(source)?);
     Ok(hir::lower_program(&program))
 }
 
 pub fn lower_to_mir_source(source: &str) -> Result<MirProgram, Vec<Diagnostic>> {
-    let program = parse_source(source)?;
+    let program = normalize::normalize_program(&parse_source(source)?);
     let mut diagnostics = sema::check_program(&program);
     if diagnostics
         .iter()
@@ -67,7 +71,7 @@ pub struct RunResult {
 }
 
 pub fn run_source(source: &str) -> Result<RunResult, Vec<Diagnostic>> {
-    let program = parse_source(source)?;
+    let program = normalize::normalize_program(&parse_source(source)?);
     let diagnostics = sema::check_program(&program);
     if diagnostics
         .iter()

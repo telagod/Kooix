@@ -18,11 +18,11 @@ The goal is backward-compatible evolution: all Core v0 programs remain valid.
   - AST: `Item::Capability(CapabilityDecl)`
   - Code: `crates/kooixc/src/ast.rs`, `crates/kooixc/src/parser.rs`
 
-- Grammar: `ImportDecl ::= "import" StringLiteral ";"`
+- Grammar: `ImportDecl ::= "import" StringLiteral ["as" Identifier] ";"`
   - AST: `Item::Import(ImportDecl)`
   - Loader (include-style multi-file concatenation): `crates/kooixc/src/loader.rs`
   - CLI entry: `crates/kooixc/src/main.rs` (`load_source_map`)
-  - Note: HIR lowering currently ignores `import` items (they are for loading only).
+  - Note: HIR lowering currently ignores `import` items (they are for loading only). If `as` is present, it only declares an optional namespace prefix; we strip `Foo::` prefixes during normalization (`crates/kooixc/src/normalize.rs`) before semantic analysis.
 
 - Grammar: `EnumDecl ::= "enum" ...`
   - AST: `Item::Enum(EnumDecl)`
