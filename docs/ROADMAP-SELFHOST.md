@@ -104,7 +104,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - P1（模块主线）把 module-aware check 从 CLI/API 推进到编译主链路：
   - ✅ DoD1：`hir/mir/llvm/native/run/check` 已可在不依赖“normalize 剥离 namespace”前提下处理 `Foo::bar` / `Foo::T` / `Foo::Enum::Variant`。
   - ✅ DoD2：已新增跨模块同名符号冲突/隔离回归用例（function/record/enum 三类，覆盖 namespace import 场景）。
-  - DoD3：Stage1 关键 smoke 不回退。
+  - ✅ DoD3：Stage1 关键 smoke 持续全绿（`cargo test -p kooixc -j 1 -- --test-threads=1` 与 CI 均通过）。
 - P2（工程门禁）增强 module-check CI 产物与可观测性：
   - ✅ DoD1：`check-modules --json` 输出保存为 workflow artifact（`module-check-json`）。
   - ✅ DoD2：PR/run summary 展示模块错误计数与首条诊断。
