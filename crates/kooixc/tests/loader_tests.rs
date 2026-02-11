@@ -2,6 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use kooixc::check_entry_modules;
+use kooixc::error::Severity;
 use kooixc::loader::{load_module_programs, load_source_map, load_source_map_with_module_graph};
 
 fn make_temp_dir(suffix: &str) -> PathBuf {
@@ -148,6 +150,52 @@ fn load_module_programs_parses_each_file_separately() {
         .find(|module| module.path.file_name().and_then(|name| name.to_str()) == Some("lib.kooix"))
         .expect("lib module should exist");
     assert_eq!(lib_mod.program.items.len(), 1); // fn
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_entry_modules_does_not_require_include_concatenation() {
+    let dir = make_temp_dir("module-check");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(&main, "import \"lib\" as Lib;\n\nfn main() -> Int { 0 };").expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results.iter().any(|result| {
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_entry_modules_isolates_duplicate_names_across_files() {
+    let dir = make_temp_dir("module-check-dupes");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\";\n\nfn helper() -> Int { 1 };\nfn main() -> Int { 0 };",
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert!(!results
+        .iter()
+        .flat_map(|result| &result.diagnostics)
+        .any(|diagnostic| {
+            diagnostic.severity == Severity::Error
+                && diagnostic.message.contains("duplicate function")
+        }));
 
     let _ = fs::remove_dir_all(&dir);
 }

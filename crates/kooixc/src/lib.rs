@@ -19,6 +19,12 @@ use hir::HirProgram;
 use mir::MirProgram;
 use std::path::Path;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleCheckResult {
+    pub path: std::path::PathBuf,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 pub fn parse_source(source: &str) -> Result<Program, Vec<Diagnostic>> {
     let tokens = lexer::lex(source).map_err(|error| vec![error])?;
     parser::parse(&tokens).map_err(|error| vec![error])
@@ -32,6 +38,20 @@ pub fn check_source(source: &str) -> Vec<Diagnostic> {
         }
         Err(parse_errors) => parse_errors,
     }
+}
+
+pub fn check_entry_modules(entry: &Path) -> Result<Vec<ModuleCheckResult>, Vec<Diagnostic>> {
+    let (_graph, modules) = loader::load_module_programs(entry)?;
+    let mut out = Vec::new();
+    for module in modules {
+        let program = normalize::normalize_program(&module.program);
+        let diagnostics = sema::check_program(&program);
+        out.push(ModuleCheckResult {
+            path: module.path,
+            diagnostics,
+        });
+    }
+    Ok(out)
 }
 
 pub fn lower_source(source: &str) -> Result<HirProgram, Vec<Diagnostic>> {
