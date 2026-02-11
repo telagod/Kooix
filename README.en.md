@@ -172,6 +172,9 @@ echo $?
 # Low-resource real-workload smoke: validate stage1 lexer/parser/typecheck/resolver in one pass
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
+# One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop + determinism compare
+CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main
 /tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min

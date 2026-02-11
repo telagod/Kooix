@@ -23,29 +23,10 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Run low-resource Stage1 real-workload smokes
+      - name: Run bootstrap-heavy gate script
         env:
           CARGO_BUILD_JOBS: "1"
-          KX_SMOKE_S1_CORE: "1"
-        run: ./scripts/bootstrap_v0_13.sh
-
-      - name: Run compiler_main two-hop loop smoke
-        run: |
-          set -euo pipefail
-          ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main
-          /tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min
-          /tmp/kx-stage4-stage2-min >/dev/null
-
-      - name: Run compiler_main determinism smoke (same input -> same IR hash)
-        run: |
-          set -euo pipefail
-          ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-det-a.ll /tmp/kx-det-a >/dev/null
-          ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-det-b.ll /tmp/kx-det-b >/dev/null
-          sha_a=$(sha256sum /tmp/kx-det-a.ll | awk '{print $1}')
-          sha_b=$(sha256sum /tmp/kx-det-b.ll | awk '{print $1}')
-          test "$sha_a" = "$sha_b"
-          cmp -s /tmp/kx-det-a.ll /tmp/kx-det-b.ll
-          echo "determinism sha256: $sha_a"
+        run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
         if: always()

@@ -64,8 +64,9 @@
 - `cargo test -p kooixc`
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
-- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认使用 `CARGO_BUILD_JOBS=1` + `KX_SMOKE_S1_CORE=1`。
+- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh`。
 
 ## 一键复现（v0.13）
 
@@ -112,6 +113,12 @@ KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh
 
 ```bash
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
+```
+
+一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环 + deterministic 对比）：
+
+```bash
+CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
 ```
 
 可选 smoke（更重：验证 stage1/resolver 子图也可被 stage3 编译+链接+运行）：

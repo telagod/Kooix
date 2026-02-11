@@ -117,6 +117,6 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（2026-02-11）：`CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh`（自动覆盖 lexer/parser/typecheck/resolver 四子图）。
 - P4（下一刀）推进 `dist/kooixc1` 的编译器本体负载：
   - ✅ DoD1：`compiler_main` 关键路径 smoke 已覆盖：`dist/kooixc1` 编译 `stage1/compiler_main.kooix` 产出 stage3 compiler，再由该编译器编译并运行 `stage1/stage2_min.kooix`（exit=0）。
-  - ✅ DoD2：已把“真实负载 smoke”纳入可选 CI gate：新增 `bootstrap-heavy` workflow（`workflow_dispatch` + nightly `schedule`，低资源配额运行）。
+  - ✅ DoD2：已把“真实负载 smoke”纳入可选 CI gate：新增 `bootstrap-heavy` workflow（`workflow_dispatch` + nightly `schedule`，调用 `scripts/bootstrap_heavy_gate.sh` 低资源运行）。
   - ✅ DoD3：deterministic 证据已纳入可选 CI gate：`bootstrap-heavy` 新增 `compiler_main` 双次 emit + `sha256/cmp` 一致性校验（固定输入 bytes/hash 波动为 0）。
   - 验证命令（2026-02-11）：`./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main && /tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min && /tmp/kx-stage4-stage2-min`。
