@@ -59,6 +59,15 @@
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
 
+## 一键复现（v0.13）
+
+构建一个可运行的 stage3 compiler（二进制）：
+
+```bash
+./scripts/bootstrap_v0_13.sh /tmp
+# 产物：/tmp/kooixc-stage3
+```
+
 ### Gate 1（Stage1 落地后启用）
 
 - `kooixc0` 编译 `kooixc1`（生成可运行产物）

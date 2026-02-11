@@ -185,6 +185,13 @@ cargo run -p kooixc -- native stage1/self_host_list_main.kooix /tmp/kx-selfhost-
 cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2-list --run
 ```
 
+### v0.13：一键产出 stage3 compiler（二进制）
+
+```bash
+./scripts/bootstrap_v0_13.sh /tmp
+# 产物：/tmp/kooixc-stage3
+```
+
 ## 余劫（主要风险）
 
 - **Backend 复杂度爆炸**：建议坚持“最小可运行子集 + 渐进覆盖”。
