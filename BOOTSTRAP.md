@@ -79,7 +79,7 @@ cargo run -p kooixc -- native examples/run.kooix /tmp/kooix-run --run
 - 文件 I/O：read_to_text / write_text / list_dir（至少能读源文件）
 - diagnostics：结构化错误（message + span/path）
 
-注：当前已有 host-only intrinsics `host_load_source_map/host_eprintln`（native runtime 已实现），可用于 bootstrap 路线下“读取并展开 include 风格 import”的最小闭环；但这不等价于语言级 stdlib 的通用文件 I/O。
+注：当前有 host-only intrinsics `host_load_source_map/host_eprintln`（native runtime 已实现），可用于 bootstrap 路线下“读取并展开 include 风格 import”的最小闭环；同时 Stage1 侧也已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（基于 `host_read_file`）。但这些都不等价于语言级 stdlib 的通用文件 I/O。
 另：`host_write_file(path, content)` 已补齐（native runtime 已实现），用于将 Stage1 生成的 LLVM IR 文本落盘，配合 `kooixc native-llvm` 链接生成 stage2。
 
 ### M3：Stage1 编译器（先能跑，再求快）

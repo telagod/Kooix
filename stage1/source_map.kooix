@@ -1,0 +1,623 @@
+import "../stdlib/prelude";
+
+record S1SmState {
+  visited: List<Text>;
+  chunks_rev: List<Text>;
+};
+
+fn s1_sm_reverse_text_list(xs: List<Text>) -> List<Text> {
+  let out: List<Text> = Nil;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        out = Cons(ListCons<Text> { head: c0.head; tail: out; });
+        cur = c0.tail;
+        0
+      };
+    }
+  };
+  out
+};
+
+fn s1_sm_join_text_chunks(chunks: List<Text>) -> Text {
+  // Pairwise concatenation in rounds to avoid O(n^2) growth.
+  let cur: List<Text> = chunks;
+  let done: Bool = false;
+  let out: Text = "";
+
+  while done == false {
+    match cur {
+      Nil => { out = ""; done = true; 0 };
+      Cons(c0) => {
+        match c0.tail {
+          Nil => { out = c0.head; done = true; 0 };
+          _ => {
+            let merged_rev: List<Text> = Nil;
+            let c2: List<Text> = cur;
+            let done2: Bool = false;
+            while done2 == false {
+              match c2 {
+                Nil => { done2 = true; 0 };
+                Cons(a0) => {
+                  match a0.tail {
+                    Nil => {
+                      merged_rev = Cons(ListCons<Text> { head: a0.head; tail: merged_rev; });
+                      done2 = true;
+                      0
+                    };
+                    Cons(b0) => {
+                      let m: Text = text_concat(a0.head, b0.head);
+                      merged_rev = Cons(ListCons<Text> { head: m; tail: merged_rev; });
+                      c2 = b0.tail;
+                      0
+                    };
+                  };
+                  0
+                };
+              }
+            };
+            cur = s1_sm_reverse_text_list(merged_rev);
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+
+  out
+};
+
+fn s1_sm_text_list_contains(xs: List<Text>, value: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<Text> = xs;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        if c0.head == value { found = true; done = true; 0 } else { cur = c0.tail; 0 };
+        0
+      };
+    }
+  };
+  found
+};
+
+fn s1_sm_is_ascii_ident_continue(b: Int) -> Bool {
+  if byte_is_ascii_alpha(b) { true } else {
+    if byte_is_ascii_digit(b) { true } else {
+      if b == 95 { true } else { false }
+    }
+  }
+};
+
+fn s1_sm_dec1(x: Int) -> Int {
+  // Compute x - 1 without relying on a '-' operator.
+  // For x == 0, returns 0.
+  let prev: Int = 0;
+  let cur: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    if cur == x { done = true; 0 } else { prev = cur; cur = cur + 1; 0 };
+  };
+  prev
+};
+
+fn s1_sm_has_extension(path: Text) -> Bool {
+  // A path has an extension if there's a '.' after the last '/'.
+  let n: Int = text_len(path);
+  let i: Int = 0;
+  let seen_dot: Bool = false;
+  let done: Bool = false;
+
+  while done == false {
+    if i == n {
+      done = true;
+      0
+    } else {
+      match text_byte_at(path, i) {
+        None => { done = true; 0 };
+        Some(b) => {
+          if b == 47 { seen_dot = false; i = i + 1; 0 } else {
+            if b == 46 { seen_dot = true; i = i + 1; 0 } else { i = i + 1; 0 }
+          };
+          0
+        };
+      }
+    }
+  };
+
+  seen_dot
+};
+
+fn s1_sm_add_kooix_ext_if_missing(path: Text) -> Text {
+  if s1_sm_has_extension(path) { path } else { text_concat(path, ".kooix") }
+};
+
+fn s1_sm_dirname_with_slash(path: Text) -> Text {
+  // Return the directory prefix ending with '/', or "" if none.
+  let n: Int = text_len(path);
+  let i: Int = 0;
+  let last: Int = 0;
+  let done: Bool = false;
+
+  while done == false {
+    if i == n {
+      done = true;
+      0
+    } else {
+      match text_byte_at(path, i) {
+        None => { done = true; 0 };
+        Some(b) => {
+          if b == 47 { last = i + 1; 0 } else { 0 };
+          i = i + 1;
+          0
+        };
+      }
+    }
+  };
+
+  if last == 0 {
+    ""
+  } else {
+    match text_slice(path, 0, last) {
+      None => "";
+      Some(t) => t;
+    }
+  }
+};
+
+fn s1_sm_resolve_import_path(base_dir: Text, raw: Text) -> Text {
+  let out: Text = "";
+  if text_starts_with(raw, "/") {
+    out = raw;
+    0
+  } else {
+    out = text_concat(base_dir, raw);
+    0
+  };
+  s1_sm_add_kooix_ext_if_missing(out)
+};
+
+fn s1_sm_match_import_kw(src: Text, i: Int) -> Bool {
+  // Ensure we match `import` as a standalone word (ASCII ident boundaries).
+  let prev_ok: Bool =
+    if i == 0 { true } else {
+      let iprev: Int = s1_sm_dec1(i);
+      match text_byte_at(src, iprev) {
+        None => true;
+        Some(pb) => { if s1_sm_is_ascii_ident_continue(pb) { false } else { true } };
+      }
+    };
+
+  if prev_ok == false { false } else {
+    // Match `import` and ensure the next byte is not an ASCII ident char.
+    match text_byte_at(src, i) {
+      Some(b0) => {
+        if b0 != 105 { false } else {
+          match text_byte_at(src, i + 1) {
+            Some(b1) => {
+              if b1 != 109 { false } else {
+                match text_byte_at(src, i + 2) {
+                  Some(b2) => {
+                    if b2 != 112 { false } else {
+                      match text_byte_at(src, i + 3) {
+                        Some(b3) => {
+                          if b3 != 111 { false } else {
+                            match text_byte_at(src, i + 4) {
+                              Some(b4) => {
+                                if b4 != 114 { false } else {
+                                  match text_byte_at(src, i + 5) {
+                                    Some(b5) => {
+                                      if b5 != 116 { false } else {
+                                        match text_byte_at(src, i + 6) {
+                                          None => true;
+                                          Some(nb) => { if s1_sm_is_ascii_ident_continue(nb) { false } else { true } };
+                                        }
+                                      }
+                                    };
+                                    _ => false;
+                                  }
+                                }
+                              };
+                              _ => false;
+                            }
+                          }
+                        };
+                        _ => false;
+                      }
+                    }
+                  };
+                  _ => false;
+                }
+              }
+            };
+            _ => false;
+          }
+        }
+      };
+      _ => false;
+    }
+  }
+};
+
+fn s1_sm_skip_ws_and_line_comments(src: Text, i0: Int) -> Int {
+  let n: Int = text_len(src);
+  let i: Int = i0;
+  let done: Bool = false;
+  while done == false {
+    if i == n { done = true; 0 } else {
+      match text_byte_at(src, i) {
+        None => { done = true; 0 };
+        Some(b) => {
+          if b == 32 { i = i + 1; 0 } else {
+            if b == 9 { i = i + 1; 0 } else {
+              if b == 10 { i = i + 1; 0 } else {
+                if b == 13 { i = i + 1; 0 } else {
+                  if b == 47 {
+                    match text_byte_at(src, i + 1) {
+                      Some(b2) => {
+                        if b2 == 47 {
+                          i = i + 2;
+                          let scan: Bool = true;
+                          while scan == true {
+                            if i == n { scan = false; 0 } else {
+                              match text_byte_at(src, i) {
+                                None => { scan = false; 0 };
+                                Some(b3) => {
+                                  if b3 == 10 { i = i + 1; scan = false; 0 } else { i = i + 1; 0 };
+                                  0
+                                };
+                              }
+                            }
+                          };
+                          0
+                        } else {
+                          done = true;
+                          0
+                        }
+                      };
+                      _ => { done = true; 0 };
+                    }
+                  } else {
+                    done = true;
+                    0
+                  }
+                }
+              }
+            }
+          };
+          0
+        };
+      }
+    }
+  };
+  i
+};
+
+fn s1_sm_collect_imports(src: Text) -> Result<List<Text>, Text> {
+  let n: Int = text_len(src);
+  let i: Int = 0;
+  let imports_rev: List<Text> = Nil;
+  let ok: Bool = true;
+  let err: Text = "source_map: import scan error";
+  let done: Bool = false;
+
+  // Nesting depth stack: non-empty means we're inside brackets/braces/parens.
+  let depth: List<Int> = Nil;
+
+  while done == false {
+    if i == n {
+      done = true;
+      0
+    } else {
+      let i2: Int = s1_sm_skip_ws_and_line_comments(src, i);
+      i = i2;
+      if i == n { done = true; 0 } else {
+        match text_byte_at(src, i) {
+          None => { done = true; 0 };
+          Some(b) => {
+            // Skip string literals to avoid accidental keyword matches.
+            if b == 34 {
+              i = i + 1;
+              let esc: Bool = false;
+              let scanning: Bool = true;
+              while scanning == true {
+                if i == n { scanning = false; ok = false; err = "source_map: unterminated string literal"; done = true; 0 } else {
+                  match text_byte_at(src, i) {
+                    None => { scanning = false; ok = false; err = "source_map: unterminated string literal"; done = true; 0 };
+                    Some(b2) => {
+                      if esc == true {
+                        esc = false;
+                        i = i + 1;
+                        0
+                      } else {
+                        if b2 == 92 {
+                          esc = true;
+                          i = i + 1;
+                          0
+                        } else {
+                          if b2 == 34 { i = i + 1; scanning = false; 0 } else { i = i + 1; 0 };
+                          0
+                        }
+                      };
+                      0
+                    };
+                  }
+                }
+              };
+              0
+            } else {
+              // Track nesting.
+              if b == 123 { depth = Cons(ListCons<Int> { head: 0; tail: depth; }); i = i + 1; 0 } else {
+                if b == 40 { depth = Cons(ListCons<Int> { head: 0; tail: depth; }); i = i + 1; 0 } else {
+                  if b == 91 { depth = Cons(ListCons<Int> { head: 0; tail: depth; }); i = i + 1; 0 } else {
+                    if b == 125 {
+                      match depth { Nil => 0; Cons(d0) => { depth = d0.tail; 0 }; };
+                      i = i + 1;
+                      0
+                    } else {
+                      if b == 41 {
+                        match depth { Nil => 0; Cons(d0) => { depth = d0.tail; 0 }; };
+                        i = i + 1;
+                        0
+                      } else {
+                        if b == 93 {
+                          match depth { Nil => 0; Cons(d0) => { depth = d0.tail; 0 }; };
+                          i = i + 1;
+                          0
+                        } else {
+                          // import at depth 0
+                          match depth {
+                            Cons(_d) => { i = i + 1; 0 };
+                            Nil => {
+                              if s1_sm_match_import_kw(src, i) == true {
+                                i = i + 6;
+                                i = s1_sm_skip_ws_and_line_comments(src, i);
+                                match text_byte_at(src, i) {
+                                  Some(q) => {
+                                    if q != 34 {
+                                      ok = false;
+                                      err = "source_map: import expects a string literal path";
+                                      done = true;
+                                      0
+                                    } else {
+                                      let start: Int = i + 1;
+                                      i = start;
+                                      let esc2: Bool = false;
+                                      let scanning2: Bool = true;
+                                      let end: Int = start;
+                                      while scanning2 == true {
+                                        if i == n { scanning2 = false; ok = false; err = "source_map: unterminated import string"; done = true; 0 } else {
+                                          match text_byte_at(src, i) {
+                                            None => { scanning2 = false; ok = false; err = "source_map: unterminated import string"; done = true; 0 };
+                                            Some(b3) => {
+                                              if esc2 == true {
+                                                esc2 = false;
+                                                i = i + 1;
+                                                0
+                                              } else {
+                                                if b3 == 92 {
+                                                  esc2 = true;
+                                                  i = i + 1;
+                                                  0
+                                                } else {
+                                                  if b3 == 34 {
+                                                    end = i;
+                                                    scanning2 = false;
+                                                    i = i + 1;
+                                                    0
+                                                  } else {
+                                                    i = i + 1;
+                                                    0
+                                                  };
+                                                  0
+                                                }
+                                              };
+                                              0
+                                            };
+                                          }
+                                        }
+                                      };
+
+                                      if ok == true {
+                                        match text_slice(src, start, end) {
+                                          None => {
+                                            ok = false;
+                                            err = "source_map: invalid import string slice";
+                                            done = true;
+                                            0
+                                          };
+                                          Some(p) => {
+                                            i = s1_sm_skip_ws_and_line_comments(src, i);
+                                            match text_byte_at(src, i) {
+                                              Some(semi) => {
+                                                if semi != 59 {
+                                                  ok = false;
+                                                  err = "source_map: import declaration must end with ';'";
+                                                  done = true;
+                                                  0
+                                                } else {
+                                                  imports_rev = Cons(ListCons<Text> { head: p; tail: imports_rev; });
+                                                  i = i + 1;
+                                                  0
+                                                }
+                                              };
+                                              _ => {
+                                                ok = false;
+                                                err = "source_map: import declaration must end with ';'";
+                                                done = true;
+                                                0
+                                              };
+                                            };
+                                            0
+                                          };
+                                        }
+                                      } else { 0 };
+
+                                      0
+                                    }
+                                  };
+                                  _ => {
+                                    ok = false;
+                                    err = "source_map: import expects a string literal path";
+                                    done = true;
+                                    0
+                                  };
+                                };
+                                0
+                              } else {
+                                i = i + 1;
+                                0
+                              };
+                              0
+                            };
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              };
+              0
+            };
+            0
+          };
+        }
+      }
+    }
+  };
+
+  let out: Result<List<Text>, Text> = Err(err);
+  if ok == true { out = Ok(s1_sm_reverse_text_list(imports_rev)); 0 } else { 0 };
+  out
+};
+
+fn s1_sm_normalize_file_source(source: Text) -> Text {
+  let n: Int = text_len(source);
+  if n == 0 {
+    "\n"
+  } else {
+    let out: Text = source;
+    // Find the last byte without indexing via (n - 1).
+    let i: Int = 0;
+    let last: Int = 0;
+    let have_last: Bool = false;
+    let done: Bool = false;
+    while done == false {
+      if i == n {
+        done = true;
+        0
+      } else {
+        match text_byte_at(source, i) {
+          None => { done = true; 0 };
+          Some(b) => { last = b; have_last = true; i = i + 1; 0 };
+        }
+      }
+    };
+
+    if have_last == true {
+      if last != 10 { out = text_concat(out, "\n"); 0 } else { 0 };
+      0
+    } else {
+      out = text_concat(out, "\n");
+      0
+    };
+    text_concat(out, "\n")
+  }
+};
+
+fn s1_sm_append_chunk(path: Text, source: Text) -> Text {
+  let head: Text = text_concat("// --- file: ", path);
+  let marker: Text = text_concat(head, " ---\n");
+  let body: Text = s1_sm_normalize_file_source(source);
+  text_concat(marker, body)
+};
+
+fn s1_sm_load_file(path: Text, st0: S1SmState) -> Result<S1SmState, Text> {
+  let out: Result<S1SmState, Text> = Err("source_map: load error");
+
+  if s1_sm_text_list_contains(st0.visited, path) == true {
+    out = Ok(st0);
+    0
+  } else {
+    // Mark visited early to avoid cycles.
+    let visited2: List<Text> = Cons(ListCons<Text> { head: path; tail: st0.visited; });
+    let st2: S1SmState = S1SmState { visited: visited2; chunks_rev: st0.chunks_rev; };
+
+    let read_r: Result<Text, Text> = host_read_file(path);
+    match read_r {
+      Err(m) => { out = Err(m); 0 };
+      Ok(src) => {
+        let imports_r: Result<List<Text>, Text> = s1_sm_collect_imports(src);
+        match imports_r {
+          Err(e2) => { out = Err(e2); 0 };
+          Ok(imps) => {
+            let base_dir: Text = s1_sm_dirname_with_slash(path);
+            let cur: List<Text> = imps;
+            let done: Bool = false;
+            let st3_ok: Bool = true;
+            let st3: S1SmState = st2;
+            let err3: Text = "source_map: load error";
+
+            while done == false {
+              match cur {
+                Nil => { done = true; 0 };
+                Cons(c0) => {
+                  let resolved: Text = s1_sm_resolve_import_path(base_dir, c0.head);
+                  match s1_sm_load_file(resolved, st3) {
+                    Err(e3) => { st3_ok = false; err3 = e3; done = true; 0 };
+                    Ok(next) => { st3 = next; cur = c0.tail; 0 };
+                  };
+                  0
+                };
+              }
+            };
+
+            if st3_ok == false {
+              out = Err(err3);
+              0
+            } else {
+              let chunk: Text = s1_sm_append_chunk(path, src);
+              let chunks2: List<Text> = Cons(ListCons<Text> { head: chunk; tail: st3.chunks_rev; });
+              out = Ok(S1SmState { visited: st3.visited; chunks_rev: chunks2; });
+              0
+            }
+          };
+        }
+      };
+    };
+    0
+  };
+
+  out
+};
+
+fn s1_load_source_map(entry_path: Text) -> Result<Text, Text>
+intent "Stage1 include-style loader: read entry file and expand top-level import statements into a single combined source string"
+evidence {
+  trace "stage1.source_map.v0";
+  metrics [stage1_source_map_calls];
+}
+{
+  let entry: Text = s1_sm_add_kooix_ext_if_missing(entry_path);
+  let visited0: List<Text> = Nil;
+  let chunks0: List<Text> = Nil;
+  let init: S1SmState = S1SmState { visited: visited0; chunks_rev: chunks0; };
+  let out: Result<Text, Text> = Err("source_map: load error");
+
+  match s1_sm_load_file(entry, init) {
+    Err(m) => { out = Err(m); 0 };
+    Ok(st) => {
+      let chunks: List<Text> = s1_sm_reverse_text_list(st.chunks_rev);
+      out = Ok(s1_sm_join_text_chunks(chunks));
+      0
+    };
+  };
+
+  out
+};

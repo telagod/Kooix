@@ -46,7 +46,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper）。
-- host intrinsics：`host_load_source_map/host_write_file/host_read_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。
+- host intrinsics：`host_load_source_map`（兼容 loader）与 `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。另：Stage1 已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（Stage1 compiler driver 已切换到此实现）。
 - 自举产物：`./scripts/bootstrap_v0_13.sh` 可产出 `dist/kooixc1`（stage3 compiler binary，可用于编译+链接 Kooix 程序）。
 - enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
@@ -182,7 +182,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - borrow checker
 - 完整表达式系统与类型推导（当前仅实现函数体最小子集）
-- 函数体的 MIR/LLVM lowering 与运行语义
+- 更完整的函数体 MIR/LLVM lowering 覆盖与运行语义（当前仅最小子集）
 - 完整模块系统 / 包管理（当前 `import` 仅 include 风格，未做 namespace/export）
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
 - 运行时与标准库设计
