@@ -17,7 +17,7 @@ Its core goal is to push AI capability constraints, workflow constraints, and au
 - Evidence-first: critical flows declare `evidence` (trace/metrics) to support auditability.
 - Workflow/Agent as first-class: orchestration (`workflow`) and agent loops (`agent`) are type-checkable structures, not ad-hoc scripts.
 
-## Current Status (as of 2026-02-10)
+## Current Status (as of 2026-02-11)
 
 Kooix already has a runnable minimal compiler pipeline:
 
@@ -48,15 +48,16 @@ Kooix already has a runnable minimal compiler pipeline:
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers).
-- Host intrinsics: `host_load_source_map/host_write_file/host_eprintln` (used for bootstrap; implemented in native runtime).
+- Host intrinsics: `host_load_source_map/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file` (used for bootstrap; implemented in native runtime).
+- Bootstrap artifact: `./scripts/bootstrap_v0_13.sh` produces `dist/kooixc1` (stage3 compiler binary that can compile+link Kooix programs).
 - Enum variant namespacing: `Enum.Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
 
 ### Test Status
 
-- Latest regression command: `cargo test -p kooixc`
-- Result: `181 passed, 0 failed, 3 ignored`
+- Recommended regression (avoid saturating CPU/memory with `llc/clang` concurrency): `cargo test -p kooixc -j 2 -- --test-threads=1`
+- Result: green locally/CI (GitHub Actions is the source of truth)
 
 > Note: the historical `run_executable_times_out` flakiness is fixed; full test runs are now stable in baseline verification.
 
@@ -94,6 +95,8 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 9.1: Native lowering for `record` (non-generic + Int/Bool field subset)
 - ✅ Phase 9.2: Native lowering for `Text/enum/match` + intrinsic runtime (enables Stage1 execution)
 - ✅ Phase 9.3: Native runtime for `host_load_source_map/host_eprintln` (Stage1 bootstrap path runs)
+- ✅ Phase 9.4: Bootstrap I/O/argv/toolchain intrinsics (`host_write_file/host_argc/host_argv/host_link_llvm_ir_file`)
+- ✅ Phase 9.5: Reproducible bootstrap gates (stage2/3/4/5 fingerprint match + golden/determinism) + one-shot `dist/kooixc1` build
 
 See also: `DESIGN.md` / `BOOTSTRAP.md`
 
@@ -136,57 +139,16 @@ printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/koo
 # Runtime timeout (ms)
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
-# Build from LLVM IR file (used for Stage1 -> Stage2 self-host)
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
+# Bootstrap: build a stage3 compiler binary
+./scripts/bootstrap_v0_13.sh
 
-# Stage1 self-host v0: emit stage2 LLVM IR to disk (/tmp/kooixc_stage2.ll; current input is stage1/stage2_min.kooix)
-cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
-
-# Stage1 self-host v0.1 (Text smoke): emit stage2 LLVM IR (/tmp/kooixc_stage2_text.ll; input: stage1/stage2_text_smoke.kooix)
-cargo run -p kooixc -- native stage1/self_host_text_main.kooix /tmp/kx-selfhost-text --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text.ll /tmp/kooixc-stage2-text --run
-
-# Stage1 self-host v0.2 (Text eq smoke): emit stage2 LLVM IR (/tmp/kooixc_stage2_text_eq.ll; input: stage1/stage2_text_eq_smoke.kooix)
-cargo run -p kooixc -- native stage1/self_host_text_eq_main.kooix /tmp/kx-selfhost-text-eq --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_eq.ll /tmp/kooixc-stage2-text-eq --run
-
-# Stage1 self-host v0.3 (host_eprintln smoke): emit stage2 LLVM IR (/tmp/kooixc_stage2_host_eprintln.ll; input: stage1/stage2_host_eprintln_smoke.kooix)
-cargo run -p kooixc -- native stage1/self_host_host_eprintln_main.kooix /tmp/kx-selfhost-host-eprintln --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_eprintln.ll /tmp/kooixc-stage2-host-eprintln --run
-
-# Stage1 self-host v0.4 (enum/match/IO smoke): Option/Result + match + host_write_file/host_load_source_map
-cargo run -p kooixc -- native stage1/self_host_option_match_main.kooix /tmp/kx-selfhost-opt --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_option_match.ll /tmp/kooixc-stage2-opt --run
-cargo run -p kooixc -- native stage1/self_host_host_write_file_main.kooix /tmp/kx-selfhost-io --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_write_file.ll /tmp/kooixc-stage2-io --run
-
-# Stage1 self-host v0.5 (text_byte_at smoke): text_byte_at(Text, Int) -> Option<Int>
-cargo run -p kooixc -- native stage1/self_host_text_byte_at_main.kooix /tmp/kx-selfhost-tba --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_byte_at.ll /tmp/kooixc-stage2-tba --run
-
-# Stage1 self-host v0.6 (text_slice smoke): text_slice(Text, Int, Int) -> Option<Text>
-cargo run -p kooixc -- native stage1/self_host_text_slice_main.kooix /tmp/kx-selfhost-ts --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_slice.ll /tmp/kooixc-stage2-ts --run
-
-# Stage1 self-host v0.7 (lexer canary): byte_is_ascii_* intrinsics smoke (uses text_byte_at)
-cargo run -p kooixc -- native stage1/self_host_lexer_canary_main.kooix /tmp/kx-selfhost-lex --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_canary.ll /tmp/kooixc-stage2-lex --run
-
-# Stage1 self-host v0.8 (lexer ident smoke): while + text_slice + byte_is_ascii_ident_continue
-cargo run -p kooixc -- native stage1/self_host_lexer_ident_main.kooix /tmp/kx-selfhost-lid --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_ident.ll /tmp/kooixc-stage2-lid --run
-
-# Stage1 self-host v0.9 (typed direct call): non Int-only function signatures/calls (Text/Bool params and returns)
-cargo run -p kooixc -- native stage1/self_host_fn_text_call_main.kooix /tmp/kx-selfhost-ftc --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_fn_text_call.ll /tmp/kooixc-stage2-ftc --run
-
-# Stage1 self-host v0.10 (List smoke): List<T> + Nil/Cons + match + ListCons record/member (input: stage1/stage2_list_smoke.kooix)
-cargo run -p kooixc -- native stage1/self_host_list_main.kooix /tmp/kx-selfhost-list --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2-list --run
+# Shortest loop: use dist/kooixc1 to compile+link a program (stage2_min)
+./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
+/tmp/kx-stage2-min
+echo $?
 
 # Tests
-cargo test -p kooixc
+cargo test -p kooixc -j 2 -- --test-threads=1
 ```
 
 ---
@@ -212,6 +174,7 @@ cargo test -p kooixc
 - Toward self-hosting:
   - Bootstrap gates and stage artifacts: `docs/BOOTSTRAP.md`
   - Roadmap and milestones: `docs/ROADMAP-SELFHOST.md`
+  - (Historical smoke list) Stage1 self-host v0.x: see `docs/BOOTSTRAP.md`
 
 ---
 

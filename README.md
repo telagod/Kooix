@@ -16,7 +16,7 @@ Kooix 是一个 **AI-native、强类型** 编程语言原型（MVP），目标�
 - Evidence-first：对关键链路提供 `evidence` 声明，便于 trace/metrics 与审计闭环。
 - Workflow/Agent 一等公民：把编排（`workflow`）与 agent loop（`agent`）做成可类型检查的结构，而不是散落在脚本里。
 
-## 当前状态（截至 2026-02-10）
+## 当前状态（截至 2026-02-11）
 
 Kooix 已完成一条可运行的最小编译链路：
 
@@ -46,15 +46,16 @@ Kooix 已完成一条可运行的最小编译链路：
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载：顶层 `import "path";`（CLI loader 拼接 source；无 module/namespace/export）。
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper）。
-- host intrinsics：`host_load_source_map/host_write_file/host_eprintln`（bootstrap 使用；native runtime 已实现）。
+- host intrinsics：`host_load_source_map/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。
+- 自举产物：`./scripts/bootstrap_v0_13.sh` 可产出 `dist/kooixc1`（stage3 compiler binary，可用于编译+链接 Kooix 程序）。
 - enum variant namespacing：支持 `Enum.Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
 
 ### 测试状态
 
-- 最新回归：`cargo test -p kooixc`
-- 结果：`181 passed, 0 failed, 3 ignored`
+- 推荐回归（避免 `llc/clang` 并行把机器打满）：`cargo test -p kooixc -j 2 -- --test-threads=1`
+- 结果：本地/CI 通过（以 GitHub Actions 为准）
 
 > 注：`run_executable_times_out` 遗留不稳定问题已修复，当前可跑全量测试。
 
@@ -92,6 +93,8 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 9.1: `record` native lowering（非泛型 + Int/Bool 字段子集）
 - ✅ Phase 9.2: `Text/enum/match` native lowering + 预置 intrinsics（支撑 Stage1 运行）
 - ✅ Phase 9.3: native runtime 补齐 `host_load_source_map/host_eprintln`（Stage1 bootstrap 链路可跑）
+- ✅ Phase 9.4: native runtime + lowering 补齐 bootstrap I/O/argv/toolchain intrinsics（`host_write_file/host_argc/host_argv/host_link_llvm_ir_file`）
+- ✅ Phase 9.5: bootstrap v0.13+ 产物可复现（stage2/stage3/stage4/stage5 指纹一致 + golden/determinism 门禁）+ 一键产出 `dist/kooixc1`
 
 详见：`DESIGN.md` / `BOOTSTRAP.md`
 
@@ -134,57 +137,16 @@ printf 'payload' | cargo run -p kooixc -- native examples/codegen.kooix /tmp/koo
 # 运行超时保护（ms）
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --timeout 2000 -- arg1
 
-# 从 LLVM IR 文件生成本地可执行文件（供 Stage1 -> Stage2 self-host 使用）
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
+# 自举：产出 stage3 compiler（二进制）
+./scripts/bootstrap_v0_13.sh
 
-# Stage1 self-host v0：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2.ll；当前输入为 stage1/stage2_min.kooix；覆盖 block expr/stmtful let 与 if/while）
-cargo run -p kooixc -- native stage1/self_host_main.kooix /tmp/kx-selfhost --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2.ll /tmp/kooixc-stage2 --run
-
-# Stage1 self-host v0.1（Text smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_text.ll；当前输入为 stage1/stage2_text_smoke.kooix）
-cargo run -p kooixc -- native stage1/self_host_text_main.kooix /tmp/kx-selfhost-text --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text.ll /tmp/kooixc-stage2-text --run
-
-# Stage1 self-host v0.2（Text eq smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_text_eq.ll；当前输入为 stage1/stage2_text_eq_smoke.kooix）
-cargo run -p kooixc -- native stage1/self_host_text_eq_main.kooix /tmp/kx-selfhost-text-eq --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_eq.ll /tmp/kooixc-stage2-text-eq --run
-
-# Stage1 self-host v0.3（host_eprintln smoke）：生成 stage2 LLVM IR 并落盘（/tmp/kooixc_stage2_host_eprintln.ll；当前输入为 stage1/stage2_host_eprintln_smoke.kooix）
-cargo run -p kooixc -- native stage1/self_host_host_eprintln_main.kooix /tmp/kx-selfhost-host-eprintln --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_eprintln.ll /tmp/kooixc-stage2-host-eprintln --run
-
-# Stage1 self-host v0.4（enum/match/IO smoke）：Option/Result + match + host_write_file/host_load_source_map
-cargo run -p kooixc -- native stage1/self_host_option_match_main.kooix /tmp/kx-selfhost-opt --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_option_match.ll /tmp/kooixc-stage2-opt --run
-cargo run -p kooixc -- native stage1/self_host_host_write_file_main.kooix /tmp/kx-selfhost-io --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_host_write_file.ll /tmp/kooixc-stage2-io --run
-
-# Stage1 self-host v0.5（text_byte_at smoke）：text_byte_at(Text, Int) -> Option<Int>
-cargo run -p kooixc -- native stage1/self_host_text_byte_at_main.kooix /tmp/kx-selfhost-tba --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_byte_at.ll /tmp/kooixc-stage2-tba --run
-
-# Stage1 self-host v0.6（text_slice smoke）：text_slice(Text, Int, Int) -> Option<Text>
-cargo run -p kooixc -- native stage1/self_host_text_slice_main.kooix /tmp/kx-selfhost-ts --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_text_slice.ll /tmp/kooixc-stage2-ts --run
-
-# Stage1 self-host v0.7（lexer canary）：byte_is_ascii_* intrinsics smoke（依赖 text_byte_at）
-cargo run -p kooixc -- native stage1/self_host_lexer_canary_main.kooix /tmp/kx-selfhost-lex --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_canary.ll /tmp/kooixc-stage2-lex --run
-
-# Stage1 self-host v0.8（lexer ident smoke）：while + text_slice + byte_is_ascii_ident_continue
-cargo run -p kooixc -- native stage1/self_host_lexer_ident_main.kooix /tmp/kx-selfhost-lid --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_lexer_ident.ll /tmp/kooixc-stage2-lid --run
-
-# Stage1 self-host v0.9（typed direct call）：非 Int-only 的函数签名/调用（Text/Bool 参数与返回）
-cargo run -p kooixc -- native stage1/self_host_fn_text_call_main.kooix /tmp/kx-selfhost-ftc --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_fn_text_call.ll /tmp/kooixc-stage2-ftc --run
-
-# Stage1 self-host v0.10（List smoke）：List<T> + Nil/Cons + match + ListCons record/member（目标 stage1/stage2_list_smoke.kooix）
-cargo run -p kooixc -- native stage1/self_host_list_main.kooix /tmp/kx-selfhost-list --run
-cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2-list --run
+# 最短闭环：用 dist/kooixc1 编译并链接一个程序（stage2_min）
+./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
+/tmp/kx-stage2-min
+echo $?
 
 # 测试
-cargo test -p kooixc
+cargo test -p kooixc -j 2 -- --test-threads=1
 ```
 
 ---
@@ -210,6 +172,7 @@ cargo test -p kooixc
 - 自举路线：
   - Bootstrap 门禁与阶段产物：`docs/BOOTSTRAP.md`
   - 自举路线图与里程碑：`docs/ROADMAP-SELFHOST.md`
+  - （历史 smoke 列表）Stage1 self-host v0.x：见 `docs/BOOTSTRAP.md`
 
 ---
 
