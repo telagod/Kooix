@@ -30,4 +30,7 @@ jobs:
 
       - name: Test
         # Keep resource usage stable: bootstrap/native tests may spawn external toolchains.
+        env:
+          KX_DETERMINISM: "1"
+          KX_GOLDEN: "1"
         run: cargo test -p kooixc -j 2 -- --test-threads=1
