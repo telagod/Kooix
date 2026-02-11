@@ -6,6 +6,7 @@ pub mod lexer;
 pub mod llvm;
 pub mod loader;
 pub mod mir;
+pub mod module_check;
 pub mod native;
 pub mod normalize;
 pub mod parser;
@@ -42,10 +43,13 @@ pub fn check_source(source: &str) -> Vec<Diagnostic> {
 
 pub fn check_entry_modules(entry: &Path) -> Result<Vec<ModuleCheckResult>, Vec<Diagnostic>> {
     let (_graph, modules) = loader::load_module_programs(entry)?;
+    let exports = module_check::build_export_index(&modules);
+
     let mut out = Vec::new();
     for module in modules {
-        let program = normalize::normalize_program(&module.program);
-        let diagnostics = sema::check_program(&program);
+        let (program, mut diagnostics) =
+            module_check::prepare_program_for_module_check(&module, &_graph, &exports);
+        diagnostics.extend(sema::check_program(&program));
         out.push(ModuleCheckResult {
             path: module.path,
             diagnostics,

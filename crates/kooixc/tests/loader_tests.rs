@@ -199,3 +199,28 @@ fn check_entry_modules_isolates_duplicate_names_across_files() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn check_entry_modules_resolves_qualified_import_function_calls() {
+    let dir = make_temp_dir("module-check-qualified-call");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::helper() + 1 };",
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results.iter().any(|result| {
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }));
+
+    let _ = fs::remove_dir_all(&dir);
+}
