@@ -2,8 +2,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::ast::Program;
 use crate::error::{Diagnostic, Span};
 use crate::lexer;
+use crate::parser;
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +33,12 @@ pub struct ModuleNode {
 pub struct ModuleGraph {
     pub entry: PathBuf,
     pub modules: Vec<ModuleNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadedModule {
+    pub path: PathBuf,
+    pub program: Program,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +81,26 @@ pub fn load_source_map_with_module_graph(
             modules: loader.modules,
         },
     ))
+}
+
+pub fn load_module_programs(
+    entry: &Path,
+) -> Result<(ModuleGraph, Vec<LoadedModule>), Vec<Diagnostic>> {
+    let (map, graph) = load_source_map_with_module_graph(entry)?;
+
+    let mut modules = Vec::new();
+    for file in &map.files {
+        let tokens = lexer::lex(&file.source)
+            .map_err(|error| vec![qualify_diagnostic(&file.path, &file.source, error)])?;
+        let program = parser::parse(&tokens)
+            .map_err(|error| vec![qualify_diagnostic(&file.path, &file.source, error)])?;
+        modules.push(LoadedModule {
+            path: file.path.clone(),
+            program,
+        });
+    }
+
+    Ok((graph, modules))
 }
 
 struct Loader {

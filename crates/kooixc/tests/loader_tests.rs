@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use kooixc::loader::{load_source_map, load_source_map_with_module_graph};
+use kooixc::loader::{load_module_programs, load_source_map, load_source_map_with_module_graph};
 
 fn make_temp_dir(suffix: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -117,6 +117,37 @@ fn module_graph_tracks_import_aliases() {
             .and_then(|name| name.to_str()),
         Some("lib.kooix")
     );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_module_programs_parses_each_file_separately() {
+    let dir = make_temp_dir("modules");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::helper() + 1 };",
+    )
+    .expect("write main");
+
+    let (_graph, modules) = load_module_programs(&main).expect("load modules should succeed");
+    assert_eq!(modules.len(), 2);
+
+    let main_mod = modules
+        .iter()
+        .find(|module| module.path.file_name().and_then(|name| name.to_str()) == Some("main.kooix"))
+        .expect("main module should exist");
+    assert_eq!(main_mod.program.items.len(), 2); // import + fn
+
+    let lib_mod = modules
+        .iter()
+        .find(|module| module.path.file_name().and_then(|name| name.to_str()) == Some("lib.kooix"))
+        .expect("lib module should exist");
+    assert_eq!(lib_mod.program.items.len(), 1); // fn
 
     let _ = fs::remove_dir_all(&dir);
 }
