@@ -3556,6 +3556,46 @@ fn stage1_self_host_v0_4_emits_and_runs_stage2_host_write_file_smoke() {
 }
 
 #[test]
+fn stage1_self_host_v0_14_emits_and_runs_stage2_host_read_file_smoke() {
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_host_read_file.ll.
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entry = repo_root.join("stage1/self_host_host_read_file_main.kooix");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_host_read_file_main should load via include-style imports");
+
+    let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-14-host-read-file");
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_read_file.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_read_file_in.txt");
+
+    let run_output = compile_and_run_native_source(&source_map.combined, &output)
+        .expect("stage1 self-host host_read_file driver should run");
+    assert_eq!(run_output.status_code, Some(0));
+
+    // Link+run the emitted LLVM IR as a standalone Stage2 native binary.
+    let ir = std::fs::read_to_string("/tmp/kooixc_stage2_host_read_file.ll")
+        .expect("stage1 self-host driver should write /tmp/kooixc_stage2_host_read_file.ll");
+
+    let stage2 = std::env::temp_dir().join("kooixc-stage2-from-stage1-ll-host-read-file");
+    let _ = std::fs::remove_file(&stage2);
+    compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
+
+    let args: Vec<String> = vec![];
+    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
+        .expect("stage2 host_read_file binary should run");
+    assert_eq!(stage2_out.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&stage2);
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_read_file.ll");
+    let _ = std::fs::remove_file("/tmp/kooixc_stage2_host_read_file_in.txt");
+}
+
+#[test]
 fn stage1_self_host_v0_5_emits_and_runs_stage2_text_byte_at_smoke() {
     if !tool_exists("llc") || !tool_exists("clang") {
         return;

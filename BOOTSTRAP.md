@@ -120,6 +120,7 @@ cargo run -p kooixc -- native stage1/compiler_pure_main.kooix "$out" --run
 - v0.2 Text eq：`stage1/self_host_text_eq_main.kooix` → `/tmp/kooixc_stage2_text_eq.ll`（目标：`stage1/stage2_text_eq_smoke.kooix`）
 - v0.3 host_eprintln smoke：`stage1/self_host_host_eprintln_main.kooix` → `/tmp/kooixc_stage2_host_eprintln.ll`
 - v0.4 enum/match/IO smoke：`stage1/self_host_option_match_main.kooix` → `/tmp/kooixc_stage2_option_match.ll`；`stage1/self_host_host_write_file_main.kooix` → `/tmp/kooixc_stage2_host_write_file.ll`
+- v0.14 host_read_file smoke：`stage1/self_host_host_read_file_main.kooix` → `/tmp/kooixc_stage2_host_read_file.ll`
 - v0.5 text_byte_at smoke：`stage1/self_host_text_byte_at_main.kooix` → `/tmp/kooixc_stage2_text_byte_at.ll`
 - v0.6 text_slice smoke：`stage1/self_host_text_slice_main.kooix` → `/tmp/kooixc_stage2_text_slice.ll`
 - v0.7 lexer canary：`stage1/self_host_lexer_canary_main.kooix` → `/tmp/kooixc_stage2_lexer_canary.ll`

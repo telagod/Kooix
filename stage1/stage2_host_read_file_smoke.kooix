@@ -1,0 +1,19 @@
+import "../stdlib/prelude";
+
+fn main() -> Int {
+  let in_path: Text = "/tmp/kooixc_stage2_host_read_file_in.txt";
+  let w: Result<Int, Text> = host_write_file(in_path, "hello");
+  match w {
+    Err(_m) => 2;
+    Ok(_n) => {
+      let r: Result<Text, Text> = host_read_file(in_path);
+      match r {
+        Err(_m2) => 3;
+        Ok(s) => {
+          if s == "hello" { 0 } else { 4 }
+        };
+      }
+    };
+  }
+};
+
