@@ -183,6 +183,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - borrow checker
 - full expression system and type inference
+- logical and comparison operators: expressions do not support `< <= > >= && ||` yet (predicate comparisons in `ensures` are separate)
 - full module system / package management (current `import` is include-style; no namespace/export)
 - optimizer and full LLVM codegen (current backend is text-oriented)
 - runtime and standard library design

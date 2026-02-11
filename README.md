@@ -183,6 +183,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - borrow checker
 - 完整表达式系统与类型推导（当前仅实现函数体最小子集）
+- 逻辑与比较运算符：表达式暂不支持 `< <= > >= && ||`（`ensures` 的 predicate 比较单独支持）
 - 更完整的函数体 MIR/LLVM lowering 覆盖与运行语义（当前仅最小子集）
 - 完整模块系统 / 包管理（当前 `import` 仅 include 风格，未做 namespace/export）
 - optimizer 与真正的 LLVM codegen（目前是文本后端）
