@@ -57,6 +57,7 @@
 - `cargo fmt --all --check`
 - `cargo test -p kooixc`
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
+  - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
 
 ### Gate 1（Stage1 落地后启用）
 

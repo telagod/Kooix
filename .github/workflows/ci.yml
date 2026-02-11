@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install LLVM tools (llc) + clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -24,5 +29,5 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Test
-        run: cargo test -p kooixc
-
+        # Keep resource usage stable: bootstrap/native tests may spawn external toolchains.
+        run: cargo test -p kooixc -j 2 -- --test-threads=1
