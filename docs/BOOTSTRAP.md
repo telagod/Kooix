@@ -65,6 +65,7 @@
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
 - 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认使用 `CARGO_BUILD_JOBS=1` + `KX_SMOKE_S1_CORE=1`。
+- 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验。
 
 ## 一键复现（v0.13）
 

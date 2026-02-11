@@ -36,6 +36,17 @@ jobs:
           /tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min
           /tmp/kx-stage4-stage2-min >/dev/null
 
+      - name: Run compiler_main determinism smoke (same input -> same IR hash)
+        run: |
+          set -euo pipefail
+          ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-det-a.ll /tmp/kx-det-a >/dev/null
+          ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-det-b.ll /tmp/kx-det-b >/dev/null
+          sha_a=$(sha256sum /tmp/kx-det-a.ll | awk '{print $1}')
+          sha_b=$(sha256sum /tmp/kx-det-b.ll | awk '{print $1}')
+          test "$sha_a" = "$sha_b"
+          cmp -s /tmp/kx-det-a.ll /tmp/kx-det-b.ll
+          echo "determinism sha256: $sha_a"
+
       - name: Upload bootstrap-heavy artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,6 +56,8 @@ jobs:
             dist/kooixc1
             /tmp/kx-stage3-compiler-main.ll
             /tmp/kx-stage4-stage2-min.ll
+            /tmp/kx-det-a.ll
+            /tmp/kx-det-b.ll
           if-no-files-found: warn
 
       - name: Bootstrap-heavy summary
@@ -55,4 +68,5 @@ jobs:
             echo ""
             echo "- low-resource Stage1 real-workload smokes: KX_SMOKE_S1_CORE=1"
             echo "- compiler_main two-hop loop smoke: dist/kooixc1 -> compiler_main -> stage2_min"
+            echo "- compiler_main determinism smoke: same input emits byte-identical LLVM IR (sha256 compared)"
           } >> "$GITHUB_STEP_SUMMARY"
