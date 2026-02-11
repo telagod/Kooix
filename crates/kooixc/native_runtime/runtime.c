@@ -580,6 +580,31 @@ KxEnum* kx_host_write_file(const char* path, const char* content) {
   return out;
 }
 
+KxEnum* kx_host_read_file(const char* path) {
+  KxEnum* out = (KxEnum*)malloc(sizeof(KxEnum));
+  if (!out) {
+    return NULL;
+  }
+
+  if (!path) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)kx_strdup("host_read_file: path is null");
+    return out;
+  }
+
+  char* err = NULL;
+  char* content = kx_read_file_with_search(path, &err);
+  if (!content) {
+    out->tag = 1; // Err
+    out->payload = (uint64_t)(uintptr_t)(err ? err : kx_strdup("failed to read file"));
+    return out;
+  }
+
+  out->tag = 0; // Ok
+  out->payload = (uint64_t)(uintptr_t)content;
+  return out;
+}
+
 KxEnum* kx_host_link_llvm_ir_file(const char* ir_path, const char* out_path) {
   KxEnum* out = (KxEnum*)malloc(sizeof(KxEnum));
   if (!out) {

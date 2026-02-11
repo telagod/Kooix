@@ -3996,6 +3996,48 @@ fn main() -> Int {
 }
 
 #[test]
+fn native_host_read_file_works() {
+    if cfg!(windows) {
+        return;
+    }
+    if !tool_exists("llc") || !tool_exists("clang") {
+        return;
+    }
+
+    let input_path = std::env::temp_dir().join("kooixc-host-read-file.txt");
+    let _ = std::fs::remove_file(&input_path);
+    std::fs::write(&input_path, b"hello").expect("write input file");
+
+    let source = format!(
+        r#"
+enum Result<T, E> {{ Ok(T); Err(E); }};
+
+fn host_read_file(path: Text) -> Result<Text, Text>;
+fn host_eprintln(s: Text) -> Unit;
+
+fn main() -> Int {{
+  let r: Result<Text, Text> = host_read_file("{path}");
+  match r {{
+    Ok(s) => {{ if s == "hello" {{ 0 }} else {{ 2 }} }};
+    Err(m) => {{ host_eprintln(m); 3 }};
+  }}
+}};
+"#,
+        path = input_path.to_string_lossy()
+    );
+
+    let output = std::env::temp_dir().join("kooixc-native-host-read-file-smoke");
+    let _ = std::fs::remove_file(&output);
+
+    let run_output =
+        compile_and_run_native_source(&source, &output).expect("compile+run should work");
+    assert_eq!(run_output.status_code, Some(0));
+
+    let _ = std::fs::remove_file(&output);
+    let _ = std::fs::remove_file(&input_path);
+}
+
+#[test]
 fn native_host_link_llvm_ir_file_works() {
     if cfg!(windows) {
         return;

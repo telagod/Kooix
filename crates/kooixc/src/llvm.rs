@@ -36,6 +36,7 @@ pub fn emit_program(program: &MirProgram) -> String {
     output.push_str("declare i8* @kx_host_load_source_map(i8*)\n");
     output.push_str("declare void @kx_host_eprintln(i8*)\n\n");
     output.push_str("declare i8* @kx_host_write_file(i8*, i8*)\n\n");
+    output.push_str("declare i8* @kx_host_read_file(i8*)\n\n");
     output.push_str("declare i8* @kx_host_link_llvm_ir_file(i8*, i8*)\n\n");
     output.push_str("declare i64 @kx_host_argc()\n");
     output.push_str("declare i8* @kx_host_argv(i64)\n\n");
@@ -983,6 +984,52 @@ impl<'a> FunctionEmitter<'a> {
                 let _ = writeln!(output, "  {cast} = bitcast i8* {raw} to {res_ty}");
                 Some(cast)
             }
+            "host_read_file" => {
+                // Host-only file read. For the native backend, we evaluate this at compile time
+                // when the path is a string literal. Otherwise, it calls into the linked native
+                // runtime. Returns Result<Text, Text>.
+                let [path_op] = args else {
+                    return Some("null".to_string());
+                };
+
+                if let MirOperand::ConstText(path) = path_op {
+                    let (tag, payload_text) = match native_read_file(path) {
+                        Ok(content) => (self.lookup_enum_tag("Result", "Ok").unwrap_or(0), content),
+                        Err(message) => {
+                            (self.lookup_enum_tag("Result", "Err").unwrap_or(1), message)
+                        }
+                    };
+                    let payload_ptr = self.emit_text_ptr_for_value(&payload_text, output);
+                    let payload_word = self.ptr_to_word("i8*", &payload_ptr, output);
+                    let res_ptr = self.emit_enum_alloc("Result", tag, &payload_word, output);
+                    return Some(res_ptr);
+                }
+
+                let path_val = self.emit_operand_value(
+                    path_op,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let raw = self.fresh_tmp();
+                let _ = writeln!(
+                    output,
+                    "  {raw} = call i8* @kx_host_read_file(i8* {path_val})"
+                );
+                let res_ty = llvm_type(
+                    &TypeRef {
+                        name: "Result".to_string(),
+                        args: Vec::new(),
+                    },
+                    self.records,
+                    self.enums,
+                );
+                let cast = self.fresh_tmp();
+                let _ = writeln!(output, "  {cast} = bitcast i8* {raw} to {res_ty}");
+                Some(cast)
+            }
             "host_link_llvm_ir_file" => {
                 // Runtime native toolchain: compile+link LLVM IR file into an executable, returns Result<Int, Text>.
                 let [ir_path, out_path] = args else {
@@ -1655,6 +1702,24 @@ fn collect_text_bytes_in_rvalue(rv: &MirRvalue, out: &mut Vec<Vec<u8>>) {
                     out.push(bytes);
                 }
             }
+
+            if callee == "host_read_file" {
+                if let [MirOperand::ConstText(path)] = args.as_slice() {
+                    let bytes = match native_read_file(path) {
+                        Ok(content) => {
+                            let mut bytes = content.as_bytes().to_vec();
+                            bytes.push(0);
+                            bytes
+                        }
+                        Err(message) => {
+                            let mut bytes = message.as_bytes().to_vec();
+                            bytes.push(0);
+                            bytes
+                        }
+                    };
+                    out.push(bytes);
+                }
+            }
         }
         MirRvalue::RecordLit { fields, .. } => {
             for op in fields {
@@ -1706,6 +1771,29 @@ fn native_load_source_map(raw: &str) -> Result<String, String> {
             .map(|error| error.message.clone())
             .unwrap_or_else(|| "failed to load source map".to_string())),
     }
+}
+
+fn native_read_file(raw: &str) -> Result<String, String> {
+    let mut entry = PathBuf::from(raw);
+    if entry.extension().is_none() {
+        entry.set_extension("kooix");
+    }
+
+    if std::fs::metadata(&entry).is_err() {
+        // Mirror the interpreter's resilience: tests may run with cwd = crates/kooixc.
+        let mut prefix = PathBuf::new();
+        for _ in 0..8 {
+            prefix.push("..");
+            let candidate = prefix.join(&entry);
+            if std::fs::metadata(&candidate).is_ok() {
+                entry = candidate;
+                break;
+            }
+        }
+    }
+
+    std::fs::read_to_string(&entry)
+        .map_err(|error| format!("failed to read file '{}': {error}", entry.display()))
 }
 
 fn emit_text_constant(name: &str, bytes: &[u8], output: &mut String) {

@@ -499,6 +499,40 @@ fn eval_intrinsic_function(
                 )))),
             }
         }
+        "host_read_file" => {
+            let [Value::Text(path)] = args else {
+                return Some(Err(Diagnostic::error(
+                    "host_read_file expects (Text)",
+                    function.span,
+                )));
+            };
+
+            let mut entry = PathBuf::from(path);
+            if entry.extension().is_none() {
+                entry.set_extension("kooix");
+            }
+
+            if fs::metadata(&entry).is_err() {
+                // Mirror host_load_source_map behavior for tests: search parent dirs.
+                let mut prefix = PathBuf::new();
+                for _ in 0..8 {
+                    prefix.push("..");
+                    let candidate = prefix.join(&entry);
+                    if fs::metadata(&candidate).is_ok() {
+                        entry = candidate;
+                        break;
+                    }
+                }
+            }
+
+            match std::fs::read_to_string(&entry) {
+                Ok(content) => Ok(result_ok(Value::Text(content))),
+                Err(error) => Ok(result_err(Value::Text(format!(
+                    "failed to read file '{}': {error}",
+                    entry.display()
+                )))),
+            }
+        }
         "host_link_llvm_ir_file" => {
             let [Value::Text(ir_path), Value::Text(out_path)] = args else {
                 return Some(Err(Diagnostic::error(
