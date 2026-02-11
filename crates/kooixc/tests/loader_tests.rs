@@ -224,3 +224,28 @@ fn check_entry_modules_resolves_qualified_import_function_calls() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn check_entry_modules_resolves_qualified_import_record_types() {
+    let dir = make_temp_dir("module-check-qualified-record");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "record Answer { x: Int; };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn f(a: Lib::Answer) -> Int { a.x };\nfn main() -> Int { f(Lib::Answer { x: 1; }) };",
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    assert!(!results.iter().any(|result| {
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }));
+
+    let _ = fs::remove_dir_all(&dir);
+}

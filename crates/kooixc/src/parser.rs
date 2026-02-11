@@ -1406,50 +1406,57 @@ impl<'a> Parser<'a> {
                 });
             }
 
-            if segments.len() == 1 {
-                let ident = segments
-                    .pop()
-                    .expect("segments has exactly one element above");
-
-                let mut type_args = Vec::new();
-                if self.at_langle() && self.looks_like_generic_record_literal() {
-                    self.expect_langle()?;
-                    if !self.at_rangle() {
-                        loop {
-                            type_args.push(self.parse_type_arg()?);
-                            if self.at_comma() {
-                                self.advance();
-                                continue;
-                            }
-                            break;
+            let mut type_args = Vec::new();
+            if self.at_langle() && self.looks_like_generic_record_literal() {
+                self.expect_langle()?;
+                if !self.at_rangle() {
+                    loop {
+                        type_args.push(self.parse_type_arg()?);
+                        if self.at_comma() {
+                            self.advance();
+                            continue;
                         }
+                        break;
                     }
-                    self.expect_rangle()?;
+                }
+                self.expect_rangle()?;
+            }
+
+            if self.at_lbrace() {
+                self.expect_lbrace()?;
+                let mut fields = Vec::new();
+
+                while !self.at_rbrace() {
+                    let (name, _) = self.expect_ident()?;
+                    self.expect_colon()?;
+                    let value = self.parse_expr()?;
+                    self.expect_semicolon()?;
+                    fields.push(RecordLitField { name, value });
                 }
 
-                if self.at_lbrace() {
-                    self.expect_lbrace()?;
-                    let mut fields = Vec::new();
+                self.expect_rbrace()?;
+                let name = if segments.len() == 1 {
+                    segments
+                        .into_iter()
+                        .next()
+                        .expect("segments has one element above")
+                } else {
+                    segments.join("::")
+                };
+                return Ok(Expr::RecordLit {
+                    ty: TypeRef {
+                        name,
+                        args: type_args,
+                    },
+                    fields,
+                });
+            }
 
-                    while !self.at_rbrace() {
-                        let (name, _) = self.expect_ident()?;
-                        self.expect_colon()?;
-                        let value = self.parse_expr()?;
-                        self.expect_semicolon()?;
-                        fields.push(RecordLitField { name, value });
-                    }
-
-                    self.expect_rbrace()?;
-                    return Ok(Expr::RecordLit {
-                        ty: TypeRef {
-                            name: ident,
-                            args: type_args,
-                        },
-                        fields,
-                    });
-                }
-
-                return Ok(Expr::Path(vec![ident]));
+            if segments.len() == 1 {
+                return Ok(Expr::Path(vec![segments
+                    .into_iter()
+                    .next()
+                    .expect("segments has one element above")]));
             }
 
             return Ok(Expr::Path(segments));

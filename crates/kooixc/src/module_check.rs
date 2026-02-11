@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ast::{
     Block, EnumDecl, Expr, FunctionDecl, Item, MatchArm, MatchArmBody, MatchPattern, Program,
-    RecordDecl, Statement,
+    RecordDecl, Statement, TypeArg, TypeRef,
 };
 use crate::error::{Diagnostic, Span};
 use crate::loader::{ImportEdge, LoadedModule, ModuleGraph};
@@ -210,6 +210,35 @@ fn normalize_function_body(
     needed_enums: &mut HashMap<String, (String, PathBuf)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    rewrite_type_ref(
+        &mut function.return_type,
+        alias_map,
+        exports,
+        needed_records,
+        needed_enums,
+        diagnostics,
+    );
+    for param in &mut function.params {
+        rewrite_type_ref(
+            &mut param.ty,
+            alias_map,
+            exports,
+            needed_records,
+            needed_enums,
+            diagnostics,
+        );
+    }
+    for required in &mut function.requires {
+        rewrite_type_ref(
+            required,
+            alias_map,
+            exports,
+            needed_records,
+            needed_enums,
+            diagnostics,
+        );
+    }
+
     let Some(body) = &mut function.body else {
         return;
     };
@@ -235,15 +264,27 @@ fn normalize_block(
 ) {
     for statement in &mut block.statements {
         match statement {
-            Statement::Let(let_stmt) => normalize_expr(
-                &mut let_stmt.value,
-                alias_map,
-                exports,
-                needed_functions,
-                needed_records,
-                needed_enums,
-                diagnostics,
-            ),
+            Statement::Let(let_stmt) => {
+                if let Some(ty) = &mut let_stmt.ty {
+                    rewrite_type_ref(
+                        ty,
+                        alias_map,
+                        exports,
+                        needed_records,
+                        needed_enums,
+                        diagnostics,
+                    );
+                }
+                normalize_expr(
+                    &mut let_stmt.value,
+                    alias_map,
+                    exports,
+                    needed_functions,
+                    needed_records,
+                    needed_enums,
+                    diagnostics,
+                )
+            }
             Statement::Assign(assign_stmt) => normalize_expr(
                 &mut assign_stmt.value,
                 alias_map,
@@ -302,7 +343,15 @@ fn normalize_expr(
 ) {
     match expr {
         Expr::Path(_) | Expr::String(_) | Expr::Number(_) | Expr::Bool(_) => {}
-        Expr::RecordLit { fields, .. } => {
+        Expr::RecordLit { ty, fields } => {
+            rewrite_type_ref(
+                ty,
+                alias_map,
+                exports,
+                needed_records,
+                needed_enums,
+                diagnostics,
+            );
             for field in fields {
                 normalize_expr(
                     &mut field.value,
@@ -480,7 +529,7 @@ fn rewrite_qualified_call_target(
     alias_map: &HashMap<String, PathBuf>,
     exports: &ExportIndex,
     needed_functions: &mut HashMap<String, (String, PathBuf)>,
-    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    _needed_records: &mut HashMap<String, (String, PathBuf)>,
     needed_enums: &mut HashMap<String, (String, PathBuf)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -506,31 +555,9 @@ fn rewrite_qualified_call_target(
                 return;
             }
 
-            if exports
-                .records
-                .get(&imported_module)
-                .and_then(|items| items.get(name))
-                .is_some()
-            {
-                needed_records.insert(internal.clone(), (name.clone(), imported_module));
-                *target = vec![internal];
-                return;
-            }
-
-            if exports
-                .enums
-                .get(&imported_module)
-                .and_then(|items| items.get(name))
-                .is_some()
-            {
-                needed_enums.insert(internal.clone(), (name.clone(), imported_module));
-                *target = vec![internal];
-                return;
-            }
-
             diagnostics.push(Diagnostic::error(
                 format!(
-                    "module check: unknown imported symbol '{alias}::{name}' (from '{}')",
+                    "module check: unknown imported function '{alias}::{name}' (from '{}')",
                     imported_module.display()
                 ),
                 Span::new(0, 0),
@@ -599,6 +626,83 @@ fn rewrite_qualified_enum_path(
         }
         _ => {}
     }
+}
+
+fn rewrite_type_ref(
+    ty: &mut TypeRef,
+    alias_map: &HashMap<String, PathBuf>,
+    exports: &ExportIndex,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for arg in &mut ty.args {
+        let TypeArg::Type(nested) = arg else {
+            continue;
+        };
+        rewrite_type_ref(
+            nested,
+            alias_map,
+            exports,
+            needed_records,
+            needed_enums,
+            diagnostics,
+        );
+    }
+
+    let name = ty.name.clone();
+    let mut parts = name.splitn(2, "::");
+    let Some(head) = parts.next() else {
+        return;
+    };
+    let Some(rest) = parts.next() else {
+        return;
+    };
+    let Some(imported_module) = alias_map.get(head).cloned() else {
+        return;
+    };
+
+    if rest.contains("::") {
+        diagnostics.push(Diagnostic::error(
+            format!(
+                "module check: imported type ref must be '<ns>::<Type>' (found '{}')",
+                ty.name
+            ),
+            Span::new(0, 0),
+        ));
+        return;
+    }
+
+    let internal = format!("{head}__{rest}");
+    if exports
+        .records
+        .get(&imported_module)
+        .and_then(|items| items.get(rest))
+        .is_some()
+    {
+        ty.name = internal.clone();
+        needed_records.insert(internal, (rest.to_string(), imported_module));
+        return;
+    }
+
+    if exports
+        .enums
+        .get(&imported_module)
+        .and_then(|items| items.get(rest))
+        .is_some()
+    {
+        ty.name = internal.clone();
+        needed_enums.insert(internal, (rest.to_string(), imported_module));
+        return;
+    }
+
+    diagnostics.push(Diagnostic::error(
+        format!(
+            "module check: unknown imported type '{head}::{rest}' (from '{}')",
+            imported_module.display()
+        ),
+        Span::new(0, 0),
+    ));
 }
 
 fn stub_function(template: &FunctionDecl, new_name: &str) -> FunctionDecl {
