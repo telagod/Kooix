@@ -44,7 +44,7 @@ Kooix already has a runnable minimal compiler pipeline:
   - stop condition target validation (unknown/unreachable state warning).
   - non-termination warning when there is no `max_iterations` guard and no reachable terminal path.
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
-- CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (build native binaries directly from LLVM IR files).
+- CLI commands: `check`, `check-modules`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (`check-modules` supports `--json` / `--pretty`; `native-llvm` builds native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading (include-style): top-level `import "path";` / `import "path" as Foo;`
   - The main compile/run pipeline still uses the compat semantics: recursively expand imports, concatenate sources, then normalize away namespace prefixes (keeps the Stage1 v0.x bootstrap chain stable).
@@ -92,6 +92,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 8.6: Minimal multi-file import loading (include-style)
 - ✅ Phase 8.6.1: Import namespace prefix (`import \"path\" as Foo;` + `Foo::bar`/`Foo::T` normalization)
 - ✅ Phase 8.6.2: Prototype module-aware semantic check (`check_entry_modules`: qualified fn/type/record lit/enum variant)
+- ✅ Phase 8.6.3: `check-modules` CLI + JSON/pretty output + lightweight CI gate
 - ✅ Phase 8.7: Prelude stdlib + expected-type inference for call arguments
 - ✅ Phase 8.8: Enum variant namespacing (`Enum.Variant`) + allow cross-enum duplicates
 - ✅ Phase 8.9: Function generics syntax + explicit call type args (minimal subset)

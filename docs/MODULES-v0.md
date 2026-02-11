@@ -11,6 +11,7 @@ Kooix currently has two “import semantics” layers:
   - Builds a `ModuleGraph` and type-checks each file’s `Program` separately.
   - Resolves qualified references like `Foo::bar(...)`, `Foo::T` (including record literals), and `Foo::Enum::Variant`.
   - Internally rewrites to collision-free names (e.g. `Foo__bar`, `Foo__T`) and injects imported stubs so each module can be checked in isolation.
+  - 已暴露 CLI 入口：`kooixc check-modules <entry.kooix>`；支持 `--json`（machine-readable）与 `--pretty`（human-readable，需搭配 `--json`）。
 
 This is intentional: it keeps the bootstrap chain small while leaving syntax space for future evolution.
 
@@ -70,6 +71,7 @@ Status:
   - qualified function calls: `Foo::bar(...)`
   - qualified types / record literals: `Foo::T` / `Foo::T { ... }`
   - qualified enum variants (patterns + constructors): `Foo::Enum::Variant`
+  - via CLI: `check-modules` / `check-modules --json` / `check-modules --json --pretty`
 
 ### Step 2: Name resolution rules
 

@@ -42,7 +42,7 @@ Kooix 已完成一条可运行的最小编译链路：
   - state reachability（不可达状态 warning）。
   - stop condition 目标状态校验（unknown/unreachable warning）。
   - 无 `max_iterations` 且缺乏可达终态时 non-termination warning。
-- CLI 能力：`check`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（从 LLVM IR 文件直接产出 native bin）。
+- CLI 能力：`check`、`check-modules`、`ast`、`hir`、`mir`、`llvm`、`run`、`native`、`native-llvm`（`check-modules` 支持 `--json` / `--pretty`；`native-llvm` 可从 LLVM IR 文件直接产出 native bin）。
 - Native 运行增强：`--run`、`--stdin <file|->`、`-- <args...>`、`--timeout <ms>`。
 - 多文件加载（include-style）：顶层 `import "path";` / `import "path" as Foo;`
   - 编译/解释执行主链路仍是“递归展开 + 拼接 source + normalize 剥离 namespace 前缀”的兼容语义（保持 Stage1 v0.x 自举链稳定）。
@@ -90,6 +90,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 8.6: 最小 import 多文件加载（include 风格）
 - ✅ Phase 8.6.1: import namespace 前缀（`import "path" as Foo;` + `Foo::bar`/`Foo::T` 归一化）
 - ✅ Phase 8.6.2: module-aware semantic check 原型（`check_entry_modules`：qualified fn/type/record lit/enum variant）
+- ✅ Phase 8.6.3: `check-modules` CLI + JSON/pretty 输出 + CI 轻量门禁
 - ✅ Phase 8.7: 预置 stdlib（prelude）+ call arg expected-type 推导
 - ✅ Phase 8.8: enum variant namespacing（`Enum.Variant`）+ 跨 enum 重名放开
 - ✅ Phase 8.9: 函数泛型语法 + 显式 call type args（最小子集）
