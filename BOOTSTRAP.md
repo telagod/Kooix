@@ -189,20 +189,28 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2
 ### v0.13：一键产出 stage3 compiler（二进制）
 
 ```bash
-./scripts/bootstrap_v0_13.sh /tmp
-# 产物：/tmp/kooixc-stage3
+./scripts/bootstrap_v0_13.sh
+# 产物：dist/kooixc-stage3（同时复制为 dist/kooixc1）
 ```
 
 可选 smoke（验证 stage3 compiler 可以编译 `stage1/stage2_min.kooix` 并运行产物）：
 
 ```bash
-KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh /tmp
+KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
 更深一层（产出 stage4 compiler binary，并用 stage4 再 emit stage5 IR）：
 
 ```bash
-KX_DEEP=1 ./scripts/bootstrap_v0_13.sh /tmp
+KX_DEEP=1 ./scripts/bootstrap_v0_13.sh
+```
+
+最短闭环（用 kooixc1 编译并链接一个程序）：
+
+```bash
+./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
+/tmp/kx-stage2-min
+echo $?
 ```
 
 ## 余劫（主要风险）

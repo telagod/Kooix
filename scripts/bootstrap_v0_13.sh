@@ -17,7 +17,8 @@ if ! command -v clang >/dev/null 2>&1; then
 fi
 
 JOBS="${CARGO_BUILD_JOBS:-2}"
-OUT_DIR="${1:-/tmp}"
+OUT_DIR="${1:-$ROOT/dist}"
+mkdir -p "$OUT_DIR"
 
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"
@@ -28,6 +29,7 @@ STAGE5_IR="/tmp/kooixc_stage5_stage1_compiler.ll"
 STAGE2_BIN_SRC="/tmp/kooixc_stage2_stage1_compiler"
 STAGE2_BIN="${OUT_DIR%/}/kooixc-stage2"
 STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
+STAGE3_ALIAS="${OUT_DIR%/}/kooixc1"
 STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
 
 rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
@@ -48,6 +50,8 @@ test -s "$STAGE3_IR"
 test -x "$STAGE3_BIN"
 
 echo "ok: $STAGE3_BIN"
+cp "$STAGE3_BIN" "$STAGE3_ALIAS"
+echo "ok: $STAGE3_ALIAS"
 
 if [[ "${KX_SMOKE:-}" != "" ]]; then
   echo "[smoke] stage3 compiler compiles stage2_min and runs it"
