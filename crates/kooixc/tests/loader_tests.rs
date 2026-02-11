@@ -165,12 +165,14 @@ fn check_entry_modules_does_not_require_include_concatenation() {
 
     let results = check_entry_modules(&main).expect("module check should succeed");
     assert_eq!(results.len(), 2);
-    assert!(!results.iter().any(|result| {
+    if results.iter().any(|result| {
         result
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.severity == Severity::Error)
-    }));
+    }) {
+        panic!("unexpected module-check errors: {results:#?}");
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -215,12 +217,14 @@ fn check_entry_modules_resolves_qualified_import_function_calls() {
 
     let results = check_entry_modules(&main).expect("module check should succeed");
     assert_eq!(results.len(), 2);
-    assert!(!results.iter().any(|result| {
+    if results.iter().any(|result| {
         result
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.severity == Severity::Error)
-    }));
+    }) {
+        panic!("unexpected module-check errors: {results:#?}");
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -240,12 +244,45 @@ fn check_entry_modules_resolves_qualified_import_record_types() {
 
     let results = check_entry_modules(&main).expect("module check should succeed");
     assert_eq!(results.len(), 2);
-    assert!(!results.iter().any(|result| {
+    if results.iter().any(|result| {
         result
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.severity == Severity::Error)
-    }));
+    }) {
+        panic!("unexpected module-check errors: {results:#?}");
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_entry_modules_resolves_qualified_import_enum_variants() {
+    let dir = make_temp_dir("module-check-qualified-enum");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &lib,
+        "enum Option<T> { Some(T); None; };\nfn mk(x: Int) -> Option<Int> { Option.Some(x) };",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int {\n  let o: Lib::Option<Int> = Lib::mk(7);\n  match o {\n    Lib::Option::Some(v) => v;\n    Lib::Option::None => 0;\n  }\n};",
+    )
+    .expect("write main");
+
+    let results = check_entry_modules(&main).expect("module check should succeed");
+    assert_eq!(results.len(), 2);
+    if results.iter().any(|result| {
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }) {
+        panic!("unexpected module-check errors: {results:#?}");
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }

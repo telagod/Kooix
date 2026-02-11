@@ -96,11 +96,18 @@ pub fn prepare_program_for_module_check(
         }
     }
 
-    let mut inserted = HashSet::new();
-    for (internal, (original, imported_module)) in needed_functions {
-        if !inserted.insert(internal.clone()) {
+    let mut inserted: HashSet<String> = HashSet::new();
+    let mut record_queue: Vec<String> = needed_records.keys().cloned().collect();
+    let mut enum_queue: Vec<String> = needed_enums.keys().cloned().collect();
+
+    let mut fn_queue: Vec<String> = needed_functions.keys().cloned().collect();
+    while let Some(internal) = fn_queue.pop() {
+        if !inserted.insert(inserted_key("fn", &internal)) {
             continue;
         }
+        let Some((original, imported_module)) = needed_functions.get(&internal).cloned() else {
+            continue;
+        };
         let Some(template) = exports
             .functions
             .get(&imported_module)
@@ -117,64 +124,113 @@ pub fn prepare_program_for_module_check(
             ));
             continue;
         };
-        program
-            .items
-            .push(Item::Function(stub_function(template, &internal)));
+
+        let alias = internal_namespace(&internal).to_string();
+        let mut stub = stub_function(template, &internal);
+        rewrite_function_signature_for_imported_module(
+            &mut stub,
+            &alias,
+            &imported_module,
+            exports,
+            &mut needed_records,
+            &mut needed_enums,
+            &mut record_queue,
+            &mut enum_queue,
+        );
+        program.items.push(Item::Function(stub));
     }
 
-    for (internal, (original, imported_module)) in needed_records {
-        if !inserted.insert(internal.clone()) {
-            continue;
-        }
-        let Some(template) = exports
-            .records
-            .get(&imported_module)
-            .and_then(|items| items.get(&original))
-        else {
-            diagnostics.push(Diagnostic::error(
-                format!(
-                    "module check: unknown imported record '{}::{}' (from '{}')",
-                    internal_namespace(&internal),
-                    original,
-                    imported_module.display(),
-                ),
-                Span::new(0, 0),
-            ));
-            continue;
-        };
-        let mut stub = template.clone();
-        stub.name = internal.clone();
-        stub.span = Span::new(0, 0);
-        program.items.push(Item::Record(stub));
-    }
+    // Insert record/enum stubs, expanding dependencies discovered while rewriting imported item
+    // signatures and schemas.
+    while !record_queue.is_empty() || !enum_queue.is_empty() {
+        while let Some(internal) = record_queue.pop() {
+            if !inserted.insert(inserted_key("record", &internal)) {
+                continue;
+            }
+            let Some((original, imported_module)) = needed_records.get(&internal).cloned() else {
+                continue;
+            };
+            let Some(template) = exports
+                .records
+                .get(&imported_module)
+                .and_then(|items| items.get(&original))
+            else {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "module check: unknown imported record '{}::{}' (from '{}')",
+                        internal_namespace(&internal),
+                        original,
+                        imported_module.display(),
+                    ),
+                    Span::new(0, 0),
+                ));
+                continue;
+            };
 
-    for (internal, (original, imported_module)) in needed_enums {
-        if !inserted.insert(internal.clone()) {
-            continue;
+            let alias = internal_namespace(&internal).to_string();
+            let mut stub = template.clone();
+            stub.name = internal.clone();
+            stub.span = Span::new(0, 0);
+            rewrite_record_decl_for_imported_module(
+                &mut stub,
+                &alias,
+                &imported_module,
+                exports,
+                &mut needed_records,
+                &mut needed_enums,
+                &mut record_queue,
+                &mut enum_queue,
+            );
+            program.items.push(Item::Record(stub));
         }
-        let Some(template) = exports
-            .enums
-            .get(&imported_module)
-            .and_then(|items| items.get(&original))
-        else {
-            diagnostics.push(Diagnostic::error(
-                format!(
-                    "module check: unknown imported enum '{}::{}' (from '{}')",
-                    internal_namespace(&internal),
-                    original,
-                    imported_module.display(),
-                ),
-                Span::new(0, 0),
-            ));
-            continue;
-        };
-        let mut stub = template.clone();
-        stub.name = internal.clone();
-        stub.span = Span::new(0, 0);
-        program.items.push(Item::Enum(stub));
+
+        while let Some(internal) = enum_queue.pop() {
+            if !inserted.insert(inserted_key("enum", &internal)) {
+                continue;
+            }
+            let Some((original, imported_module)) = needed_enums.get(&internal).cloned() else {
+                continue;
+            };
+            let Some(template) = exports
+                .enums
+                .get(&imported_module)
+                .and_then(|items| items.get(&original))
+            else {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "module check: unknown imported enum '{}::{}' (from '{}')",
+                        internal_namespace(&internal),
+                        original,
+                        imported_module.display(),
+                    ),
+                    Span::new(0, 0),
+                ));
+                continue;
+            };
+
+            let alias = internal_namespace(&internal).to_string();
+            let mut stub = template.clone();
+            stub.name = internal.clone();
+            stub.span = Span::new(0, 0);
+            rewrite_enum_decl_for_imported_module(
+                &mut stub,
+                &alias,
+                &imported_module,
+                exports,
+                &mut needed_records,
+                &mut needed_enums,
+                &mut record_queue,
+                &mut enum_queue,
+            );
+            program.items.push(Item::Enum(stub));
+        }
     }
 
     (program, diagnostics)
+}
+
+fn inserted_key(kind: &str, internal: &str) -> String {
+    format!("{kind}:{internal}")
 }
 
 fn internal_namespace(internal: &str) -> &str {
@@ -703,6 +759,203 @@ fn rewrite_type_ref(
         ),
         Span::new(0, 0),
     ));
+}
+
+fn rewrite_function_signature_for_imported_module(
+    function: &mut FunctionDecl,
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
+) {
+    for generic in &mut function.generics {
+        for bound in &mut generic.bounds {
+            rewrite_type_ref_for_imported_module(
+                bound,
+                alias,
+                imported_module,
+                exports,
+                needed_records,
+                needed_enums,
+                record_queue,
+                enum_queue,
+            );
+        }
+    }
+
+    for param in &mut function.params {
+        rewrite_type_ref_for_imported_module(
+            &mut param.ty,
+            alias,
+            imported_module,
+            exports,
+            needed_records,
+            needed_enums,
+            record_queue,
+            enum_queue,
+        );
+    }
+
+    rewrite_type_ref_for_imported_module(
+        &mut function.return_type,
+        alias,
+        imported_module,
+        exports,
+        needed_records,
+        needed_enums,
+        record_queue,
+        enum_queue,
+    );
+}
+
+fn rewrite_record_decl_for_imported_module(
+    record: &mut RecordDecl,
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
+) {
+    for generic in &mut record.generics {
+        for bound in &mut generic.bounds {
+            rewrite_type_ref_for_imported_module(
+                bound,
+                alias,
+                imported_module,
+                exports,
+                needed_records,
+                needed_enums,
+                record_queue,
+                enum_queue,
+            );
+        }
+    }
+
+    for field in &mut record.fields {
+        rewrite_type_ref_for_imported_module(
+            &mut field.ty,
+            alias,
+            imported_module,
+            exports,
+            needed_records,
+            needed_enums,
+            record_queue,
+            enum_queue,
+        );
+    }
+}
+
+fn rewrite_enum_decl_for_imported_module(
+    en: &mut EnumDecl,
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
+) {
+    for generic in &mut en.generics {
+        for bound in &mut generic.bounds {
+            rewrite_type_ref_for_imported_module(
+                bound,
+                alias,
+                imported_module,
+                exports,
+                needed_records,
+                needed_enums,
+                record_queue,
+                enum_queue,
+            );
+        }
+    }
+
+    for variant in &mut en.variants {
+        if let Some(payload) = &mut variant.payload {
+            rewrite_type_ref_for_imported_module(
+                payload,
+                alias,
+                imported_module,
+                exports,
+                needed_records,
+                needed_enums,
+                record_queue,
+                enum_queue,
+            );
+        }
+    }
+}
+
+fn rewrite_type_ref_for_imported_module(
+    ty: &mut TypeRef,
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
+) {
+    for arg in &mut ty.args {
+        let TypeArg::Type(nested) = arg else {
+            continue;
+        };
+        rewrite_type_ref_for_imported_module(
+            nested,
+            alias,
+            imported_module,
+            exports,
+            needed_records,
+            needed_enums,
+            record_queue,
+            enum_queue,
+        );
+    }
+
+    // Only rewrite local type references (unqualified) from the imported module. If the signature
+    // references other namespaces, we currently leave them as-is.
+    if ty.name.contains("::") {
+        return;
+    }
+
+    let original = ty.name.clone();
+    if exports
+        .records
+        .get(imported_module)
+        .and_then(|items| items.get(&original))
+        .is_some()
+    {
+        let internal = format!("{alias}__{original}");
+        ty.name = internal.clone();
+        if needed_records
+            .insert(internal.clone(), (original, imported_module.clone()))
+            .is_none()
+        {
+            record_queue.push(internal);
+        }
+        return;
+    }
+
+    if exports
+        .enums
+        .get(imported_module)
+        .and_then(|items| items.get(&original))
+        .is_some()
+    {
+        let internal = format!("{alias}__{original}");
+        ty.name = internal.clone();
+        if needed_enums
+            .insert(internal.clone(), (original, imported_module.clone()))
+            .is_none()
+        {
+            enum_queue.push(internal);
+        }
+    }
 }
 
 fn stub_function(template: &FunctionDecl, new_name: &str) -> FunctionDecl {
