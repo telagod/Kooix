@@ -123,6 +123,20 @@ if [[ "${KX_SMOKE_S1_LEXER:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
+if [[ "${KX_SMOKE_S1_PARSER:-}" != "" ]]; then
+  echo "[smoke] stage3 compiler compiles stage1/stage2_s1_parser_module_smoke and runs it (imports stage1/parser)"
+  SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_parser_module_smoke.ll"
+  SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-parser-module-smoke"
+  rm -f "$SMOKE_IR" "$SMOKE_BIN"
+
+  "$STAGE3_BIN" stage1/stage2_s1_parser_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  test -s "$SMOKE_IR"
+  test -x "$SMOKE_BIN"
+  "$SMOKE_BIN" >/dev/null
+
+  echo "ok: smoke binary ran: $SMOKE_BIN"
+fi
+
 if [[ "${KX_DEEP:-}" != "" ]]; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"

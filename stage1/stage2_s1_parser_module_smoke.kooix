@@ -1,0 +1,55 @@
+import "../stdlib/prelude";
+import "ast";
+import "lexer";
+import "parser";
+
+fn s1_has_main_fn(items: List<S1Item>) -> Bool {
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  let found: Bool = false;
+
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Function(f) => {
+            if f.name == "main" {
+              found = true;
+              done = true;
+              0
+            } else {
+              0
+            }
+          };
+          _ => 0;
+        };
+        cur = cell.tail;
+        0
+      };
+    }
+  };
+
+  found
+};
+
+fn main() -> Int {
+  let src: Text = "fn main() -> Int { 0 };";
+  let r1: Result<List<S1Token>, S1Diagnostic> = s1_lex(src);
+  match r1 {
+    Err(_e1) => 80;
+    Ok(ts) => {
+      let r2: Result<S1Program, S1Diagnostic> = s1_parse(ts);
+      match r2 {
+        Err(_e2) => 81;
+        Ok(p) => {
+          if s1_has_main_fn(p.items) { 0 } else { 82 }
+        };
+      }
+    };
+  }
+};
+
