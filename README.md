@@ -50,7 +50,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - stdlib 起步：`stdlib/prelude.kooix`（`Option`/`Result`/`List`/`Pair` + 少量 Int helper；以及 `fs_read_text/fs_write_text/args_len/args_get` 薄封装）。
 - host intrinsics：`host_load_source_map`（兼容 loader）与 `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file`（bootstrap 使用；native runtime 已实现）。另：Stage1 已提供 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（Stage1 compiler driver 与 self-host drivers 已切换到此实现）。
 - 自举产物：`./scripts/bootstrap_v0_13.sh` 可产出 `dist/kooixc1`（stage3 compiler binary，可用于编译+链接 Kooix 程序）。
-- 自举实载验证：`dist/kooixc1` 已可编译+链接+运行 `stage1/lexer`、`stage1/parser`、`stage1/typecheck` 子图 smoke（低资源命令见下方 Quick Start）。
+- 自举实载验证：`dist/kooixc1` 已可编译+链接+运行 `stage1/lexer`、`stage1/parser`、`stage1/typecheck`、`stage1/resolver` 子图 smoke；并已验证 `compiler_main` 二段闭环（低资源命令见下方 Quick Start）。
 - enum variant namespacing：支持 `Enum.Variant` / `Enum::Variant` / `Enum.Variant(payload)`；跨 enum 允许同名 variant（发生冲突时要求使用 namespaced 形式）。
 
 > 语法注记：在 `if/while/match` 的 condition/scrutinee 位置，record literal 需要括号包裹以消除 `{ ... }` 歧义，例如 `if (Pair { a: 1; b: 2; }).a == 1 { ... }`。
@@ -101,7 +101,7 @@ Kooix 已完成一条可运行的最小编译链路：
 - ✅ Phase 9.3: native runtime 补齐 `host_load_source_map/host_eprintln`（Stage1 bootstrap 链路可跑）
 - ✅ Phase 9.4: native runtime + lowering 补齐 bootstrap I/O/argv/toolchain intrinsics（`host_write_file/host_argc/host_argv/host_link_llvm_ir_file`）
 - ✅ Phase 9.5: bootstrap v0.13+ 产物可复现（stage2/stage3/stage4/stage5 指纹一致 + golden/determinism 门禁）+ 一键产出 `dist/kooixc1`
-- ✅ Phase 9.6: `dist/kooixc1` 真实负载扩面（`stage1/lexer` + `stage1/parser` + `stage1/typecheck` smoke 全绿，含低资源单线程链路）
+- ✅ Phase 9.6: `dist/kooixc1` 真实负载扩面（`stage1/lexer` + `stage1/parser` + `stage1/typecheck` + `stage1/resolver` smoke 全绿，且 `compiler_main` 二段闭环可跑）
 
 详见：`DESIGN.md` / `BOOTSTRAP.md`
 
@@ -167,8 +167,14 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 /tmp/kx-stage2-min
 echo $?
 
-# 低资源实载 smoke：一次性验证 stage1 lexer/parser/typecheck 子图
-CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh
+# 低资源实载 smoke：一次性验证 stage1 lexer/parser/typecheck/resolver 子图
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 KX_SMOKE_S1_RESOLVER=1 ./scripts/bootstrap_v0_13.sh
+
+# 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
+./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main
+/tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min
+/tmp/kx-stage4-stage2-min
+echo $?
 
 # 测试
 cargo test -p kooixc -j 2 -- --test-threads=1

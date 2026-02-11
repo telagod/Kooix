@@ -52,7 +52,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers; plus thin wrappers `fs_read_text/fs_write_text/args_len/args_get`).
 - Host intrinsics: `host_load_source_map` (compat loader) plus `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file` (used for bootstrap; implemented in native runtime). Also: Stage1 now has a Kooix include loader `stage1/source_map.kooix:s1_load_source_map` (the Stage1 compiler driver and self-host drivers use this path).
 - Bootstrap artifact: `./scripts/bootstrap_v0_13.sh` produces `dist/kooixc1` (stage3 compiler binary that can compile+link Kooix programs).
-- Real-workload bootstrap validation: `dist/kooixc1` now compiles+links+runs Stage1 module smokes for `lexer`, `parser`, and `typecheck` (see low-resource command in Quick Start).
+- Real-workload bootstrap validation: `dist/kooixc1` now compiles+links+runs Stage1 module smokes for `lexer`, `parser`, `typecheck`, and `resolver`; the two-hop `compiler_main` loop is also verified (see Quick Start).
 - Enum variant namespacing: `Enum.Variant` / `Enum::Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).
 
 > Syntax note: in `if/while/match` condition/scrutinee positions, record literals must be parenthesized to avoid `{ ... }` ambiguity (e.g. `if (Pair { a: 1; b: 2; }).a == 1 { ... }`).
@@ -103,7 +103,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - ✅ Phase 9.3: Native runtime for `host_load_source_map/host_eprintln` (Stage1 bootstrap path runs)
 - ✅ Phase 9.4: Bootstrap I/O/argv/toolchain intrinsics (`host_write_file/host_argc/host_argv/host_link_llvm_ir_file`)
 - ✅ Phase 9.5: Reproducible bootstrap gates (stage2/3/4/5 fingerprint match + golden/determinism) + one-shot `dist/kooixc1` build
-- ✅ Phase 9.6: `dist/kooixc1` real-workload expansion (`stage1/lexer` + `stage1/parser` + `stage1/typecheck` smokes are green, including low-resource single-job mode)
+- ✅ Phase 9.6: `dist/kooixc1` real-workload expansion (`stage1/lexer` + `stage1/parser` + `stage1/typecheck` + `stage1/resolver` smokes are green, and the two-hop `compiler_main` loop is runnable)
 
 See also: `DESIGN.md` / `BOOTSTRAP.md`
 
@@ -169,8 +169,14 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 /tmp/kx-stage2-min
 echo $?
 
-# Low-resource real-workload smoke: validate stage1 lexer/parser/typecheck in one pass
-CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh
+# Low-resource real-workload smoke: validate stage1 lexer/parser/typecheck/resolver in one pass
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 KX_SMOKE_S1_RESOLVER=1 ./scripts/bootstrap_v0_13.sh
+
+# Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
+./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main
+/tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min
+/tmp/kx-stage4-stage2-min
+echo $?
 
 # Tests
 cargo test -p kooixc -j 2 -- --test-threads=1
