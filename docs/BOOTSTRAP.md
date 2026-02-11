@@ -64,9 +64,9 @@
 - `cargo test -p kooixc`
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
-- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。
-- 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验。
-- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh`。
+- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）。
+- 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路）。
 
 ## 一键复现（v0.13）
 
@@ -76,6 +76,8 @@
 ./scripts/bootstrap_v0_13.sh
 # 产物：dist/kooixc-stage3（同时复制为 dist/kooixc1）
 ```
+
+> 资源策略：`scripts/bootstrap_v0_13.sh` 默认 `CARGO_BUILD_JOBS=1`，优先保守占用。
 
 可选 smoke（验证 stage3 compiler 可以编译 `stage1/stage2_min.kooix` 并运行产物）：
 
@@ -115,10 +117,20 @@ KX_SMOKE_S1_TYPECHECK=1 ./scripts/bootstrap_v0_13.sh
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
-一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环 + deterministic 对比）：
+一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环；本地默认不跑 deterministic 对比）：
 
 ```bash
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+```
+
+可选（同一脚本）：
+
+```bash
+# 开启 deterministic 对比
+CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 打开 deep 链路（stage4 -> stage5）
+CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 ```
 
 可选 smoke（更重：验证 stage1/resolver 子图也可被 stage3 编译+链接+运行）：

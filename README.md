@@ -170,8 +170,14 @@ echo $?
 # 低资源实载 smoke：一次性验证 stage1 lexer/parser/typecheck/resolver 子图
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
-# 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环 + deterministic 对比
+# 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 可选：开启 deterministic 对比
+CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 可选：开启 deep 链路（stage4 -> stage5）
+CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

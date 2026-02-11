@@ -16,7 +16,7 @@ if ! command -v clang >/dev/null 2>&1; then
   exit 1
 fi
 
-JOBS="${CARGO_BUILD_JOBS:-2}"
+JOBS="${CARGO_BUILD_JOBS:-1}"
 OUT_DIR="${1:-$ROOT/dist}"
 mkdir -p "$OUT_DIR"
 

@@ -1,14 +1,25 @@
 name: bootstrap-heavy
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      run_determinism:
+        description: Run compiler_main deterministic emit check
+        required: false
+        default: true
+        type: boolean
+      run_deep:
+        description: Enable deep chain (stage4 -> stage5) in bootstrap_v0_13
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "37 3 * * *"
 
 jobs:
   stage1-real-workload-smokes:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -23,9 +34,22 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Resolve bootstrap-heavy toggles
+        id: toggles
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "determinism=${{ inputs.run_determinism }}" >> "$GITHUB_OUTPUT"
+            echo "deep=${{ inputs.run_deep }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "determinism=true" >> "$GITHUB_OUTPUT"
+            echo "deep=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run bootstrap-heavy gate script
         env:
           CARGO_BUILD_JOBS: "1"
+          KX_HEAVY_DETERMINISM: ${{ steps.toggles.outputs.determinism }}
+          KX_HEAVY_DEEP: ${{ steps.toggles.outputs.deep }}
         run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
@@ -35,19 +59,56 @@ jobs:
           name: bootstrap-heavy-artifacts
           path: |
             dist/kooixc1
+            dist/kooixc-stage4
             /tmp/kx-stage3-compiler-main.ll
             /tmp/kx-stage4-stage2-min.ll
             /tmp/kx-det-a.ll
             /tmp/kx-det-b.ll
+            /tmp/bootstrap-heavy-metrics.txt
+            /tmp/bootstrap-heavy-determinism.sha256
+            /tmp/kooixc_stage4_stage1_compiler.ll
+            /tmp/kooixc_stage5_stage1_compiler.ll
           if-no-files-found: warn
 
       - name: Bootstrap-heavy summary
         if: always()
         run: |
+          metrics_file=/tmp/bootstrap-heavy-metrics.txt
+          det_file=/tmp/bootstrap-heavy-determinism.sha256
+
+          gate1="n/a"
+          gate2="n/a"
+          gate3="n/a"
+          total="n/a"
+          deep="unknown"
+          determinism="unknown"
+          det_hash="n/a"
+
+          if [ -f "$metrics_file" ]; then
+            while IFS='=' read -r key value; do
+              case "$key" in
+                gate1_seconds) gate1="$value" ;;
+                gate2_seconds) gate2="$value" ;;
+                gate3_seconds) gate3="$value" ;;
+                total_seconds) total="$value" ;;
+                deep_enabled) deep="$value" ;;
+                determinism_enabled) determinism="$value" ;;
+              esac
+            done < "$metrics_file"
+          fi
+
+          if [ -s "$det_file" ]; then
+            det_hash=$(awk '{print $1}' "$det_file")
+          fi
+
           {
             echo "### Bootstrap Heavy Summary"
             echo ""
-            echo "- low-resource Stage1 real-workload smokes: KX_SMOKE_S1_CORE=1"
-            echo "- compiler_main two-hop loop smoke: dist/kooixc1 -> compiler_main -> stage2_min"
-            echo "- compiler_main determinism smoke: same input emits byte-identical LLVM IR (sha256 compared)"
+            echo "- deep mode: ${deep}"
+            echo "- determinism mode: ${determinism}"
+            echo "- gate1 (S1_CORE smokes): ${gate1}s"
+            echo "- gate2 (compiler_main two-hop): ${gate2}s"
+            echo "- gate3 (determinism): ${gate3}s"
+            echo "- total: ${total}s"
+            echo "- determinism sha256: ${det_hash}"
           } >> "$GITHUB_STEP_SUMMARY"
