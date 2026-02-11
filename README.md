@@ -165,6 +165,9 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # 复用已有 dist/kooixc-stage3（避免重复重建，降低资源占用）
 KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
 
+# 若 stage3 丢失但 stage2 仍在，可复用 dist/kooixc-stage2 重建 stage3
+KX_REUSE_STAGE2=1 ./scripts/bootstrap_v0_13.sh
+
 # 最短闭环：用 dist/kooixc1 编译并链接一个程序（stage2_min）
 ./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
 /tmp/kx-stage2-min
@@ -175,6 +178,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
 # 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 可选：关闭/开启 bootstrap 产物复用（默认均开启）
+CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 
 # 可选：开启 deterministic 对比
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh

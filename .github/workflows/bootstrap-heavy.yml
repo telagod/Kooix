@@ -13,6 +13,16 @@ on:
         required: false
         default: false
         type: boolean
+      reuse_stage3:
+        description: Reuse dist/kooixc-stage3 when already present
+        required: false
+        default: true
+        type: boolean
+      reuse_stage2:
+        description: Reuse dist/kooixc-stage2 when stage3 rebuild is needed
+        required: false
+        default: true
+        type: boolean
   schedule:
     - cron: "37 3 * * *"
 
@@ -40,9 +50,13 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "determinism=${{ inputs.run_determinism }}" >> "$GITHUB_OUTPUT"
             echo "deep=${{ inputs.run_deep }}" >> "$GITHUB_OUTPUT"
+            echo "reuse_stage3=${{ inputs.reuse_stage3 }}" >> "$GITHUB_OUTPUT"
+            echo "reuse_stage2=${{ inputs.reuse_stage2 }}" >> "$GITHUB_OUTPUT"
           else
             echo "determinism=true" >> "$GITHUB_OUTPUT"
             echo "deep=false" >> "$GITHUB_OUTPUT"
+            echo "reuse_stage3=true" >> "$GITHUB_OUTPUT"
+            echo "reuse_stage2=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run bootstrap-heavy gate script
@@ -50,6 +64,8 @@ jobs:
           CARGO_BUILD_JOBS: "1"
           KX_HEAVY_DETERMINISM: ${{ steps.toggles.outputs.determinism }}
           KX_HEAVY_DEEP: ${{ steps.toggles.outputs.deep }}
+          KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
+          KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
         run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
@@ -59,11 +75,13 @@ jobs:
           name: bootstrap-heavy-artifacts
           path: |
             dist/kooixc1
+            dist/kooixc-stage2
             dist/kooixc-stage4
             /tmp/kx-stage3-compiler-main.ll
             /tmp/kx-stage4-stage2-min.ll
             /tmp/kx-det-a.ll
             /tmp/kx-det-b.ll
+            /tmp/bootstrap-heavy-bootstrap.log
             /tmp/bootstrap-heavy-metrics.txt
             /tmp/bootstrap-heavy-determinism.sha256
             /tmp/kooixc_stage4_stage1_compiler.ll
@@ -82,6 +100,10 @@ jobs:
           total="n/a"
           deep="unknown"
           determinism="unknown"
+          reuse_stage3="unknown"
+          reuse_stage3_hit="n/a"
+          reuse_stage2="unknown"
+          reuse_stage2_hit="n/a"
           det_hash="n/a"
 
           if [ -f "$metrics_file" ]; then
@@ -93,6 +115,10 @@ jobs:
                 total_seconds) total="$value" ;;
                 deep_enabled) deep="$value" ;;
                 determinism_enabled) determinism="$value" ;;
+                reuse_stage3_enabled) reuse_stage3="$value" ;;
+                reuse_stage3_hit) reuse_stage3_hit="$value" ;;
+                reuse_stage2_enabled) reuse_stage2="$value" ;;
+                reuse_stage2_hit) reuse_stage2_hit="$value" ;;
               esac
             done < "$metrics_file"
           fi
@@ -106,6 +132,8 @@ jobs:
             echo ""
             echo "- deep mode: ${deep}"
             echo "- determinism mode: ${determinism}"
+            echo "- reuse stage3: ${reuse_stage3} (hit=${reuse_stage3_hit})"
+            echo "- reuse stage2: ${reuse_stage2} (hit=${reuse_stage2_hit})"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"
             echo "- gate3 (determinism): ${gate3}s"

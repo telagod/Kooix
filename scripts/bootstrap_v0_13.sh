@@ -20,6 +20,16 @@ JOBS="${CARGO_BUILD_JOBS:-1}"
 OUT_DIR="${1:-$ROOT/dist}"
 mkdir -p "$OUT_DIR"
 
+is_enabled() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+REUSE_STAGE3="${KX_REUSE_STAGE3:-0}"
+REUSE_STAGE2="${KX_REUSE_STAGE2:-0}"
+
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"
 STAGE3_IR="/tmp/kooixc_stage3_stage1_compiler.ll"
@@ -32,24 +42,34 @@ STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
 STAGE3_ALIAS="${OUT_DIR%/}/kooixc1"
 STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
 
-if [[ "${KX_REUSE_STAGE3:-}" != "" && -x "$STAGE3_BIN" ]]; then
+if is_enabled "$REUSE_STAGE3" && [[ -x "$STAGE3_BIN" ]]; then
   echo "[reuse] using existing stage3 compiler: $STAGE3_BIN"
 else
-  if [[ "${KX_REUSE_STAGE3:-}" != "" ]]; then
+  if is_enabled "$REUSE_STAGE3"; then
     echo "[reuse] requested but missing stage3 compiler; rebuilding: $STAGE3_BIN"
   fi
 
-  rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE3_BIN" "$STAGE4_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC" "$STAGE3_IR" "$STAGE4_IR" "$STAGE5_IR"
+  rm -f "$STAGE3_BIN" "$STAGE3_IR" "$STAGE4_BIN" "$STAGE4_IR" "$STAGE5_IR"
 
-  echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
-  cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
-  test -s "$STAGE2_IR"
-  test -x "$STAGE2_BIN_SRC"
+  if is_enabled "$REUSE_STAGE2" && [[ -x "$STAGE2_BIN" ]]; then
+    echo "[reuse] using existing stage2 compiler: $STAGE2_BIN"
+  else
+    if is_enabled "$REUSE_STAGE2"; then
+      echo "[reuse] requested but missing stage2 compiler; rebuilding: $STAGE2_BIN"
+    fi
 
-  if [[ "$STAGE2_BIN" != "$STAGE2_BIN_SRC" ]]; then
-    cp "$STAGE2_BIN_SRC" "$STAGE2_BIN"
+    rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC"
+
+    echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
+    cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
+    test -s "$STAGE2_IR"
+    test -x "$STAGE2_BIN_SRC"
+
+    if [[ "$STAGE2_BIN" != "$STAGE2_BIN_SRC" ]]; then
+      cp "$STAGE2_BIN_SRC" "$STAGE2_BIN"
+    fi
+    test -x "$STAGE2_BIN"
   fi
-  test -x "$STAGE2_BIN"
 
   echo "[2/2] stage2 compiler -> stage3 IR -> stage3 compiler"
   "$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null

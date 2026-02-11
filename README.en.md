@@ -167,6 +167,9 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Reuse existing dist/kooixc-stage3 (avoid rebuild, lower resource usage)
 KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
 
+# If stage3 is missing but stage2 still exists, rebuild stage3 from dist/kooixc-stage2
+KX_REUSE_STAGE2=1 ./scripts/bootstrap_v0_13.sh
+
 # Shortest loop: use dist/kooixc1 to compile+link a program (stage2_min)
 ./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
 /tmp/kx-stage2-min
@@ -177,6 +180,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+
+# Optional: disable/enable bootstrap artifact reuse (both enabled by default)
+CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable determinism compare
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh

@@ -14,6 +14,8 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 
 HEAVY_DETERMINISM="${KX_HEAVY_DETERMINISM:-0}"
 HEAVY_DEEP="${KX_HEAVY_DEEP:-0}"
+HEAVY_REUSE_STAGE3="${KX_HEAVY_REUSE_STAGE3:-1}"
+HEAVY_REUSE_STAGE2="${KX_HEAVY_REUSE_STAGE2:-1}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
@@ -24,6 +26,7 @@ DET_A_LL="/tmp/kx-det-a.ll"
 DET_B_LL="/tmp/kx-det-b.ll"
 METRICS_FILE="/tmp/bootstrap-heavy-metrics.txt"
 DET_SHA_FILE="/tmp/bootstrap-heavy-determinism.sha256"
+BOOTSTRAP_LOG="/tmp/bootstrap-heavy-bootstrap.log"
 
 is_enabled() {
   case "${1,,}" in
@@ -40,7 +43,8 @@ rm -f \
   "$DET_A_LL" \
   "$DET_B_LL" \
   "$METRICS_FILE" \
-  "$DET_SHA_FILE"
+  "$DET_SHA_FILE" \
+  "$BOOTSTRAP_LOG"
 
 if is_enabled "$HEAVY_DEEP"; then
   DEEP_LABEL="enabled"
@@ -54,16 +58,48 @@ else
   DET_LABEL="disabled"
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL"
+if is_enabled "$HEAVY_REUSE_STAGE3"; then
+  REUSE_STAGE3_LABEL="enabled"
+else
+  REUSE_STAGE3_LABEL="disabled"
+fi
+
+if is_enabled "$HEAVY_REUSE_STAGE2"; then
+  REUSE_STAGE2_LABEL="enabled"
+else
+  REUSE_STAGE2_LABEL="disabled"
+fi
+
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SMOKE_S1_CORE=1 KX_DEEP=1 ./scripts/bootstrap_v0_13.sh "$OUT_DIR"
+  KX_SMOKE_S1_CORE=1 KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh "$OUT_DIR"
+  KX_SMOKE_S1_CORE=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
+
+if is_enabled "$HEAVY_REUSE_STAGE3"; then
+  if grep -q "^\[reuse\] using existing stage3 compiler:" "$BOOTSTRAP_LOG"; then
+    REUSE_STAGE3_HIT="yes"
+  else
+    REUSE_STAGE3_HIT="no"
+  fi
+else
+  REUSE_STAGE3_HIT="disabled"
+fi
+
+if is_enabled "$HEAVY_REUSE_STAGE2"; then
+  if grep -q "^\[reuse\] using existing stage2 compiler:" "$BOOTSTRAP_LOG"; then
+    REUSE_STAGE2_HIT="yes"
+  else
+    REUSE_STAGE2_HIT="no"
+  fi
+else
+  REUSE_STAGE2_HIT="disabled"
+fi
 
 gate2_start="$SECONDS"
 echo "[gate 2/3] compiler_main two-hop loop"
@@ -98,6 +134,10 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "total_seconds=$total_seconds"
   echo "deep_enabled=$DEEP_LABEL"
   echo "determinism_enabled=$DET_LABEL"
+  echo "reuse_stage3_enabled=$REUSE_STAGE3_LABEL"
+  echo "reuse_stage3_hit=$REUSE_STAGE3_HIT"
+  echo "reuse_stage2_enabled=$REUSE_STAGE2_LABEL"
+  echo "reuse_stage2_hit=$REUSE_STAGE2_HIT"
   echo "determinism_sha256=${sha_a}"
 } > "$METRICS_FILE"
 
