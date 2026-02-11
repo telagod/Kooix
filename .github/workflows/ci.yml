@@ -35,11 +35,27 @@ jobs:
           KX_GOLDEN: "1"
         run: cargo test -p kooixc -j 2 -- --test-threads=1
 
-      - name: Module-aware check gate (JSON)
-        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json > module-check.json
+      - name: Module-aware check gate matrix
+        run: |
+          set -euo pipefail
 
-      - name: Module-aware check gate (strict warnings)
-        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings > module-check-strict.json
+          cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json > module-check-pass.json
+
+          cargo run -p kooixc -- check-modules examples/module_check_gate_warn.kooix --json > module-check-warn.json
+          if cargo run -p kooixc -- check-modules examples/module_check_gate_warn.kooix --json --strict-warnings > module-check-warn-strict.json; then
+            echo "expected strict warning gate to fail" >&2
+            exit 1
+          fi
+
+          if cargo run -p kooixc -- check-modules examples/module_check_gate_error.kooix --json > module-check-error.json; then
+            echo "expected error gate to fail" >&2
+            exit 1
+          fi
+
+          if cargo run -p kooixc -- check-modules examples/module_check_gate_error.kooix --json --strict-warnings > module-check-error-strict.json; then
+            echo "expected strict error gate to fail" >&2
+            exit 1
+          fi
 
       - name: Upload module-check artifact
         if: always()
@@ -47,30 +63,50 @@ jobs:
         with:
           name: module-check-json
           path: |
-            module-check.json
-            module-check-strict.json
+            module-check-pass.json
+            module-check-warn.json
+            module-check-warn-strict.json
+            module-check-error.json
+            module-check-error-strict.json
           if-no-files-found: warn
 
       - name: Module-check summary
         if: always()
         run: |
-          if [ ! -f module-check.json ]; then
+          if [ ! -f module-check-pass.json ]; then
             {
               echo "### Module Check Summary"
               echo ""
-              echo "- artifact: missing (module-check.json not generated)"
+              echo "- artifact: missing (module-check-*.json not generated)"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          error_count=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check.json)
-          warning_count=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check.json)
-          first_diagnostic=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check.json)
+          pass_ok=$(jq -r '.ok' module-check-pass.json)
+          warn_ok=$(jq -r '.ok' module-check-warn.json)
+          warn_strict_ok=$(jq -r '.ok' module-check-warn-strict.json)
+          error_ok=$(jq -r '.ok' module-check-error.json)
+          error_strict_ok=$(jq -r '.ok' module-check-error-strict.json)
+
+          pass_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-pass.json)
+          pass_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-pass.json)
+
+          warn_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-warn.json)
+          warn_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-warn.json)
+          warn_first=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check-warn.json)
+
+          error_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-error.json)
+          error_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-error.json)
+          error_first=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check-error.json)
 
           {
             echo "### Module Check Summary"
             echo ""
-            echo "- errors: ${error_count}"
-            echo "- warnings: ${warning_count}"
-            echo "- first diagnostic: ${first_diagnostic}"
+            echo "- pass-case ok: ${pass_ok} (errors=${pass_errors}, warnings=${pass_warnings})"
+            echo "- warn-case ok: ${warn_ok} (errors=${warn_errors}, warnings=${warn_warnings})"
+            echo "- warn-case strict ok: ${warn_strict_ok}"
+            echo "- error-case ok: ${error_ok} (errors=${error_errors}, warnings=${error_warnings})"
+            echo "- error-case strict ok: ${error_strict_ok}"
+            echo "- warn-case first diagnostic: ${warn_first}"
+            echo "- error-case first diagnostic: ${error_first}"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,3 @@
+cap Net<"example.com">;
+
+fn main() -> Int requires [Net<"example.com">] { 0 };

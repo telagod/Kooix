@@ -184,6 +184,8 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - `examples/import_lib.kooix`
   - `examples/import_alias_main.kooix`
   - `examples/import_alias_lib.kooix`
+  - `examples/module_check_gate_warn.kooix`
+  - `examples/module_check_gate_error.kooix`
   - `examples/stdlib_smoke.kooix`
   - `examples/namespaced_variants.kooix`
 - 语法文档：

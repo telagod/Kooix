@@ -109,6 +109,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD1：`check-modules --json` 输出保存为 workflow artifact（`module-check-json`）。
   - ✅ DoD2：PR/run summary 展示模块错误计数与首条诊断。
   - ✅ DoD3：新增 `--strict-warnings`（可选）用于渐进收紧告警策略（CI 已额外跑 strict gate）。
+  - ✅ DoD4：CI gate 扩展为 pass/warn/error 三类样例矩阵，并在 summary 分组展示结果。
 - P3（自举能力）继续扩面 `dist/kooixc1` 的真实负载编译：
   - DoD1：从 `stage2_min` 扩到 `lexer/parser/typecheck` 子集。
   - DoD2：保持资源可控（默认轻量链路，深链路按需开关）。
