@@ -6,8 +6,9 @@ use kooixc::error::{Diagnostic, Severity};
 use kooixc::loader::{load_source_map, SourceMap};
 use kooixc::native::NativeError;
 use kooixc::{
-    check_source, compile_and_run_native_source_with_args_stdin_and_timeout, compile_native_source,
-    emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source, run_source,
+    check_entry_modules, check_source, compile_and_run_native_source_with_args_stdin_and_timeout,
+    compile_native_source, emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source,
+    run_source, ModuleCheckResult,
 };
 
 fn main() {
@@ -100,6 +101,26 @@ fn main() {
     let file = &args[2];
 
     let entry_path = Path::new(file);
+    if command == "check-modules" {
+        match check_entry_modules(entry_path) {
+            Ok(results) => {
+                if results.iter().all(|result| result.diagnostics.is_empty()) {
+                    println!("ok: module semantic checks passed");
+                } else {
+                    print_module_diagnostics(&results);
+                    process::exit(1);
+                }
+            }
+            Err(errors) => {
+                for error in errors {
+                    eprintln!("error: {}", error.message);
+                }
+                process::exit(2);
+            }
+        }
+        return;
+    }
+
     let source_map = match load_source_map(entry_path) {
         Ok(map) => map,
         Err(errors) => {
@@ -266,6 +287,30 @@ fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {
     }
 }
 
+fn print_module_diagnostics(results: &[ModuleCheckResult]) {
+    for result in results {
+        let module_source = fs::read_to_string(&result.path).ok();
+        for diagnostic in &result.diagnostics {
+            let level = match diagnostic.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+            };
+
+            if let Some(source) = &module_source {
+                let start = diagnostic.span.start.min(source.len());
+                let (line, col) = byte_to_line_col(source, start);
+                eprintln!(
+                    "{level}[{}:{line}:{col}]: {}",
+                    result.path.display(),
+                    diagnostic.message
+                );
+            } else {
+                eprintln!("{level}[{}]: {}", result.path.display(), diagnostic.message);
+            }
+        }
+    }
+}
+
 fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
     let mut line = 1;
     let mut col = 1;
@@ -285,7 +330,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|check-modules|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 

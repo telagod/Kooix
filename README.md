@@ -115,6 +115,10 @@ Kooix 已完成一条可运行的最小编译链路：
 
 ```bash
 cargo run -p kooixc -- check examples/valid.kooix
+
+# 模块感知语义检查（按文件 + qualified import）
+cargo run -p kooixc -- check-modules examples/import_alias_main.kooix
+
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix

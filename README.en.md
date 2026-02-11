@@ -117,6 +117,10 @@ See also: `DESIGN.md` / `BOOTSTRAP.md`
 
 ```bash
 cargo run -p kooixc -- check examples/valid.kooix
+
+# Module-aware semantic checks (per-file + qualified imports)
+cargo run -p kooixc -- check-modules examples/import_alias_main.kooix
+
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
