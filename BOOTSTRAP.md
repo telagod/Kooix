@@ -206,6 +206,12 @@ KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 KX_SMOKE_STDLIB=1 ./scripts/bootstrap_v0_13.sh
 ```
 
+可选 smoke（验证 stage1 编译器对 stage1 真实模块的编译+链接+运行能力，先从 lexer 子图开始）：
+
+```bash
+KX_SMOKE_S1_LEXER=1 ./scripts/bootstrap_v0_13.sh
+```
+
 更深一层（产出 stage4 compiler binary，并用 stage4 再 emit stage5 IR）：
 
 ```bash
