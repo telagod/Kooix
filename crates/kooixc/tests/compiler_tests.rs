@@ -2384,8 +2384,7 @@ fn stage1_compiler_can_compile_its_own_token_module_via_host_loader() {
         "stage1 bootstrap token smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 bootstrap token smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 bootstrap token smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2403,8 +2402,7 @@ fn stage1_compiler_can_compile_its_own_lexer_module_via_host_loader() {
         "stage1 bootstrap lexer smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 bootstrap lexer smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 bootstrap lexer smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2502,8 +2500,8 @@ fn stage1_compiler_can_compile_its_own_compiler_main_module_via_host_loader() {
         "stage1 bootstrap compiler_main smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined)
-        .expect("stage1 bootstrap compiler_main smoke should run");
+    let result =
+        run_source(&source_map.combined).expect("stage1 bootstrap compiler_main smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2557,7 +2555,8 @@ fn stage1_lexer_multi_token_smoke() {
         "stage1 lexer multi-token smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined).expect("stage1 lexer multi-token smoke should run");
+    let result =
+        run_source(&source_map.combined).expect("stage1 lexer multi-token smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2656,8 +2655,8 @@ fn stage1_parser_enum_smoke() {
 fn stage1_parser_fn_body_and_type_args_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_parse_fn_body_types_smoke.kooix");
-    let source_map = load_source_map(&entry)
-        .expect("stage1 parser fn body + type args smoke should load");
+    let source_map =
+        load_source_map(&entry).expect("stage1 parser fn body + type args smoke should load");
 
     let diagnostics = check_source(&source_map.combined);
     assert!(
@@ -2667,8 +2666,8 @@ fn stage1_parser_fn_body_and_type_args_smoke() {
         "stage1 parser fn body + type args smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser fn body + type args smoke should run");
+    let result = run_source(&source_map.combined)
+        .expect("stage1 parser fn body + type args smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2676,8 +2675,7 @@ fn stage1_parser_fn_body_and_type_args_smoke() {
 fn stage1_parser_generics_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_parse_generics_smoke.kooix");
-    let source_map =
-        load_source_map(&entry).expect("stage1 parser generics smoke should load");
+    let source_map = load_source_map(&entry).expect("stage1 parser generics smoke should load");
 
     let diagnostics = check_source(&source_map.combined);
     assert!(
@@ -2687,8 +2685,7 @@ fn stage1_parser_generics_smoke() {
         "stage1 parser generics smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser generics smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser generics smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2744,8 +2741,7 @@ fn stage1_parser_match_smoke() {
         "stage1 parser match smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser match smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser match smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2781,8 +2777,7 @@ fn stage1_parser_binary_smoke() {
         "stage1 parser binary smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser binary smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser binary smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2800,8 +2795,7 @@ fn stage1_parser_ns_path_smoke() {
         "stage1 parser ns path smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser ns path smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser ns path smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2820,8 +2814,8 @@ fn stage1_parser_match_payload_smoke() {
         "stage1 parser match payload smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined)
-        .expect("stage1 parser match payload smoke should run");
+    let result =
+        run_source(&source_map.combined).expect("stage1 parser match payload smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2839,8 +2833,7 @@ fn stage1_parser_ns_type_smoke() {
         "stage1 parser ns type smoke should have no semantic errors"
     );
 
-    let result =
-        run_source(&source_map.combined).expect("stage1 parser ns type smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser ns type smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2859,8 +2852,8 @@ fn stage1_parser_match_block_arm_smoke() {
         "stage1 parser match block arm smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined)
-        .expect("stage1 parser match block arm smoke should run");
+    let result =
+        run_source(&source_map.combined).expect("stage1 parser match block arm smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2868,8 +2861,7 @@ fn stage1_parser_match_block_arm_smoke() {
 fn stage1_parser_multi_path_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_parse_multi_path_smoke.kooix");
-    let source_map =
-        load_source_map(&entry).expect("stage1 parser multi path smoke should load");
+    let source_map = load_source_map(&entry).expect("stage1 parser multi path smoke should load");
 
     let diagnostics = check_source(&source_map.combined);
     assert!(
@@ -2879,8 +2871,8 @@ fn stage1_parser_multi_path_smoke() {
         "stage1 parser multi path smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined)
-        .expect("stage1 parser multi path smoke should run");
+    let result =
+        run_source(&source_map.combined).expect("stage1 parser multi path smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2898,8 +2890,7 @@ fn stage1_parser_member_smoke() {
         "stage1 parser member smoke should have no semantic errors"
     );
 
-    let result = run_source(&source_map.combined)
-        .expect("stage1 parser member smoke should run");
+    let result = run_source(&source_map.combined).expect("stage1 parser member smoke should run");
     assert_eq!(result.value, Value::Int(0));
 }
 
@@ -2946,7 +2937,8 @@ fn stage1_resolver_missing_namespace_smoke() {
 fn stage1_resolver_bad_variant_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_resolve_bad_variant_smoke.kooix");
-    let source_map = load_source_map(&entry).expect("stage1 resolver bad variant smoke should load");
+    let source_map =
+        load_source_map(&entry).expect("stage1 resolver bad variant smoke should load");
 
     let diagnostics = check_source(&source_map.combined);
     assert!(
@@ -3062,8 +3054,7 @@ fn stage1_match_imported_prelude_option_smoke() {
 fn stage1_imported_prelude_fn_smoke() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("examples/stage1_import_prelude_fn_smoke.kooix");
-    let source_map =
-        load_source_map(&entry).expect("stage1 imported prelude fn smoke should load");
+    let source_map = load_source_map(&entry).expect("stage1 imported prelude fn smoke should load");
 
     let diagnostics = check_source(&source_map.combined);
     assert!(
@@ -3339,15 +3330,15 @@ fn stage1_self_host_v0_emits_and_runs_stage2_min() {
     // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2.ll.
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("stage1/self_host_main.kooix");
-    let source_map =
-        load_source_map(&entry).expect("stage1 self_host_main should load via include-style imports");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_main should load via include-style imports");
 
     let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0");
     let _ = std::fs::remove_file(&output);
     let _ = std::fs::remove_file("/tmp/kooixc_stage2.ll");
 
-    let run_output =
-        compile_and_run_native_source(&source_map.combined, &output).expect("stage1 self-host driver should run");
+    let run_output = compile_and_run_native_source(&source_map.combined, &output)
+        .expect("stage1 self-host driver should run");
     assert_eq!(run_output.status_code, Some(0));
 
     // Link+run the emitted LLVM IR as a standalone Stage2 native binary.
@@ -3359,8 +3350,8 @@ fn stage1_self_host_v0_emits_and_runs_stage2_min() {
     compile_llvm_ir_to_executable(&ir, &stage2).expect("native-llvm build should succeed");
 
     let args: Vec<String> = vec![];
-    let stage2_out = run_executable_with_args_and_stdin(&stage2, &args, None)
-        .expect("stage2 binary should run");
+    let stage2_out =
+        run_executable_with_args_and_stdin(&stage2, &args, None).expect("stage2 binary should run");
     assert_eq!(stage2_out.status_code, Some(0));
 
     let _ = std::fs::remove_file(&output);
@@ -3649,8 +3640,8 @@ fn stage1_self_host_v0_11_emits_and_runs_stage2_import_smoke() {
     // Compile+run Stage1 self-host driver (native) which writes LLVM IR to /tmp/kooixc_stage2_import.ll.
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let entry = repo_root.join("stage1/self_host_import_main.kooix");
-    let source_map =
-        load_source_map(&entry).expect("stage1 self_host_import_main should load via include-style imports");
+    let source_map = load_source_map(&entry)
+        .expect("stage1 self_host_import_main should load via include-style imports");
 
     let output = std::env::temp_dir().join("kooixc-stage1-self-host-v0-11-import");
     let _ = std::fs::remove_file(&output);
@@ -3710,11 +3701,16 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     );
 
     let golden_line = format!("bytes={} fnv1a64={:016x}\n", ir.len(), stage2_hash);
-    let golden_path = repo_root.join("crates/kooixc/tests/fixtures/bootstrap_v0_13_stage1_compiler_ir.txt");
+    let golden_path =
+        repo_root.join("crates/kooixc/tests/fixtures/bootstrap_v0_13_stage1_compiler_ir.txt");
     if std::env::var_os("KX_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(golden_path.parent().expect("golden parent")).expect("create golden dir");
+        std::fs::create_dir_all(golden_path.parent().expect("golden parent"))
+            .expect("create golden dir");
         std::fs::write(&golden_path, golden_line.as_bytes()).expect("write golden");
-        eprintln!("bootstrap v0.13: updated golden at {}", golden_path.display());
+        eprintln!(
+            "bootstrap v0.13: updated golden at {}",
+            golden_path.display()
+        );
     } else if std::env::var_os("KX_GOLDEN").is_some() {
         let expected = std::fs::read_to_string(&golden_path).unwrap_or_else(|_| {
             panic!(
@@ -3745,7 +3741,7 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     ];
     let stage2_out =
         run_executable_with_args_and_stdin_and_timeout(&stage2, &args, None, Some(120_000))
-        .expect("stage2 compiler binary should run");
+            .expect("stage2 compiler binary should run");
     assert_eq!(stage2_out.status_code, Some(0));
 
     let ir2 = std::fs::read_to_string("/tmp/kooixc_stage3_stage1_compiler.ll")
@@ -3801,7 +3797,8 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
     // (Optional deeper step) Link+run the stage3 LLVM IR as a standalone binary and emit stage4 IR.
     let stage3 = std::env::temp_dir().join("kooixc-stage3-from-stage2-ll-stage1-compiler-main");
     let _ = std::fs::remove_file(&stage3);
-    compile_llvm_ir_to_executable(&ir2, &stage3).expect("native-llvm build for stage3 should succeed");
+    compile_llvm_ir_to_executable(&ir2, &stage3)
+        .expect("native-llvm build for stage3 should succeed");
 
     let args_stage3: Vec<String> = vec![
         "stage1/compiler_main.kooix".to_string(),
@@ -3824,7 +3821,10 @@ fn stage1_self_host_v0_13_stage2_compiler_self_emits_stage3_ir() {
         ir3.contains("define i64 @kx_program_main"),
         "stage4-emitted LLVM IR should contain entrypoint"
     );
-    assert!(ir3.len() > 100_000, "stage4-emitted LLVM IR should be non-trivial");
+    assert!(
+        ir3.len() > 100_000,
+        "stage4-emitted LLVM IR should be non-trivial"
+    );
     assert_eq!(
         stage4_hash, stage2_hash,
         "stage4 compiler should emit the same IR fingerprint as stage2 (basic reproducibility signal)"

@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use crate::ast::{BinaryOp, TypeRef};
 use crate::loader::load_source_map;
 use crate::mir::{
-    MirBlock, MirEnum, MirFunction, MirOperand, MirProgram, MirRecord, MirRvalue,
-    MirStatement, MirTerminator,
+    MirBlock, MirEnum, MirFunction, MirOperand, MirProgram, MirRecord, MirRvalue, MirStatement,
+    MirTerminator,
 };
 
 pub fn emit_program(program: &MirProgram) -> String {
@@ -329,7 +329,11 @@ impl<'a> FunctionEmitter<'a> {
                                 output,
                                 "  {cmp} = call i32 @strcmp(i8* {left_value}, i8* {right_value})"
                             );
-                            let pred = if matches!(op, BinaryOp::Eq) { "eq" } else { "ne" };
+                            let pred = if matches!(op, BinaryOp::Eq) {
+                                "eq"
+                            } else {
+                                "ne"
+                            };
                             let _ = writeln!(output, "  {tmp} = icmp {pred} i32 {cmp}, 0");
                             tmp
                         } else if self.enums.contains_key(head) {
@@ -343,7 +347,11 @@ impl<'a> FunctionEmitter<'a> {
                             }
                         } else {
                             let ty = llvm_type(&left_ty, self.records, self.enums);
-                            let pred = if matches!(op, BinaryOp::Eq) { "eq" } else { "ne" };
+                            let pred = if matches!(op, BinaryOp::Eq) {
+                                "eq"
+                            } else {
+                                "ne"
+                            };
                             let _ = writeln!(
                                 output,
                                 "  {tmp} = icmp {pred} {ty} {left_value}, {right_value}"
@@ -370,7 +378,13 @@ impl<'a> FunctionEmitter<'a> {
                 tag,
                 payload,
                 payload_ty,
-            } => self.emit_enum_lit(enum_name, *tag, payload.as_ref(), payload_ty.as_ref(), output),
+            } => self.emit_enum_lit(
+                enum_name,
+                *tag,
+                payload.as_ref(),
+                payload_ty.as_ref(),
+                output,
+            ),
             MirRvalue::EnumTag { base, enum_name } => self.emit_enum_tag(base, enum_name, output),
             MirRvalue::EnumPayload {
                 base,
@@ -380,7 +394,12 @@ impl<'a> FunctionEmitter<'a> {
         }
     }
 
-    fn emit_operand_value(&mut self, operand: &MirOperand, ty: &TypeRef, output: &mut String) -> String {
+    fn emit_operand_value(
+        &mut self,
+        operand: &MirOperand,
+        ty: &TypeRef,
+        output: &mut String,
+    ) -> String {
         match operand {
             MirOperand::ConstInt(value) => value.to_string(),
             MirOperand::ConstBool(value) => {
@@ -446,7 +465,12 @@ impl<'a> FunctionEmitter<'a> {
         }
     }
 
-    fn emit_call_value(&mut self, callee: &str, args: &[MirOperand], output: &mut String) -> String {
+    fn emit_call_value(
+        &mut self,
+        callee: &str,
+        args: &[MirOperand],
+        output: &mut String,
+    ) -> String {
         // Intrinsics (native runtime).
         if let Some(value) = self.emit_intrinsic_call(callee, args, output) {
             return value;
@@ -487,7 +511,10 @@ impl<'a> FunctionEmitter<'a> {
             "0".to_string()
         } else {
             let tmp = self.fresh_tmp();
-            let _ = writeln!(output, "  {tmp} = call {ret_llvm_ty} @{fn_name}({call_args})");
+            let _ = writeln!(
+                output,
+                "  {tmp} = call {ret_llvm_ty} @{fn_name}({call_args})"
+            );
             tmp
         }
     }
@@ -500,44 +527,107 @@ impl<'a> FunctionEmitter<'a> {
     ) -> Option<String> {
         match callee {
             "text_len" => {
-                let [s] = args else { return Some("0".to_string()) };
-                let sv = self.emit_operand_value(s, &TypeRef { name: "Text".to_string(), args: Vec::new() }, output);
+                let [s] = args else {
+                    return Some("0".to_string());
+                };
+                let sv = self.emit_operand_value(
+                    s,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 let tmp = self.fresh_tmp();
                 let _ = writeln!(output, "  {tmp} = call i64 @strlen(i8* {sv})");
                 Some(tmp)
             }
             "byte_is_ascii_whitespace" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 Some(self.emit_ascii_whitespace(&bv, output))
             }
             "byte_is_ascii_digit" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 Some(self.emit_ascii_digit(&bv, output))
             }
             "byte_is_ascii_alpha" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 Some(self.emit_ascii_alpha(&bv, output))
             }
             "byte_is_ascii_alnum" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 let a = self.emit_ascii_alpha(&bv, output);
                 let d = self.emit_ascii_digit(&bv, output);
                 Some(self.emit_or_i1(&a, &d, output))
             }
             "byte_is_ascii_ident_start" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 let a = self.emit_ascii_alpha(&bv, output);
                 let u = self.emit_eq_i64(&bv, 95, output);
                 Some(self.emit_or_i1(&a, &u, output))
             }
             "byte_is_ascii_ident_continue" => {
-                let [b] = args else { return Some("0".to_string()) };
-                let bv = self.emit_operand_value(b, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [b] = args else {
+                    return Some("0".to_string());
+                };
+                let bv = self.emit_operand_value(
+                    b,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 let a = self.emit_ascii_alpha(&bv, output);
                 let d = self.emit_ascii_digit(&bv, output);
                 let ad = self.emit_or_i1(&a, &d, output);
@@ -545,9 +635,25 @@ impl<'a> FunctionEmitter<'a> {
                 Some(self.emit_or_i1(&ad, &u, output))
             }
             "text_starts_with" => {
-                let [s, prefix] = args else { return Some("0".to_string()) };
-                let s_val = self.emit_operand_value(s, &TypeRef { name: "Text".to_string(), args: Vec::new() }, output);
-                let p_val = self.emit_operand_value(prefix, &TypeRef { name: "Text".to_string(), args: Vec::new() }, output);
+                let [s, prefix] = args else {
+                    return Some("0".to_string());
+                };
+                let s_val = self.emit_operand_value(
+                    s,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let p_val = self.emit_operand_value(
+                    prefix,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
                 let plen = self.fresh_tmp();
                 let _ = writeln!(output, "  {plen} = call i64 @strlen(i8* {p_val})");
                 let slen = self.fresh_tmp();
@@ -582,9 +688,25 @@ impl<'a> FunctionEmitter<'a> {
             }
             "text_byte_at" => {
                 // Returns Option<Int>
-                let [s, index] = args else { return Some("null".to_string()) };
-                let s_val = self.emit_operand_value(s, &TypeRef { name: "Text".to_string(), args: Vec::new() }, output);
-                let idx_val = self.emit_operand_value(index, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [s, index] = args else {
+                    return Some("null".to_string());
+                };
+                let s_val = self.emit_operand_value(
+                    s,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let idx_val = self.emit_operand_value(
+                    index,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
 
                 let idx_neg = self.fresh_tmp();
                 let _ = writeln!(output, "  {idx_neg} = icmp slt i64 {idx_val}, 0");
@@ -602,27 +724,33 @@ impl<'a> FunctionEmitter<'a> {
                 let res_ptr = self.fresh_tmp();
 
                 // Allocate a stack slot for the result pointer (Option*).
-                let opt_ty = TypeRef { name: "Option".to_string(), args: Vec::new() };
+                let opt_ty = TypeRef {
+                    name: "Option".to_string(),
+                    args: Vec::new(),
+                };
                 let opt_ptr_ty = llvm_type(&opt_ty, self.records, self.enums);
                 let res_slot = self.fresh_tmp();
                 let _ = writeln!(output, "  {res_slot} = alloca {opt_ptr_ty}");
 
-                let _ = writeln!(
-                    output,
-                    "  br i1 {oob}, label %{none_bb}, label %{ok_bb}"
-                );
+                let _ = writeln!(output, "  br i1 {oob}, label %{none_bb}, label %{ok_bb}");
 
                 // ok_bb: Some(byte)
                 let _ = writeln!(output, "{ok_bb}:");
                 let gep = self.fresh_tmp();
-                let _ = writeln!(output, "  {gep} = getelementptr inbounds i8, i8* {s_val}, i64 {idx_val}");
+                let _ = writeln!(
+                    output,
+                    "  {gep} = getelementptr inbounds i8, i8* {s_val}, i64 {idx_val}"
+                );
                 let b = self.fresh_tmp();
                 let _ = writeln!(output, "  {b} = load i8, i8* {gep}");
                 let bz = self.fresh_tmp();
                 let _ = writeln!(output, "  {bz} = zext i8 {b} to i64");
                 let some_tag = self.lookup_enum_tag("Option", "Some").unwrap_or(0);
                 let some_ptr = self.emit_enum_alloc("Option", some_tag, &bz, output);
-                let _ = writeln!(output, "  store {opt_ptr_ty} {some_ptr}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  store {opt_ptr_ty} {some_ptr}, {opt_ptr_ty}* {res_slot}"
+                );
                 let _ = writeln!(output, "  br label %{join_bb}");
 
                 // none_bb: None
@@ -630,20 +758,49 @@ impl<'a> FunctionEmitter<'a> {
                 let none_tag = self.lookup_enum_tag("Option", "None").unwrap_or(1);
                 let zero = "0".to_string();
                 let none_ptr = self.emit_enum_alloc("Option", none_tag, &zero, output);
-                let _ = writeln!(output, "  store {opt_ptr_ty} {none_ptr}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  store {opt_ptr_ty} {none_ptr}, {opt_ptr_ty}* {res_slot}"
+                );
                 let _ = writeln!(output, "  br label %{join_bb}");
 
                 // join
                 let _ = writeln!(output, "{join_bb}:");
-                let _ = writeln!(output, "  {res_ptr} = load {opt_ptr_ty}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  {res_ptr} = load {opt_ptr_ty}, {opt_ptr_ty}* {res_slot}"
+                );
                 Some(res_ptr)
             }
             "text_slice" => {
                 // Returns Option<Text>
-                let [s, start, end] = args else { return Some("null".to_string()) };
-                let s_val = self.emit_operand_value(s, &TypeRef { name: "Text".to_string(), args: Vec::new() }, output);
-                let start_val = self.emit_operand_value(start, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
-                let end_val = self.emit_operand_value(end, &TypeRef { name: "Int".to_string(), args: Vec::new() }, output);
+                let [s, start, end] = args else {
+                    return Some("null".to_string());
+                };
+                let s_val = self.emit_operand_value(
+                    s,
+                    &TypeRef {
+                        name: "Text".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let start_val = self.emit_operand_value(
+                    start,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
+                let end_val = self.emit_operand_value(
+                    end,
+                    &TypeRef {
+                        name: "Int".to_string(),
+                        args: Vec::new(),
+                    },
+                    output,
+                );
 
                 let start_neg = self.fresh_tmp();
                 let _ = writeln!(output, "  {start_neg} = icmp slt i64 {start_val}, 0");
@@ -667,7 +824,10 @@ impl<'a> FunctionEmitter<'a> {
                 let none_bb = self.fresh_tmp_label("bb_none");
                 let join_bb = self.fresh_tmp_label("bb_join");
 
-                let opt_ty = TypeRef { name: "Option".to_string(), args: Vec::new() };
+                let opt_ty = TypeRef {
+                    name: "Option".to_string(),
+                    args: Vec::new(),
+                };
                 let opt_ptr_ty = llvm_type(&opt_ty, self.records, self.enums);
                 let res_slot = self.fresh_tmp();
                 let _ = writeln!(output, "  {res_slot} = alloca {opt_ptr_ty}");
@@ -681,39 +841,61 @@ impl<'a> FunctionEmitter<'a> {
                 let buf = self.fresh_tmp();
                 let _ = writeln!(output, "  {buf} = call i8* @malloc(i64 {size1})");
                 let src = self.fresh_tmp();
-                let _ = writeln!(output, "  {src} = getelementptr inbounds i8, i8* {s_val}, i64 {start_val}");
-                let _ = writeln!(output, "  call i8* @memcpy(i8* {buf}, i8* {src}, i64 {size})");
+                let _ = writeln!(
+                    output,
+                    "  {src} = getelementptr inbounds i8, i8* {s_val}, i64 {start_val}"
+                );
+                let _ = writeln!(
+                    output,
+                    "  call i8* @memcpy(i8* {buf}, i8* {src}, i64 {size})"
+                );
                 let nul_ptr = self.fresh_tmp();
-                let _ = writeln!(output, "  {nul_ptr} = getelementptr inbounds i8, i8* {buf}, i64 {size}");
+                let _ = writeln!(
+                    output,
+                    "  {nul_ptr} = getelementptr inbounds i8, i8* {buf}, i64 {size}"
+                );
                 let _ = writeln!(output, "  store i8 0, i8* {nul_ptr}");
                 let some_tag = self.lookup_enum_tag("Option", "Some").unwrap_or(0);
                 let buf_word = self.ptr_to_word("i8*", &buf, output);
                 let some_ptr = self.emit_enum_alloc("Option", some_tag, &buf_word, output);
-                let _ = writeln!(output, "  store {opt_ptr_ty} {some_ptr}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  store {opt_ptr_ty} {some_ptr}, {opt_ptr_ty}* {res_slot}"
+                );
                 let _ = writeln!(output, "  br label %{join_bb}");
 
                 let _ = writeln!(output, "{none_bb}:");
                 let none_tag = self.lookup_enum_tag("Option", "None").unwrap_or(1);
                 let zero = "0".to_string();
                 let none_ptr = self.emit_enum_alloc("Option", none_tag, &zero, output);
-                let _ = writeln!(output, "  store {opt_ptr_ty} {none_ptr}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  store {opt_ptr_ty} {none_ptr}, {opt_ptr_ty}* {res_slot}"
+                );
                 let _ = writeln!(output, "  br label %{join_bb}");
 
                 let _ = writeln!(output, "{join_bb}:");
                 let res = self.fresh_tmp();
-                let _ = writeln!(output, "  {res} = load {opt_ptr_ty}, {opt_ptr_ty}* {res_slot}");
+                let _ = writeln!(
+                    output,
+                    "  {res} = load {opt_ptr_ty}, {opt_ptr_ty}* {res_slot}"
+                );
                 Some(res)
             }
             "host_load_source_map" => {
                 // Host-only helper. For the native backend, we evaluate this at compile time when
                 // the path is a string literal. Otherwise, it calls into the linked native runtime.
-                let [path_op] = args else { return Some("null".to_string()) };
+                let [path_op] = args else {
+                    return Some("null".to_string());
+                };
 
                 if let MirOperand::ConstText(path) = path_op {
                     // Compile-time fold for deterministic bootstrap.
                     let (tag, payload_text) = match native_load_source_map(path) {
                         Ok(source) => (self.lookup_enum_tag("Result", "Ok").unwrap_or(0), source),
-                        Err(message) => (self.lookup_enum_tag("Result", "Err").unwrap_or(1), message),
+                        Err(message) => {
+                            (self.lookup_enum_tag("Result", "Err").unwrap_or(1), message)
+                        }
                     };
                     let payload_ptr = self.emit_text_ptr_for_value(&payload_text, output);
                     let payload_word = self.ptr_to_word("i8*", &payload_ptr, output);
@@ -731,7 +913,10 @@ impl<'a> FunctionEmitter<'a> {
                     output,
                 );
                 let raw = self.fresh_tmp();
-                let _ = writeln!(output, "  {raw} = call i8* @kx_host_load_source_map(i8* {path_val})");
+                let _ = writeln!(
+                    output,
+                    "  {raw} = call i8* @kx_host_load_source_map(i8* {path_val})"
+                );
                 let res_ty = llvm_type(
                     &TypeRef {
                         name: "Result".to_string(),
@@ -745,7 +930,9 @@ impl<'a> FunctionEmitter<'a> {
                 Some(cast)
             }
             "host_eprintln" => {
-                let [s] = args else { return Some("0".to_string()) };
+                let [s] = args else {
+                    return Some("0".to_string());
+                };
                 let sv = self.emit_operand_value(
                     s,
                     &TypeRef {
@@ -759,7 +946,9 @@ impl<'a> FunctionEmitter<'a> {
             }
             "host_write_file" => {
                 // Runtime file write, returns Result<Int, Text>.
-                let [path, content] = args else { return Some("null".to_string()) };
+                let [path, content] = args else {
+                    return Some("null".to_string());
+                };
                 let pv = self.emit_operand_value(
                     path,
                     &TypeRef {
@@ -799,7 +988,9 @@ impl<'a> FunctionEmitter<'a> {
                 Some(tmp)
             }
             "host_argv" => {
-                let [index] = args else { return Some("null".to_string()) };
+                let [index] = args else {
+                    return Some("null".to_string());
+                };
                 let iv = self.emit_operand_value(
                     index,
                     &TypeRef {
@@ -813,7 +1004,9 @@ impl<'a> FunctionEmitter<'a> {
                 Some(tmp)
             }
             "text_concat" => {
-                let [a, b] = args else { return Some("null".to_string()) };
+                let [a, b] = args else {
+                    return Some("null".to_string());
+                };
                 let av = self.emit_operand_value(
                     a,
                     &TypeRef {
@@ -831,11 +1024,16 @@ impl<'a> FunctionEmitter<'a> {
                     output,
                 );
                 let tmp = self.fresh_tmp();
-                let _ = writeln!(output, "  {tmp} = call i8* @kx_text_concat(i8* {av}, i8* {bv})");
+                let _ = writeln!(
+                    output,
+                    "  {tmp} = call i8* @kx_text_concat(i8* {av}, i8* {bv})"
+                );
                 Some(tmp)
             }
             "int_to_text" => {
-                let [i] = args else { return Some("null".to_string()) };
+                let [i] = args else {
+                    return Some("null".to_string());
+                };
                 let iv = self.emit_operand_value(
                     i,
                     &TypeRef {
@@ -1008,7 +1206,13 @@ impl<'a> FunctionEmitter<'a> {
         self.emit_enum_alloc(enum_name, tag, &payload_word, output)
     }
 
-    fn emit_enum_alloc(&mut self, enum_name: &str, tag: u8, payload_word: &str, output: &mut String) -> String {
+    fn emit_enum_alloc(
+        &mut self,
+        enum_name: &str,
+        tag: u8,
+        payload_word: &str,
+        output: &mut String,
+    ) -> String {
         let en_ty = llvm_named_enum_type(enum_name);
         let en_ptr_ty = format!("{en_ty}*");
 
@@ -1056,7 +1260,13 @@ impl<'a> FunctionEmitter<'a> {
         tag64
     }
 
-    fn emit_enum_payload(&mut self, base: &MirOperand, enum_name: &str, payload_ty: &TypeRef, output: &mut String) -> String {
+    fn emit_enum_payload(
+        &mut self,
+        base: &MirOperand,
+        enum_name: &str,
+        payload_ty: &TypeRef,
+        output: &mut String,
+    ) -> String {
         let en_ty = llvm_named_enum_type(enum_name);
         let en_ptr_ty = format!("{en_ty}*");
         let base_ty = TypeRef {
@@ -1075,7 +1285,13 @@ impl<'a> FunctionEmitter<'a> {
         self.emit_word_to_value(&word, payload_ty, output)
     }
 
-    fn emit_enum_eq(&mut self, enum_name: &str, left: &str, right: &str, output: &mut String) -> String {
+    fn emit_enum_eq(
+        &mut self,
+        enum_name: &str,
+        left: &str,
+        right: &str,
+        output: &mut String,
+    ) -> String {
         let en_ty = llvm_named_enum_type(enum_name);
         let en_ptr_ty = format!("{en_ty}*");
         let ltag_ptr = self.fresh_tmp();
@@ -1231,7 +1447,11 @@ fn llvm_named_enum_type(raw: &str) -> String {
     format!("%{}", sanitize_symbol(raw))
 }
 
-fn llvm_type(ty: &TypeRef, records: &HashMap<&str, &MirRecord>, enums: &HashMap<&str, &MirEnum>) -> String {
+fn llvm_type(
+    ty: &TypeRef,
+    records: &HashMap<&str, &MirRecord>,
+    enums: &HashMap<&str, &MirEnum>,
+) -> String {
     match ty.head() {
         "Unit" => "void".to_string(),
         "Int" => "i64".to_string(),
@@ -1252,7 +1472,11 @@ fn llvm_type(ty: &TypeRef, records: &HashMap<&str, &MirRecord>, enums: &HashMap<
     }
 }
 
-fn return_default_instruction(ty: &TypeRef, records: &HashMap<&str, &MirRecord>, enums: &HashMap<&str, &MirEnum>) -> String {
+fn return_default_instruction(
+    ty: &TypeRef,
+    records: &HashMap<&str, &MirRecord>,
+    enums: &HashMap<&str, &MirEnum>,
+) -> String {
     let llvm_ty = llvm_type(ty, records, enums);
     if llvm_ty == "void" {
         return "ret void".to_string();
@@ -1315,7 +1539,10 @@ fn collect_text_constants(program: &MirProgram) -> BTreeMap<String, Vec<u8>> {
     }
 
     // Native backend internal messages (ensure they're always available).
-    for msg in ["native: host_load_source_map requires string literal path", "host_write_file: path is null"] {
+    for msg in [
+        "native: host_load_source_map requires string literal path",
+        "host_write_file: path is null",
+    ] {
         let mut bytes = msg.as_bytes().to_vec();
         bytes.push(0);
         let key = bytes_to_key(&bytes);

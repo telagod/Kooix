@@ -2613,7 +2613,11 @@ fn infer_expr_type_with_expected(
                         expected_params = expected_params
                             .iter()
                             .map(|param| {
-                                substitute_record_generic_type(param, &signature.generics, type_args)
+                                substitute_record_generic_type(
+                                    param,
+                                    &signature.generics,
+                                    type_args,
+                                )
                             })
                             .collect();
                         expected_return = substitute_record_generic_type(

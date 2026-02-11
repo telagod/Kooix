@@ -82,9 +82,19 @@ pub fn run_source(source: &str) -> Result<RunResult, Vec<Diagnostic>> {
         .name("kooix-interp".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || interp::run_program(&program))
-        .map_err(|error| vec![Diagnostic::error(format!("failed to spawn interpreter thread: {error}"), crate::error::Span::new(0, 0))])?
+        .map_err(|error| {
+            vec![Diagnostic::error(
+                format!("failed to spawn interpreter thread: {error}"),
+                crate::error::Span::new(0, 0),
+            )]
+        })?
         .join()
-        .map_err(|_| vec![Diagnostic::error("interpreter thread panicked", crate::error::Span::new(0, 0))])?
+        .map_err(|_| {
+            vec![Diagnostic::error(
+                "interpreter thread panicked",
+                crate::error::Span::new(0, 0),
+            )]
+        })?
         .map_err(|error| vec![error])?;
     Ok(RunResult { value, diagnostics })
 }

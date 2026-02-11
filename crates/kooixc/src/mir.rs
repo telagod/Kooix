@@ -82,7 +82,10 @@ pub enum MirRvalue {
         left: MirOperand,
         right: MirOperand,
     },
-    Call { callee: String, args: Vec<MirOperand> },
+    Call {
+        callee: String,
+        args: Vec<MirOperand>,
+    },
     RecordLit {
         record: String,
         fields: Vec<MirOperand>,
@@ -100,7 +103,10 @@ pub enum MirRvalue {
         payload: Option<MirOperand>,
         payload_ty: Option<TypeRef>,
     },
-    EnumTag { base: MirOperand, enum_name: String },
+    EnumTag {
+        base: MirOperand,
+        enum_name: String,
+    },
     EnumPayload {
         base: MirOperand,
         enum_name: String,
@@ -118,9 +124,13 @@ pub enum MirOperand {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MirTerminator {
-    Return { value: Option<MirOperand> },
+    Return {
+        value: Option<MirOperand>,
+    },
     ReturnDefault(TypeRef),
-    Goto { target: String },
+    Goto {
+        target: String,
+    },
     If {
         cond: MirOperand,
         then_bb: String,
@@ -197,9 +207,7 @@ fn build_native_enums(program: &HirProgram) -> Vec<MirEnum> {
     program
         .enums
         .iter()
-        .filter(|enum_decl| {
-            enum_decl.variants.len() <= u8::MAX as usize
-        })
+        .filter(|enum_decl| enum_decl.variants.len() <= u8::MAX as usize)
         .map(|enum_decl| MirEnum {
             name: enum_decl.name.clone(),
             generics: enum_decl
@@ -639,7 +647,10 @@ impl<'a> MirBuilder<'a> {
         match expr {
             Expr::Number(raw) => {
                 let value = raw.parse::<i64>().map_err(|_| {
-                    Diagnostic::error(format!("invalid integer literal '{raw}'"), self.function.span)
+                    Diagnostic::error(
+                        format!("invalid integer literal '{raw}'"),
+                        self.function.span,
+                    )
                 })?;
                 Ok(ExprValue {
                     ty: TypeRef {
@@ -1001,12 +1012,12 @@ impl<'a> MirBuilder<'a> {
                         }
 
                         if return_ty.head() == "Unit" {
-                            self.current_block_mut()
-                                .statements
-                                .push(MirStatement::Eval(MirRvalue::Call {
+                            self.current_block_mut().statements.push(MirStatement::Eval(
+                                MirRvalue::Call {
                                     callee,
                                     args: lowered_args,
-                                }));
+                                },
+                            ));
                             return Ok(ExprValue::unit());
                         }
 
@@ -1234,7 +1245,11 @@ impl<'a> MirBuilder<'a> {
         }
     }
 
-    fn lower_match_expr(&mut self, value: &Expr, arms: &[crate::ast::MatchArm]) -> Result<ExprValue, Diagnostic> {
+    fn lower_match_expr(
+        &mut self,
+        value: &Expr,
+        arms: &[crate::ast::MatchArm],
+    ) -> Result<ExprValue, Diagnostic> {
         let scrutinee = self.lower_expr(value)?;
         let scrut_ty = scrutinee.ty.clone();
         let Some(enum_decl) = self.enums.get(scrut_ty.head()) else {
@@ -1304,8 +1319,9 @@ impl<'a> MirBuilder<'a> {
                     });
 
                     self.switch_to_block(&arm_bb);
-                    let value =
-                        self.with_scope(|builder| builder.lower_match_arm_body(&scrut_op, enum_decl, None, None, &arm.body))?;
+                    let value = self.with_scope(|builder| {
+                        builder.lower_match_arm_body(&scrut_op, enum_decl, None, None, &arm.body)
+                    })?;
                     self.record_match_arm_result(&mut result_local, &mut result_ty, value)?;
 
                     if !self.block_is_terminated(self.current_block) {
@@ -1721,7 +1737,10 @@ impl<'a> MirBuilder<'a> {
     }
 
     fn block_is_terminated(&self, block: usize) -> bool {
-        !matches!(self.blocks[block].terminator, MirTerminator::ReturnDefault(_))
+        !matches!(
+            self.blocks[block].terminator,
+            MirTerminator::ReturnDefault(_)
+        )
     }
 
     fn set_terminator(&mut self, terminator: MirTerminator) {
@@ -1751,10 +1770,12 @@ impl<'a> MirBuilder<'a> {
             return;
         }
 
-        let operand = value.operand.unwrap_or_else(|| match self.function.return_type.head() {
-            "Bool" => MirOperand::ConstBool(false),
-            _ => MirOperand::ConstInt(0),
-        });
+        let operand = value
+            .operand
+            .unwrap_or_else(|| match self.function.return_type.head() {
+                "Bool" => MirOperand::ConstBool(false),
+                _ => MirOperand::ConstInt(0),
+            });
         self.set_terminator(MirTerminator::Return {
             value: Some(operand),
         });

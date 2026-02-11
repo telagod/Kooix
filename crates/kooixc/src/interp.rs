@@ -589,7 +589,12 @@ fn is_ascii_ident_continue(b: i64) -> bool {
 }
 
 fn value_conforms_to_type_in_function(value: &Value, ty: &TypeRef, function: &HirFunction) -> bool {
-    if ty.args.is_empty() && function.generics.iter().any(|generic| generic.name == ty.head()) {
+    if ty.args.is_empty()
+        && function
+            .generics
+            .iter()
+            .any(|generic| generic.name == ty.head())
+    {
         return true;
     }
 
