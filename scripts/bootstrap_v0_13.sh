@@ -67,6 +67,48 @@ if [[ "${KX_SMOKE:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
+if [[ "${KX_SMOKE_IMPORT:-}" != "" ]]; then
+  echo "[smoke] stage3 compiler compiles examples/import_main and runs it (import loader)"
+  SMOKE_IR="/tmp/kooixc_stage3_examples_import_main.ll"
+  SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-main"
+  rm -f "$SMOKE_IR" "$SMOKE_BIN"
+
+  "$STAGE3_BIN" examples/import_main.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  test -s "$SMOKE_IR"
+  test -x "$SMOKE_BIN"
+  set +e
+  "$SMOKE_BIN" >/dev/null
+  code="$?"
+  set -e
+  if [[ "$code" != "42" ]]; then
+    echo "smoke failure: expected exit=42, got exit=$code ($SMOKE_BIN)" >&2
+    exit 1
+  fi
+
+  echo "ok: smoke binary ran: $SMOKE_BIN"
+fi
+
+if [[ "${KX_SMOKE_STDLIB:-}" != "" ]]; then
+  echo "[smoke] stage3 compiler compiles examples/stdlib_smoke and runs it (stdlib/prelude)"
+  SMOKE_IR="/tmp/kooixc_stage3_examples_stdlib_smoke.ll"
+  SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-stdlib-smoke"
+  rm -f "$SMOKE_IR" "$SMOKE_BIN"
+
+  "$STAGE3_BIN" examples/stdlib_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  test -s "$SMOKE_IR"
+  test -x "$SMOKE_BIN"
+  set +e
+  "$SMOKE_BIN" >/dev/null
+  code="$?"
+  set -e
+  if [[ "$code" != "11" ]]; then
+    echo "smoke failure: expected exit=11, got exit=$code ($SMOKE_BIN)" >&2
+    exit 1
+  fi
+
+  echo "ok: smoke binary ran: $SMOKE_BIN"
+fi
+
 if [[ "${KX_DEEP:-}" != "" ]]; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"

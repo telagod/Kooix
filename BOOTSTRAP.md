@@ -199,6 +199,13 @@ cargo run -p kooixc -- native-llvm /tmp/kooixc_stage2_list.ll /tmp/kooixc-stage2
 KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
+可选 smoke（验证 import loader / stdlib prelude 在更贴近日常用法的目标上可跑通）：
+
+```bash
+KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
+KX_SMOKE_STDLIB=1 ./scripts/bootstrap_v0_13.sh
+```
+
 更深一层（产出 stage4 compiler binary，并用 stage4 再 emit stage5 IR）：
 
 ```bash
