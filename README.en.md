@@ -170,7 +170,7 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 echo $?
 
 # Low-resource real-workload smoke: validate stage1 lexer/parser/typecheck/resolver in one pass
-CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 KX_SMOKE_S1_RESOLVER=1 ./scripts/bootstrap_v0_13.sh
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

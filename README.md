@@ -168,7 +168,7 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 echo $?
 
 # 低资源实载 smoke：一次性验证 stage1 lexer/parser/typecheck/resolver 子图
-CARGO_BUILD_JOBS=1 KX_SMOKE_S1_LEXER=1 KX_SMOKE_S1_PARSER=1 KX_SMOKE_S1_TYPECHECK=1 KX_SMOKE_S1_RESOLVER=1 ./scripts/bootstrap_v0_13.sh
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
 # 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

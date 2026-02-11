@@ -53,6 +53,13 @@ echo "ok: $STAGE3_BIN"
 cp "$STAGE3_BIN" "$STAGE3_ALIAS"
 echo "ok: $STAGE3_ALIAS"
 
+if [[ "${KX_SMOKE_S1_CORE:-}" != "" ]]; then
+  KX_SMOKE_S1_LEXER=1
+  KX_SMOKE_S1_PARSER=1
+  KX_SMOKE_S1_TYPECHECK=1
+  KX_SMOKE_S1_RESOLVER=1
+fi
+
 if [[ "${KX_SMOKE:-}" != "" ]]; then
   echo "[smoke] stage3 compiler compiles stage2_min and runs it"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_min.ll"
