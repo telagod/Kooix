@@ -15,7 +15,7 @@ jobs:
       - name: Install LLVM tools (llc) + clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm clang
+          sudo apt-get install -y llvm clang jq
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -36,4 +36,36 @@ jobs:
         run: cargo test -p kooixc -j 2 -- --test-threads=1
 
       - name: Module-aware check gate (JSON)
-        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json
+        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json > module-check.json
+
+      - name: Upload module-check artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-check-json
+          path: module-check.json
+          if-no-files-found: warn
+
+      - name: Module-check summary
+        if: always()
+        run: |
+          if [ ! -f module-check.json ]; then
+            {
+              echo "### Module Check Summary"
+              echo ""
+              echo "- artifact: missing (module-check.json not generated)"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          error_count=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check.json)
+          warning_count=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check.json)
+          first_diagnostic=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check.json)
+
+          {
+            echo "### Module Check Summary"
+            echo ""
+            echo "- errors: ${error_count}"
+            echo "- warnings: ${warning_count}"
+            echo "- first diagnostic: ${first_diagnostic}"
+          } >> "$GITHUB_STEP_SUMMARY"

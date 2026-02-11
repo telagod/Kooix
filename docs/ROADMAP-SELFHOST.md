@@ -106,8 +106,8 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - DoD2：新增跨模块同名符号冲突/隔离回归用例（含 record/enum/function）。
   - DoD3：Stage1 关键 smoke 不回退。
 - P2（工程门禁）增强 module-check CI 产物与可观测性：
-  - DoD1：`check-modules --json` 输出保存为 workflow artifact。
-  - DoD2：PR summary 展示模块错误计数与首条诊断。
+  - ✅ DoD1：`check-modules --json` 输出保存为 workflow artifact（`module-check-json`）。
+  - ✅ DoD2：PR/run summary 展示模块错误计数与首条诊断。
   - DoD3：新增 `--strict-warnings`（可选）用于渐进收紧告警策略。
 - P3（自举能力）继续扩面 `dist/kooixc1` 的真实负载编译：
   - DoD1：从 `stage2_min` 扩到 `lexer/parser/typecheck` 子集。

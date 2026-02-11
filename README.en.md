@@ -128,6 +128,8 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json
 # Module-aware semantic checks (pretty JSON for humans)
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --pretty
 
+# CI stores module-check JSON as an artifact and summarizes errors/warnings in the job summary
+
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
