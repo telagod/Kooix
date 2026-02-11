@@ -34,3 +34,6 @@ jobs:
           KX_DETERMINISM: "1"
           KX_GOLDEN: "1"
         run: cargo test -p kooixc -j 2 -- --test-threads=1
+
+      - name: Module-aware check gate (JSON)
+        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json

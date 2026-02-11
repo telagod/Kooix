@@ -157,3 +157,58 @@ fn check_modules_json_output_reports_errors() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn check_modules_json_pretty_output_is_multiline() {
+    let dir = make_temp_dir("check-modules-json-pretty");
+    let lib = dir.join("lib.kooix");
+    let main = dir.join("main.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\n\nfn main() -> Int { Lib::helper() + 1 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--json")
+        .arg("--pretty")
+        .output()
+        .expect("run check-modules --json --pretty");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\n"), "unexpected stdout: {stdout}");
+    assert!(
+        stdout.contains("\n  \"modules\""),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_modules_pretty_without_json_fails() {
+    let dir = make_temp_dir("check-modules-pretty-no-json");
+    let main = dir.join("main.kooix");
+    fs::write(&main, "fn main() -> Int { 0 };\n").expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--pretty")
+        .output()
+        .expect("run check-modules --pretty");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--pretty requires --json"),
+        "unexpected stderr: {stderr}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

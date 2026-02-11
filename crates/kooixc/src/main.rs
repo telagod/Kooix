@@ -115,7 +115,7 @@ fn main() {
             Ok(results) => {
                 let has_diagnostics = results.iter().any(|result| !result.diagnostics.is_empty());
                 if options.json {
-                    print_module_diagnostics_json(&results);
+                    print_module_diagnostics_json(&results, options.pretty);
                     if has_diagnostics {
                         process::exit(1);
                     }
@@ -128,7 +128,7 @@ fn main() {
             }
             Err(errors) => {
                 if options.json {
-                    print_loader_diagnostics_json(&errors);
+                    print_loader_diagnostics_json(&errors, options.pretty);
                 } else {
                     for error in errors {
                         eprintln!("error: {}", error.message);
@@ -330,7 +330,7 @@ fn print_module_diagnostics(results: &[ModuleCheckResult]) {
     }
 }
 
-fn print_module_diagnostics_json(results: &[ModuleCheckResult]) {
+fn print_module_diagnostics_json(results: &[ModuleCheckResult], pretty: bool) {
     let mut out = String::new();
     out.push_str("{\"ok\":");
     out.push_str(
@@ -369,10 +369,10 @@ fn print_module_diagnostics_json(results: &[ModuleCheckResult]) {
     }
 
     out.push_str("]}");
-    println!("{out}");
+    emit_json_output(out, pretty);
 }
 
-fn print_loader_diagnostics_json(errors: &[Diagnostic]) {
+fn print_loader_diagnostics_json(errors: &[Diagnostic], pretty: bool) {
     let mut out = String::new();
     out.push_str("{\"ok\":false,\"phase\":\"load\",\"errors\":[");
 
@@ -392,7 +392,76 @@ fn print_loader_diagnostics_json(errors: &[Diagnostic]) {
     }
 
     out.push_str("]}");
-    println!("{out}");
+    emit_json_output(out, pretty);
+}
+
+fn emit_json_output(json: String, pretty: bool) {
+    if pretty {
+        println!("{}", pretty_print_json(&json));
+    } else {
+        println!("{json}");
+    }
+}
+
+fn pretty_print_json(json: &str) -> String {
+    let mut out = String::with_capacity(json.len().saturating_mul(2));
+    let mut indent = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for ch in json.chars() {
+        if in_string {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => {
+                in_string = true;
+                out.push(ch);
+            }
+            '{' | '[' => {
+                out.push(ch);
+                indent += 1;
+                out.push('\n');
+                push_indent(&mut out, indent);
+            }
+            '}' | ']' => {
+                indent = indent.saturating_sub(1);
+                out.push('\n');
+                push_indent(&mut out, indent);
+                out.push(ch);
+            }
+            ',' => {
+                out.push(ch);
+                out.push('\n');
+                push_indent(&mut out, indent);
+            }
+            ':' => {
+                out.push(':');
+                out.push(' ');
+            }
+            ch if ch.is_whitespace() => {}
+            _ => out.push(ch),
+        }
+    }
+
+    out
+}
+
+fn push_indent(out: &mut String, indent: usize) {
+    for _ in 0..indent {
+        out.push_str("  ");
+    }
 }
 
 fn diagnostic_severity_label(severity: Severity) -> &'static str {
@@ -436,7 +505,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json] [--pretty]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 
@@ -463,14 +532,21 @@ struct NativeOptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CheckModulesOptions {
     json: bool,
+    pretty: bool,
 }
 
 fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, String> {
     let mut json = false;
+    let mut pretty = false;
 
     for arg in args {
         if arg == "--json" {
             json = true;
+            continue;
+        }
+
+        if arg == "--pretty" {
+            pretty = true;
             continue;
         }
 
@@ -481,7 +557,11 @@ fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, S
         return Err(format!("unexpected check-modules argument '{arg}'"));
     }
 
-    Ok(CheckModulesOptions { json })
+    if pretty && !json {
+        return Err("--pretty requires --json".to_string());
+    }
+
+    Ok(CheckModulesOptions { json, pretty })
 }
 
 fn parse_native_options(args: &[String]) -> Result<NativeOptions, String> {
@@ -581,14 +661,39 @@ mod tests {
     fn parses_check_modules_defaults() {
         let args: Vec<String> = vec![];
         let options = parse_check_modules_options(&args).expect("should parse");
-        assert_eq!(options, CheckModulesOptions { json: false });
+        assert_eq!(
+            options,
+            CheckModulesOptions {
+                json: false,
+                pretty: false,
+            }
+        );
     }
 
     #[test]
     fn parses_check_modules_json_option() {
         let args = vec!["--json".to_string()];
         let options = parse_check_modules_options(&args).expect("should parse");
-        assert_eq!(options, CheckModulesOptions { json: true });
+        assert_eq!(
+            options,
+            CheckModulesOptions {
+                json: true,
+                pretty: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_check_modules_json_pretty_option() {
+        let args = vec!["--json".to_string(), "--pretty".to_string()];
+        let options = parse_check_modules_options(&args).expect("should parse");
+        assert_eq!(
+            options,
+            CheckModulesOptions {
+                json: true,
+                pretty: true,
+            }
+        );
     }
 
     #[test]
@@ -603,6 +708,13 @@ mod tests {
         let args = vec!["output.json".to_string()];
         let error = parse_check_modules_options(&args).expect_err("should fail");
         assert!(error.contains("unexpected check-modules argument"));
+    }
+
+    #[test]
+    fn rejects_check_modules_pretty_without_json() {
+        let args = vec!["--pretty".to_string()];
+        let error = parse_check_modules_options(&args).expect_err("should fail");
+        assert!(error.contains("--pretty requires --json"));
     }
 
     #[test]
