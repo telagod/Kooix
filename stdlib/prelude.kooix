@@ -1,4 +1,6 @@
 import "intrinsics";
+import "fs";
+import "args";
 
 enum Option<T> { Some(T); None; };
 

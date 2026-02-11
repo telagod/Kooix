@@ -1,0 +1,10 @@
+import "intrinsics";
+
+fn args_len() -> Int {
+  host_argc()
+};
+
+fn args_get(index: Int) -> Text {
+  host_argv(index)
+};
+

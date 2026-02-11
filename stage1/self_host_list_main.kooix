@@ -24,7 +24,7 @@ evidence {
           3
         };
         Ok(ir) => {
-          let w: Result<Int, Text> = host_write_file("/tmp/kooixc_stage2_list.ll", ir);
+          let w: Result<Int, Text> = fs_write_text("/tmp/kooixc_stage2_list.ll", ir);
           match w {
             Ok(_n) => 0;
             Err(msg) => {

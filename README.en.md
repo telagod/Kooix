@@ -47,7 +47,7 @@ Kooix already has a runnable minimal compiler pipeline:
 - CLI commands: `check`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (build native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading: top-level `import "path";` (CLI loader concatenates sources; no module/namespace/export yet).
-- stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers).
+- stdlib bootstrap: `stdlib/prelude.kooix` (`Option`/`Result`/`List`/`Pair` + a few Int helpers; plus thin wrappers `fs_read_text/fs_write_text/args_len/args_get`).
 - Host intrinsics: `host_load_source_map` (compat loader) plus `host_read_file/host_write_file/host_eprintln/host_argc/host_argv/host_link_llvm_ir_file` (used for bootstrap; implemented in native runtime). Also: Stage1 now has a Kooix include loader `stage1/source_map.kooix:s1_load_source_map` (the Stage1 compiler driver and self-host drivers use this path).
 - Bootstrap artifact: `./scripts/bootstrap_v0_13.sh` produces `dist/kooixc1` (stage3 compiler binary that can compile+link Kooix programs).
 - Enum variant namespacing: `Enum.Variant` / `Enum.Variant(payload)`; duplicate variant names across enums are allowed (conflicts require the namespaced form).

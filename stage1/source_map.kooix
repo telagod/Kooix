@@ -549,7 +549,7 @@ fn s1_sm_load_file(path: Text, st0: S1SmState) -> Result<S1SmState, Text> {
     let visited2: List<Text> = Cons(ListCons<Text> { head: path; tail: st0.visited; });
     let st2: S1SmState = S1SmState { visited: visited2; chunks_rev: st0.chunks_rev; };
 
-    let read_r: Result<Text, Text> = host_read_file(path);
+    let read_r: Result<Text, Text> = fs_read_text(path);
     match read_r {
       Err(m) => { out = Err(m); 0 };
       Ok(src) => {

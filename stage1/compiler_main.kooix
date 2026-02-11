@@ -69,7 +69,7 @@ evidence {
                 3
               };
               Ok(ir) => {
-                let w: Result<Int, Text> = host_write_file(out_path, ir);
+                let w: Result<Int, Text> = fs_write_text(out_path, ir);
                 match w {
                   Ok(_n) => {
                     if do_link == false {

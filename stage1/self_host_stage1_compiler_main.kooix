@@ -30,7 +30,7 @@ evidence {
           host_eprintln(text_concat("self_host: llvm_ir bytes=", int_to_text(text_len(ir))));
           host_eprintln("self_host: write /tmp/kooixc_stage2_stage1_compiler.ll");
           let w: Result<Int, Text> =
-            host_write_file("/tmp/kooixc_stage2_stage1_compiler.ll", ir);
+            fs_write_text("/tmp/kooixc_stage2_stage1_compiler.ll", ir);
           match w {
             Ok(_n) => {
               host_eprintln("self_host: link /tmp/kooixc_stage2_stage1_compiler");

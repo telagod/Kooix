@@ -1,0 +1,10 @@
+import "intrinsics";
+
+fn fs_read_text(path: Text) -> Result<Text, Text> {
+  host_read_file(path)
+};
+
+fn fs_write_text(path: Text, content: Text) -> Result<Int, Text> {
+  host_write_file(path, content)
+};
+
