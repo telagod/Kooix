@@ -113,17 +113,34 @@ fn main() {
 
         match check_entry_modules(entry_path) {
             Ok(results) => {
-                let has_diagnostics = results.iter().any(|result| !result.diagnostics.is_empty());
+                let has_errors = results.iter().any(|result| {
+                    result
+                        .diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Error)
+                });
+                let has_warnings = results.iter().any(|result| {
+                    result
+                        .diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Warning)
+                });
+                let has_diagnostics = has_errors || has_warnings;
+                let should_fail = has_errors || (options.strict_warnings && has_warnings);
+
                 if options.json {
-                    print_module_diagnostics_json(&results, options.pretty);
-                    if has_diagnostics {
+                    print_module_diagnostics_json(&results, options.pretty, !should_fail);
+                    if should_fail {
                         process::exit(1);
                     }
                 } else if !has_diagnostics {
                     println!("ok: module semantic checks passed");
                 } else {
                     print_module_diagnostics(&results);
-                    process::exit(1);
+                    if should_fail {
+                        process::exit(1);
+                    }
+                    println!("ok: module semantic checks passed with warnings");
                 }
             }
             Err(errors) => {
@@ -330,16 +347,10 @@ fn print_module_diagnostics(results: &[ModuleCheckResult]) {
     }
 }
 
-fn print_module_diagnostics_json(results: &[ModuleCheckResult], pretty: bool) {
+fn print_module_diagnostics_json(results: &[ModuleCheckResult], pretty: bool, ok: bool) {
     let mut out = String::new();
     out.push_str("{\"ok\":");
-    out.push_str(
-        if results.iter().all(|result| result.diagnostics.is_empty()) {
-            "true"
-        } else {
-            "false"
-        },
-    );
+    out.push_str(if ok { "true" } else { "false" });
     out.push_str(",\"modules\":[");
 
     for (module_index, result) in results.iter().enumerate() {
@@ -505,7 +516,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json] [--pretty]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 
@@ -533,11 +544,13 @@ struct NativeOptions {
 struct CheckModulesOptions {
     json: bool,
     pretty: bool,
+    strict_warnings: bool,
 }
 
 fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, String> {
     let mut json = false;
     let mut pretty = false;
+    let mut strict_warnings = false;
 
     for arg in args {
         if arg == "--json" {
@@ -547,6 +560,11 @@ fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, S
 
         if arg == "--pretty" {
             pretty = true;
+            continue;
+        }
+
+        if arg == "--strict-warnings" {
+            strict_warnings = true;
             continue;
         }
 
@@ -561,7 +579,11 @@ fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, S
         return Err("--pretty requires --json".to_string());
     }
 
-    Ok(CheckModulesOptions { json, pretty })
+    Ok(CheckModulesOptions {
+        json,
+        pretty,
+        strict_warnings,
+    })
 }
 
 fn parse_native_options(args: &[String]) -> Result<NativeOptions, String> {
@@ -666,6 +688,7 @@ mod tests {
             CheckModulesOptions {
                 json: false,
                 pretty: false,
+                strict_warnings: false,
             }
         );
     }
@@ -679,6 +702,7 @@ mod tests {
             CheckModulesOptions {
                 json: true,
                 pretty: false,
+                strict_warnings: false,
             }
         );
     }
@@ -692,6 +716,21 @@ mod tests {
             CheckModulesOptions {
                 json: true,
                 pretty: true,
+                strict_warnings: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parses_check_modules_strict_warnings_option() {
+        let args = vec!["--strict-warnings".to_string()];
+        let options = parse_check_modules_options(&args).expect("should parse");
+        assert_eq!(
+            options,
+            CheckModulesOptions {
+                json: false,
+                pretty: false,
+                strict_warnings: true,
             }
         );
     }

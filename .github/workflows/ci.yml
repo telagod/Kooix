@@ -38,12 +38,17 @@ jobs:
       - name: Module-aware check gate (JSON)
         run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json > module-check.json
 
+      - name: Module-aware check gate (strict warnings)
+        run: cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings > module-check-strict.json
+
       - name: Upload module-check artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: module-check-json
-          path: module-check.json
+          path: |
+            module-check.json
+            module-check-strict.json
           if-no-files-found: warn
 
       - name: Module-check summary

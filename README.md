@@ -126,6 +126,9 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json
 # 模块感知语义检查（pretty JSON 输出，便于人工阅读）
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --pretty
 
+# 将 warning 视为失败（渐进收紧门禁）
+cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
+
 # CI 会保存 module-check JSON artifact，并在 job summary 汇总 errors/warnings
 
 cargo run -p kooixc -- ast examples/valid.kooix

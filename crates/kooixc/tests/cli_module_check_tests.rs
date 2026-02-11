@@ -212,3 +212,115 @@ fn check_modules_pretty_without_json_fails() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn check_modules_warning_is_non_fatal_by_default() {
+    let dir = make_temp_dir("check-modules-warning-default");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .output()
+        .expect("run check-modules");
+
+    assert!(
+        output.status.success(),
+        "warnings should not fail by default, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("warning["), "unexpected stderr: {stderr}");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_modules_strict_warnings_fails_on_warning() {
+    let dir = make_temp_dir("check-modules-warning-strict");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--strict-warnings")
+        .output()
+        .expect("run check-modules --strict-warnings");
+
+    assert_eq!(output.status.code(), Some(1));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_modules_json_warning_is_ok_without_strict() {
+    let dir = make_temp_dir("check-modules-json-warning-default");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--json")
+        .output()
+        .expect("run check-modules --json");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":true"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"severity\":\"warning\""),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_modules_json_warning_fails_with_strict() {
+    let dir = make_temp_dir("check-modules-json-warning-strict");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check-modules")
+        .arg(&main)
+        .arg("--json")
+        .arg("--strict-warnings")
+        .output()
+        .expect("run check-modules --json --strict-warnings");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":false"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
