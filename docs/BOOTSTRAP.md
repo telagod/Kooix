@@ -69,6 +69,7 @@
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
 - 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS、import variant smoke compile/run 耗时与 RSS、timeout/限载配置、每步 exit code）；summary 会基于 `*_exit_code` 直接给出 failure classification（timeout/signal/OOM-vmem 线索），并在出现 `exit=139` 时追加 Resource Hint（建议 vmem cap 起步值）。
 - 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke（`Foo::bar` + `Foo::Option::Some`），`KX_HEAVY_COMPILER_MAIN_SMOKE=1` 开启 `compiler_main` 二段闭环 smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
+- 严格本地限载预设：`KX_HEAVY_STRICT_LOCAL=1` 会默认注入 `KX_HEAVY_SAFE_MODE=1`、`KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`、`KX_HEAVY_REUSE_ONLY=1`，并关闭 `determinism/deep/import/selfhost/s1_compiler`，仅保留 `compiler_main` 二段闭环 smoke；可用显式环境变量覆盖该预设。
 
 ## 一键复现（v0.13）
 

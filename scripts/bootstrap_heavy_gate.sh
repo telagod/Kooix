@@ -144,6 +144,21 @@ run_limited() {
 
   return "$cmd_status"
 }
+STRICT_LOCAL="${KX_HEAVY_STRICT_LOCAL:-0}"
+if is_enabled "$STRICT_LOCAL"; then
+  : "${CARGO_BUILD_JOBS:=1}"
+  : "${KX_HEAVY_SAFE_MODE:=1}"
+  : "${KX_HEAVY_SAFE_MAX_VMEM_KB:=16777216}"
+  : "${KX_HEAVY_SAFE_MAX_PROCS:=0}"
+  : "${KX_HEAVY_DETERMINISM:=0}"
+  : "${KX_HEAVY_DEEP:=0}"
+  : "${KX_HEAVY_S1_COMPILER:=0}"
+  : "${KX_HEAVY_IMPORT_SMOKE:=0}"
+  : "${KX_HEAVY_SELFHOST_EQ:=0}"
+  : "${KX_HEAVY_COMPILER_MAIN_SMOKE:=1}"
+  : "${KX_HEAVY_REUSE_ONLY:=1}"
+fi
+
 HEAVY_SAFE_MODE="${KX_HEAVY_SAFE_MODE:-1}"
 HEAVY_SAFE_NICE="${KX_HEAVY_SAFE_NICE:-10}"
 HEAVY_SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"
@@ -277,11 +292,17 @@ else
   SAFE_MODE_LABEL="disabled"
 fi
 
+if is_enabled "$STRICT_LOCAL"; then
+  STRICT_LOCAL_LABEL="enabled"
+else
+  STRICT_LOCAL_LABEL="disabled"
+fi
+
 if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; heavy gate timeout disabled" >&2
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL strict_local=$STRICT_LOCAL_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
@@ -398,6 +419,7 @@ fi
   echo "deep_enabled=$DEEP_LABEL"
   echo "determinism_enabled=$DET_LABEL"
   echo "safe_mode=$SAFE_MODE_LABEL"
+  echo "strict_local_mode=$STRICT_LOCAL_LABEL"
   echo "heavy_timeout_seconds=$HEAVY_TIMEOUT"
   echo "heavy_timeout_smoke_seconds=$HEAVY_TIMEOUT_SMOKE"
   echo "heavy_safe_max_vmem_kb=$HEAVY_SAFE_MAX_VMEM_KB"

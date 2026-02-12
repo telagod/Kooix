@@ -210,6 +210,10 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 # 可调：heavy gate timeout / 限载（0 表示不限制）
 CARGO_BUILD_JOBS=1 KX_HEAVY_TIMEOUT_BOOTSTRAP=900 KX_HEAVY_TIMEOUT=900 KX_HEAVY_TIMEOUT_SMOKE=300 KX_HEAVY_SAFE_MAX_VMEM_KB=0 KX_HEAVY_SAFE_MAX_PROCS=0 ./scripts/bootstrap_heavy_gate.sh
 
+# 严格本地限载预设（默认 16 GiB vmem + reuse-only + 关闭高开销 gate，仅保留 compiler_main 两段 smoke）
+CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh
+# 冷启动首次若无复用产物，可临时预热：KX_HEAVY_STRICT_LOCAL=1 KX_HEAVY_REUSE_ONLY=0 ./scripts/bootstrap_heavy_gate.sh
+
 # 可选：关闭/开启 bootstrap 产物复用（默认均开启）
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 

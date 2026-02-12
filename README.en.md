@@ -212,6 +212,10 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 # Tunables: heavy gate timeout / safety caps (0 means unlimited)
 CARGO_BUILD_JOBS=1 KX_HEAVY_TIMEOUT_BOOTSTRAP=900 KX_HEAVY_TIMEOUT=900 KX_HEAVY_TIMEOUT_SMOKE=300 KX_HEAVY_SAFE_MAX_VMEM_KB=0 KX_HEAVY_SAFE_MAX_PROCS=0 ./scripts/bootstrap_heavy_gate.sh
 
+# Strict local resource preset (default 16 GiB vmem + reuse-only + disables expensive gates, keeps compiler_main two-hop smoke)
+CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh
+# On first cold run without reusable artifacts, prewarm once with: KX_HEAVY_STRICT_LOCAL=1 KX_HEAVY_REUSE_ONLY=0 ./scripts/bootstrap_heavy_gate.sh
+
 # Optional: disable/enable bootstrap artifact reuse (both enabled by default)
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 
