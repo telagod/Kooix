@@ -176,6 +176,9 @@ echo $?
 # 低资源实载 smoke：一次性验证 stage1 lexer/parser/typecheck/resolver 子图
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
+# 可选：增加 stage1/compiler 模块 smoke
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
+
 # 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
 
@@ -184,6 +187,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/boo
 
 # 可选：启用 reuse-only（要求命中复用，缺失即快速失败，避免误触发重建）
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 可选：开启 stage1/compiler 模块 smoke
+CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 可选：开启 deterministic 对比
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh

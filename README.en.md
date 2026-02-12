@@ -178,6 +178,9 @@ echo $?
 # Low-resource real-workload smoke: validate stage1 lexer/parser/typecheck/resolver in one pass
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
+# Optional: include stage1/compiler module smoke
+CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
+
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
 
@@ -186,6 +189,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/boo
 
 # Optional: enable reuse-only (fail fast if requested reuse artifacts are missing)
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
+
+# Optional: enable stage1/compiler module smoke
+CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable determinism compare
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh

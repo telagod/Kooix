@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_compiler_smoke:
+        description: Enable stage1/compiler module smoke in gate1
+        required: false
+        default: false
+        type: boolean
       reuse_stage3:
         description: Reuse dist/kooixc-stage3 when already present
         required: false
@@ -55,12 +60,14 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "determinism=${{ inputs.run_determinism }}" >> "$GITHUB_OUTPUT"
             echo "deep=${{ inputs.run_deep }}" >> "$GITHUB_OUTPUT"
+            echo "compiler_smoke=${{ inputs.run_compiler_smoke }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=${{ inputs.reuse_stage3 }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=${{ inputs.reuse_stage2 }}" >> "$GITHUB_OUTPUT"
             echo "reuse_only=${{ inputs.reuse_only }}" >> "$GITHUB_OUTPUT"
           else
             echo "determinism=true" >> "$GITHUB_OUTPUT"
             echo "deep=false" >> "$GITHUB_OUTPUT"
+            echo "compiler_smoke=false" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=true" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=true" >> "$GITHUB_OUTPUT"
             echo "reuse_only=false" >> "$GITHUB_OUTPUT"
@@ -71,6 +78,7 @@ jobs:
           CARGO_BUILD_JOBS: "1"
           KX_HEAVY_DETERMINISM: ${{ steps.toggles.outputs.determinism }}
           KX_HEAVY_DEEP: ${{ steps.toggles.outputs.deep }}
+          KX_HEAVY_S1_COMPILER: ${{ steps.toggles.outputs.compiler_smoke }}
           KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
           KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
           KX_HEAVY_REUSE_ONLY: ${{ steps.toggles.outputs.reuse_only }}
@@ -89,6 +97,8 @@ jobs:
             /tmp/kx-stage4-stage2-min.ll
             /tmp/kx-det-a.ll
             /tmp/kx-det-b.ll
+            dist/kooixc-stage3-stage2-s1-compiler-module-smoke
+            /tmp/kooixc_stage3_stage2_s1_compiler_module_smoke.ll
             /tmp/bootstrap-heavy-bootstrap.log
             /tmp/bootstrap-heavy-metrics.txt
             /tmp/bootstrap-heavy-determinism.sha256
@@ -113,6 +123,7 @@ jobs:
           reuse_stage2="unknown"
           reuse_stage2_hit="n/a"
           reuse_only="unknown"
+          compiler_smoke="unknown"
           det_hash="n/a"
 
           if [ -f "$metrics_file" ]; then
@@ -129,6 +140,7 @@ jobs:
                 reuse_stage2_enabled) reuse_stage2="$value" ;;
                 reuse_stage2_hit) reuse_stage2_hit="$value" ;;
                 reuse_only_enabled) reuse_only="$value" ;;
+                s1_compiler_smoke_enabled) compiler_smoke="$value" ;;
               esac
             done < "$metrics_file"
           fi
@@ -145,6 +157,7 @@ jobs:
             echo "- reuse stage3: ${reuse_stage3} (hit=${reuse_stage3_hit})"
             echo "- reuse stage2: ${reuse_stage2} (hit=${reuse_stage2_hit})"
             echo "- reuse-only mode: ${reuse_only}"
+            echo "- stage1 compiler module smoke: ${compiler_smoke}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"
             echo "- gate3 (determinism): ${gate3}s"
