@@ -314,6 +314,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 ## Known Issues (Read Before Running)
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` means "reuse only, never rebuild". On fresh runners or after cleaning `dist/` and `/tmp`, it fails fast by design (not a regression). Seed artifacts first with default safe mode (without reuse-only).
+- Local safe mode now enables cold-start guards by default (`KX_SAFE_COLD_START_GUARD=1` / `KX_HEAVY_COLD_START_GUARD=1`), so missing stage artifacts fail fast instead of triggering accidental full rebuild spikes. Set them to `0` only for intentional one-off cold rebuilds. CI now includes a dedicated smoke check for this fail-fast behavior.
 - On Linux, if `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB` is unset, scripts auto-apply `ulimit -v` at `MemTotal * 85%`. Some CI runners may kill `llc/clang` or stage binaries under this cap; the heavy CI workflow explicitly sets `KX_HEAVY_SAFE_MAX_VMEM_KB=0`, and local runs can do the same to disable the cap.
 - With `KX_HEAVY_COMPILER_MAIN_SMOKE=1`, peak RSS on the current Stage1 graph is close to 15.5 GiB. Setting `KX_HEAVY_SAFE_MAX_VMEM_KB` to 6-12 GiB may trigger `exit=139` (SIGSEGV). A strict-but-practical local baseline is: `CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`.
 - The main `check/hir/mir/llvm/native/run` pipeline is still include-style, while `check-modules` is a module-aware semantic-check prototype. For `Foo::...` and cross-file namespace isolation cases, run both `check-modules --json` and bootstrap smoke.

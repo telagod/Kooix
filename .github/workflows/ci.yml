@@ -28,6 +28,32 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      - name: Bootstrap cold-start guard smoke
+        run: |
+          set -euo pipefail
+
+          out_v013="$(mktemp /tmp/kx-guard-v013-log-XXXXXX)"
+          out_heavy="$(mktemp /tmp/kx-guard-heavy-log-XXXXXX)"
+          dir_v013="$(mktemp -d /tmp/kx-guard-v013-dist-XXXXXX)"
+          dir_heavy="$(mktemp -d /tmp/kx-guard-heavy-dist-XXXXXX)"
+          trap 'rm -f "$out_v013" "$out_heavy"; rm -rf "$dir_v013" "$dir_heavy"' EXIT
+
+          if KX_SAFE_COLD_START_GUARD=1 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_v0_13.sh "$dir_v013" >"$out_v013" 2>&1; then
+            echo "expected bootstrap_v0_13 cold-start guard to fail fast" >&2
+            cat "$out_v013" >&2
+            exit 1
+          fi
+          grep -q "cold-start rebuild blocked" "$out_v013"
+
+          if KX_HEAVY_COLD_START_GUARD=1 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh "$dir_heavy" >"$out_heavy" 2>&1; then
+            echo "expected bootstrap_heavy cold-start guard to fail fast" >&2
+            cat "$out_heavy" >&2
+            exit 1
+          fi
+          grep -q "cold-start rebuild blocked" "$out_heavy"
+
+          echo "ok: bootstrap cold-start guard smoke passed"
+
       - name: Test
         # Keep resource usage stable: bootstrap/native tests may spawn external toolchains.
         env:
