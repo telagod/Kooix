@@ -86,7 +86,7 @@ jobs:
             echo "determinism=true" >> "$GITHUB_OUTPUT"
             echo "deep=false" >> "$GITHUB_OUTPUT"
             echo "compiler_smoke=false" >> "$GITHUB_OUTPUT"
-            echo "compiler_main_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "compiler_main_smoke=true" >> "$GITHUB_OUTPUT"
             echo "import_smoke=false" >> "$GITHUB_OUTPUT"
             echo "selfhost_eq=false" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=true" >> "$GITHUB_OUTPUT"
@@ -204,6 +204,8 @@ jobs:
           failure_count=0
           failure_lines=""
           first_failure=""
+          has_sigsegv="no"
+          resource_hint="none"
 
           classify_exit_reason() {
             local code="$1"
@@ -235,6 +237,9 @@ jobs:
 
             local reason
             reason="$(classify_exit_reason "$raw")"
+            if (( raw == 139 )); then
+              has_sigsegv="yes"
+            fi
             failure_count=$((failure_count + 1))
             failure_lines+="- ${scope}:${key} -> exit=${raw} (${reason})\n"
 
@@ -319,6 +324,18 @@ jobs:
             first_failure="none"
           fi
 
+          if [ "$has_sigsegv" = "yes" ]; then
+            if [[ "$heavy_vmem" =~ ^[0-9]+$ ]] && [ "$heavy_vmem" != "0" ]; then
+              if [ "$heavy_vmem" -lt 16777216 ]; then
+                resource_hint="SIGSEGV observed under vmem cap ${heavy_vmem} KB; try KX_HEAVY_SAFE_MAX_VMEM_KB=16777216 (16 GiB) for local runs or 0 in CI."
+              else
+                resource_hint="SIGSEGV observed with vmem cap ${heavy_vmem} KB; inspect compiler_main smoke artifacts/logs for non-memory faults."
+              fi
+            else
+              resource_hint="SIGSEGV observed; inspect compiler_main smoke artifacts/logs for likely runtime faults."
+            fi
+          fi
+
           {
             echo "### Bootstrap Heavy Summary"
             echo ""
@@ -347,6 +364,7 @@ jobs:
             echo "- total: ${total}s"
             echo "- failure signals observed: ${failure_count}"
             echo "- first non-zero step: ${first_failure}"
+            echo "- resource hint: ${resource_hint}"
             echo "- self-host convergence sha256: ${selfhost_hash}"
             echo "- determinism sha256: ${det_hash}"
 
@@ -354,5 +372,11 @@ jobs:
               echo ""
               echo "#### Failure Classification"
               printf '%b' "$failure_lines"
+            fi
+
+            if [ "$resource_hint" != "none" ]; then
+              echo ""
+              echo "#### Resource Hint"
+              echo "- ${resource_hint}"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
