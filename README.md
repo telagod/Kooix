@@ -199,6 +199,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 # 可选：开启 self-host IR 收敛 smoke（stage3->stage4->stage5 的 compiler_main IR 一致性）
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 
+# 可选：compiler_main 二段闭环 smoke（stage3 编译器 -> stage4 stage2_min -> run）
+CARGO_BUILD_JOBS=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh
+
 # 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
 CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 

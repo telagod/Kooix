@@ -134,6 +134,12 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 ```
 
+可选（`compiler_main` 二段闭环 smoke：stage3 编译器编译 `compiler_main`，再编译并运行 `stage2_min`）：
+
+```bash
+CARGO_BUILD_JOBS=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh
+```
+
 默认即优先复用（safe mode），也可显式指定：
 
 ```bash

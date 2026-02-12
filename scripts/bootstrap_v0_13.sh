@@ -511,6 +511,27 @@ if is_enabled "${KX_SMOKE_SELFHOST_EQ:-0}"; then
   echo "ok: self-host IR convergence sha256=$selfhost_sha4"
 fi
 
+if is_enabled "${KX_SMOKE_COMPILER_MAIN:-0}"; then
+  echo "[smoke] compiler_main two-hop loop (stage3 compiler -> stage4 stage2_min -> run)"
+  SMOKE_COMPILER_MAIN_IR="/tmp/kooixc_stage3_stage1_compiler_main_smoke.ll"
+  SMOKE_COMPILER_MAIN_BIN="${OUT_DIR%/}/kooixc-stage3-stage1-compiler-main-smoke"
+  SMOKE_STAGE4_MIN_IR="/tmp/kooixc_stage4_stage2_min_smoke.ll"
+  SMOKE_STAGE4_MIN_BIN="${OUT_DIR%/}/kooixc-stage4-stage2-min-smoke"
+  rm -f "$SMOKE_COMPILER_MAIN_IR" "$SMOKE_COMPILER_MAIN_BIN" "$SMOKE_STAGE4_MIN_IR" "$SMOKE_STAGE4_MIN_BIN"
+
+  run_limited smoke_compiler_main_stage3_compile "$TIMEOUT_SELFHOST" "$STAGE3_BIN" stage1/compiler_main.kooix "$SMOKE_COMPILER_MAIN_IR" "$SMOKE_COMPILER_MAIN_BIN" >/dev/null
+  test -s "$SMOKE_COMPILER_MAIN_IR"
+  test -x "$SMOKE_COMPILER_MAIN_BIN"
+
+  run_limited smoke_compiler_main_stage4_compile "$TIMEOUT_SELFHOST" "$SMOKE_COMPILER_MAIN_BIN" stage1/stage2_min.kooix "$SMOKE_STAGE4_MIN_IR" "$SMOKE_STAGE4_MIN_BIN" >/dev/null
+  test -s "$SMOKE_STAGE4_MIN_IR"
+  test -x "$SMOKE_STAGE4_MIN_BIN"
+
+  run_limited smoke_compiler_main_stage4_run "$TIMEOUT_SMOKE" "$SMOKE_STAGE4_MIN_BIN" >/dev/null
+
+  echo "ok: compiler_main two-hop smoke binary ran: $SMOKE_STAGE4_MIN_BIN"
+fi
+
 if is_enabled "${KX_DEEP:-0}"; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
