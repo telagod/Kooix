@@ -267,6 +267,8 @@ cat /tmp/bootstrap-heavy-resource.log
 grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # 或使用脚本化校验（断言 strict-local 关键开关命中）
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# 额外校验 module preflight JSON 指标形态（enabled/disabled 两种模式）
+./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 
 # 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

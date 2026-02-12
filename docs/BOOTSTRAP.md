@@ -190,6 +190,8 @@ cat /tmp/kx-bootstrap-resource.log
 grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # 或用脚本做断言校验
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# 额外校验 module preflight JSON 指标形态（enabled/disabled 两种模式）
+./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 ```
 
 一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环；本地默认不跑 deterministic 对比）：

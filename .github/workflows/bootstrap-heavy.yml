@@ -115,6 +115,10 @@ jobs:
           KX_HEAVY_SAFE_MAX_VMEM_KB: "0"
         run: ./scripts/bootstrap_heavy_gate.sh
 
+      - name: Validate module preflight json metrics
+        if: success()
+        run: ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+
       - name: Upload bootstrap-heavy artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -394,6 +398,7 @@ jobs:
             echo "- cold-start guard: ${cold_start_guard}"
             echo "- module preflight: ${module_preflight} (${module_preflight_entry})"
             echo "- module preflight json: ${module_preflight_json}"
+            echo "- module preflight artifact hint: bootstrap-heavy-artifacts -> ${module_preflight_json}"
             echo "- module preflight runtime: ${module_preflight_s}s (max RSS ${module_preflight_rss} KB)"
             echo "- module preflight diagnostics: ok=${module_preflight_ok}, errors=${module_preflight_errors}, warnings=${module_preflight_warnings}"
             echo "- module preflight first diagnostic: ${module_preflight_first_diag}"

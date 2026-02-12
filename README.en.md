@@ -269,6 +269,8 @@ cat /tmp/bootstrap-heavy-resource.log
 grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # Or use scripted assertions for strict-local guardrails
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# Additional shape check for module preflight JSON metrics (enabled/disabled modes)
+./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main
