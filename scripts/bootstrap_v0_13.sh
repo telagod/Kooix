@@ -62,6 +62,20 @@ resolve_default_vmem_limit_kb() {
   echo "0"
 }
 
+resolve_default_cold_start_guard() {
+  if [[ -n "${KX_SAFE_COLD_START_GUARD+x}" ]]; then
+    echo "${KX_SAFE_COLD_START_GUARD:-0}"
+    return
+  fi
+
+  if is_enabled "$SAFE_MODE" && [[ -z "${CI:-}" ]]; then
+    echo "1"
+    return
+  fi
+
+  echo "0"
+}
+
 log_run_failure_hint() {
   local key="$1"
   local status="$2"
@@ -164,6 +178,7 @@ DEFAULT_REUSE="${KX_DEFAULT_REUSE:-1}"
 SAFE_NICE="${KX_SAFE_NICE:-10}"
 SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"
 SAFE_MAX_PROCS="${KX_SAFE_MAX_PROCS:-0}"
+SAFE_COLD_START_GUARD="$(resolve_default_cold_start_guard)"
 CMD_TIMEOUT="${KX_CMD_TIMEOUT:-900}"
 TIMEOUT_STAGE1_DRIVER="${KX_TIMEOUT_STAGE1_DRIVER:-$CMD_TIMEOUT}"
 TIMEOUT_STAGE_BUILD="${KX_TIMEOUT_STAGE_BUILD:-$CMD_TIMEOUT}"
@@ -200,17 +215,24 @@ else
 fi
 REUSE_ONLY="${KX_REUSE_ONLY:-0}"
 
+if is_enabled "$SAFE_COLD_START_GUARD"; then
+  SAFE_COLD_START_GUARD_LABEL="enabled"
+else
+  SAFE_COLD_START_GUARD_LABEL="disabled"
+fi
+
 if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; command timeout disabled" >&2
 fi
 
-echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none} vmem_cap_kb=$SAFE_MAX_VMEM_KB proc_cap=$SAFE_MAX_PROCS"
+echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL cold_start_guard=$SAFE_COLD_START_GUARD_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none} vmem_cap_kb=$SAFE_MAX_VMEM_KB proc_cap=$SAFE_MAX_PROCS"
 : > "$RESOURCE_LOG"
 printf 'safe_mode=%s\n' "$SAFE_MODE_LABEL" >> "$RESOURCE_LOG"
 printf 'cargo_build_jobs=%s\n' "$JOBS" >> "$RESOURCE_LOG"
 printf 'reuse_stage3=%s\n' "$REUSE_STAGE3" >> "$RESOURCE_LOG"
 printf 'reuse_stage2=%s\n' "$REUSE_STAGE2" >> "$RESOURCE_LOG"
 printf 'reuse_only=%s\n' "$REUSE_ONLY" >> "$RESOURCE_LOG"
+printf 'cold_start_guard=%s\n' "$SAFE_COLD_START_GUARD_LABEL" >> "$RESOURCE_LOG"
 printf 'safe_max_vmem_kb=%s\n' "$SAFE_MAX_VMEM_KB" >> "$RESOURCE_LOG"
 printf 'safe_max_procs=%s\n' "$SAFE_MAX_PROCS" >> "$RESOURCE_LOG"
 
@@ -225,6 +247,33 @@ STAGE2_BIN="${OUT_DIR%/}/kooixc-stage2"
 STAGE3_BIN="${OUT_DIR%/}/kooixc-stage3"
 STAGE3_ALIAS="${OUT_DIR%/}/kooixc1"
 STAGE4_BIN="${OUT_DIR%/}/kooixc-stage4"
+
+preflight_cold_start_guard() {
+  if ! is_enabled "$SAFE_COLD_START_GUARD"; then
+    return
+  fi
+
+  if is_enabled "$REUSE_ONLY"; then
+    return
+  fi
+
+  if is_enabled "$REUSE_STAGE3" && [[ ! -x "$STAGE3_BIN" ]]; then
+    echo "[guard] local cold-start rebuild blocked: missing stage3 artifact: $STAGE3_BIN" >&2
+    echo "[guard] reason: prevent accidental CPU/memory saturation from full bootstrap rebuild" >&2
+    echo "[guard] override once if rebuild is intentional:" >&2
+    echo "  CARGO_BUILD_JOBS=1 KX_SAFE_COLD_START_GUARD=0 ./scripts/bootstrap_v0_13.sh $OUT_DIR" >&2
+    exit 1
+  fi
+
+  if ! is_enabled "$REUSE_STAGE3" && is_enabled "$REUSE_STAGE2" && [[ ! -x "$STAGE2_BIN" ]]; then
+    echo "[guard] local cold-start rebuild blocked: missing stage2 artifact while reuse_stage3=0: $STAGE2_BIN" >&2
+    echo "[guard] override once if rebuild is intentional:" >&2
+    echo "  CARGO_BUILD_JOBS=1 KX_SAFE_COLD_START_GUARD=0 ./scripts/bootstrap_v0_13.sh $OUT_DIR" >&2
+    exit 1
+  fi
+}
+
+preflight_cold_start_guard
 
 if is_enabled "$REUSE_STAGE3" && [[ -x "$STAGE3_BIN" ]]; then
   echo "[reuse] using existing stage3 compiler: $STAGE3_BIN"

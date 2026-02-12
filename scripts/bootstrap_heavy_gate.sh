@@ -56,6 +56,20 @@ resolve_default_vmem_limit_kb() {
   echo "0"
 }
 
+resolve_default_cold_start_guard() {
+  if [[ -n "${KX_HEAVY_COLD_START_GUARD+x}" ]]; then
+    echo "${KX_HEAVY_COLD_START_GUARD:-0}"
+    return
+  fi
+
+  if is_enabled "$HEAVY_SAFE_MODE" && [[ -z "${CI:-}" ]]; then
+    echo "1"
+    return
+  fi
+
+  echo "0"
+}
+
 log_run_failure_hint() {
   local key="$1"
   local status="$2"
@@ -163,6 +177,7 @@ HEAVY_SAFE_MODE="${KX_HEAVY_SAFE_MODE:-1}"
 HEAVY_SAFE_NICE="${KX_HEAVY_SAFE_NICE:-10}"
 HEAVY_SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"
 HEAVY_SAFE_MAX_PROCS="${KX_HEAVY_SAFE_MAX_PROCS:-0}"
+HEAVY_COLD_START_GUARD="$(resolve_default_cold_start_guard)"
 HEAVY_TIMEOUT_BOOTSTRAP="${KX_HEAVY_TIMEOUT_BOOTSTRAP:-900}"
 HEAVY_TIMEOUT="${KX_HEAVY_TIMEOUT:-900}"
 HEAVY_TIMEOUT_SMOKE="${KX_HEAVY_TIMEOUT_SMOKE:-300}"
@@ -240,6 +255,31 @@ preflight_reuse_only() {
   if ! is_enabled "$HEAVY_REUSE_STAGE3" && is_enabled "$HEAVY_REUSE_STAGE2" && [[ ! -x "$STAGE2_REUSE_BIN" ]]; then
     echo "[preflight] reuse-only miss: stage2 artifact not found while reuse_stage3=0: $STAGE2_REUSE_BIN" >&2
     echo "[preflight] hint: allow one rebuild via KX_HEAVY_REUSE_ONLY=0, or provide stage2/stage3 artifacts first" >&2
+    exit 1
+  fi
+}
+
+preflight_cold_start_guard() {
+  if ! is_enabled "$HEAVY_COLD_START_GUARD"; then
+    return
+  fi
+
+  if is_enabled "$HEAVY_REUSE_ONLY"; then
+    return
+  fi
+
+  if is_enabled "$HEAVY_REUSE_STAGE3" && [[ ! -x "$STAGE3_REUSE_BIN" ]]; then
+    echo "[preflight] cold-start rebuild blocked: missing stage3 artifact: $STAGE3_REUSE_BIN" >&2
+    echo "[preflight] reason: prevent accidental local CPU/memory saturation during heavy gate" >&2
+    echo "[preflight] override once if rebuild is intentional:" >&2
+    echo "  CARGO_BUILD_JOBS=1 KX_HEAVY_COLD_START_GUARD=0 ./scripts/bootstrap_heavy_gate.sh $OUT_DIR" >&2
+    exit 1
+  fi
+
+  if ! is_enabled "$HEAVY_REUSE_STAGE3" && is_enabled "$HEAVY_REUSE_STAGE2" && [[ ! -x "$STAGE2_REUSE_BIN" ]]; then
+    echo "[preflight] cold-start rebuild blocked: missing stage2 artifact while reuse_stage3=0: $STAGE2_REUSE_BIN" >&2
+    echo "[preflight] override once if rebuild is intentional:" >&2
+    echo "  CARGO_BUILD_JOBS=1 KX_HEAVY_COLD_START_GUARD=0 ./scripts/bootstrap_heavy_gate.sh $OUT_DIR" >&2
     exit 1
   fi
 }
@@ -323,20 +363,27 @@ else
   STRICT_LOCAL_LABEL="disabled"
 fi
 
+if is_enabled "$HEAVY_COLD_START_GUARD"; then
+  COLD_START_GUARD_LABEL="enabled"
+else
+  COLD_START_GUARD_LABEL="disabled"
+fi
+
 if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; heavy gate timeout disabled" >&2
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL strict_local=$STRICT_LOCAL_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL strict_local=$STRICT_LOCAL_LABEL cold_start_guard=$COLD_START_GUARD_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
 
 preflight_reuse_only
+preflight_cold_start_guard
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_SAFE_COLD_START_GUARD="$HEAVY_COLD_START_GUARD" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_SAFE_COLD_START_GUARD="$HEAVY_COLD_START_GUARD" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
 
@@ -447,6 +494,7 @@ fi
   echo "determinism_enabled=$DET_LABEL"
   echo "safe_mode=$SAFE_MODE_LABEL"
   echo "strict_local_mode=$STRICT_LOCAL_LABEL"
+  echo "cold_start_guard=$COLD_START_GUARD_LABEL"
   echo "heavy_timeout_seconds=$HEAVY_TIMEOUT"
   echo "heavy_timeout_smoke_seconds=$HEAVY_TIMEOUT_SMOKE"
   echo "heavy_safe_max_vmem_kb=$HEAVY_SAFE_MAX_VMEM_KB"

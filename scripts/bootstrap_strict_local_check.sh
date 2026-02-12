@@ -20,6 +20,7 @@ fi
 strict_local="$(metric strict_local_mode)"
 compiler_main_smoke="$(metric compiler_main_smoke_enabled)"
 reuse_only="$(metric reuse_only_enabled)"
+cold_start_guard="$(metric cold_start_guard)"
 heavy_vmem="$(metric heavy_safe_max_vmem_kb)"
 failures="$(metric failure_signals_observed)"
 first_failure="$(metric first_non_zero_step)"
@@ -28,6 +29,7 @@ echo "metrics_file=$METRICS_FILE"
 echo "strict_local_mode=${strict_local:-missing}"
 echo "compiler_main_smoke_enabled=${compiler_main_smoke:-missing}"
 echo "reuse_only_enabled=${reuse_only:-missing}"
+echo "cold_start_guard=${cold_start_guard:-missing}"
 echo "heavy_safe_max_vmem_kb=${heavy_vmem:-missing}"
 
 if [[ -n "$failures" ]]; then

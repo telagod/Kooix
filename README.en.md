@@ -167,6 +167,10 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Safe mode (enabled by default): force single-thread build + reuse stage3/stage2 + per-command timeout/limits
 KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 
+# Local cold-start guard is enabled by default (KX_SAFE_COLD_START_GUARD=1): fail fast when stage artifacts are missing to avoid accidental full rebuild spikes
+# If a one-time cold rebuild is intentional, disable it once:
+CARGO_BUILD_JOBS=1 KX_SAFE_COLD_START_GUARD=0 ./scripts/bootstrap_v0_13.sh
+
 # If KX_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
 
 # Stricter mode: reuse-only (fail fast, never trigger rebuild when artifacts are missing)
@@ -207,6 +211,10 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
 CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 
+# Local heavy cold-start guard is enabled by default (KX_HEAVY_COLD_START_GUARD=1): fail fast when stage artifacts are missing to avoid accidental rebuild spikes
+# If a one-time cold rebuild is intentional, disable it once:
+CARGO_BUILD_JOBS=1 KX_HEAVY_COLD_START_GUARD=0 ./scripts/bootstrap_heavy_gate.sh
+
 # If KX_HEAVY_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
 
 # Tunables: heavy gate timeout / safety caps (0 means unlimited)
@@ -244,7 +252,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
 # Strict-local self-check (preset hit + active vmem cap)
-grep -E "^(strict_local_mode|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
+grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # Or use scripted assertions for strict-local guardrails
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 

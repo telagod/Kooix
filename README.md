@@ -165,6 +165,10 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # 安全模式（默认开启）：强制单线程 + 默认优先复用 stage3/stage2 + 命令级 timeout/限载
 KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 
+# 本地默认启用冷启动护栏（KX_SAFE_COLD_START_GUARD=1）：缺少 stage 产物时快速失败，避免误触发全量重建
+# 若确需首次重建，显式关闭一次：
+CARGO_BUILD_JOBS=1 KX_SAFE_COLD_START_GUARD=0 ./scripts/bootstrap_v0_13.sh
+
 # 未显式设置 KX_SAFE_MAX_VMEM_KB 时，默认使用 MemTotal 的 85% 作为内存上限（Linux）；设为 0 可关闭该上限
 
 # 更激进：只允许复用，缺失即快速失败（不触发重建）
@@ -205,6 +209,10 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh
 # 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
 CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 
+# 本地默认启用 heavy 冷启动护栏（KX_HEAVY_COLD_START_GUARD=1）：缺少 stage 产物时快速失败，避免误触发重建
+# 若确需首次重建，显式关闭一次：
+CARGO_BUILD_JOBS=1 KX_HEAVY_COLD_START_GUARD=0 ./scripts/bootstrap_heavy_gate.sh
+
 # 未显式设置 KX_HEAVY_SAFE_MAX_VMEM_KB 时，默认使用 MemTotal 的 85%（Linux）；设为 0 可关闭该上限
 
 # 可调：heavy gate timeout / 限载（0 表示不限制）
@@ -242,7 +250,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
 # 严格限载自检（是否命中 strict-local 预设 + 当前 vmem cap）
-grep -E "^(strict_local_mode|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
+grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # 或使用脚本化校验（断言 strict-local 关键开关命中）
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 
