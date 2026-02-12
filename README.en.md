@@ -190,6 +190,7 @@ KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_
 
 # Resource metrics (per-step elapsed + max RSS + exit code)
 cat /tmp/kx-bootstrap-resource.log
+# Module preflight also emits module_preflight_ok/errors/warnings/first_diagnostic (from check-modules --json)
 # Failures now emit [fail] hints (timeout / signal / OOM-vmem clues)
 
 # Note: all KX_* toggles are boolean (1/true/on = enabled, 0/false/off = disabled)
@@ -327,7 +328,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` means "reuse only, never rebuild". On fresh runners or after cleaning `dist/` and `/tmp`, it fails fast by design (not a regression). Seed artifacts first with default safe mode (without reuse-only).
 - Local safe mode now enables cold-start guards by default (`KX_SAFE_COLD_START_GUARD=1` / `KX_HEAVY_COLD_START_GUARD=1`), so missing stage artifacts fail fast instead of triggering accidental full rebuild spikes. Set them to `0` only for intentional one-off cold rebuilds. CI now includes a dedicated smoke check for this fail-fast behavior.
-- `bootstrap_v0_13.sh` now runs a module-aware preflight by default (`check-modules examples/import_variant_main.kooix`). For resource triage you can temporarily set `KX_MODULE_PREFLIGHT=0` / `KX_HEAVY_MODULE_PREFLIGHT=0`, but keeping it enabled is recommended for regression coverage.
+- `bootstrap_v0_13.sh` now runs a module-aware preflight by default (`check-modules examples/import_variant_main.kooix`). For resource triage you can temporarily set `KX_MODULE_PREFLIGHT=0` / `KX_HEAVY_MODULE_PREFLIGHT=0`, but keeping it enabled is recommended for regression coverage. Resource logs/CI summary now include preflight `ok/errors/warnings` counters and the first diagnostic for quick triage.
 - On Linux, if `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB` is unset, scripts auto-apply `ulimit -v` at `MemTotal * 85%`. Some CI runners may kill `llc/clang` or stage binaries under this cap; the heavy CI workflow explicitly sets `KX_HEAVY_SAFE_MAX_VMEM_KB=0`, and local runs can do the same to disable the cap.
 - With `KX_HEAVY_COMPILER_MAIN_SMOKE=1`, peak RSS on the current Stage1 graph is close to 15.5 GiB. Setting `KX_HEAVY_SAFE_MAX_VMEM_KB` to 6-12 GiB may trigger `exit=139` (SIGSEGV). A strict-but-practical local baseline is: `CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`.
 - The main `check/hir/mir/llvm/native/run` pipeline is still include-style, while `check-modules` is a module-aware semantic-check prototype. For `Foo::...` and cross-file namespace isolation cases, run both `check-modules --json` and bootstrap smoke.

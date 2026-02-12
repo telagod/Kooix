@@ -188,6 +188,7 @@ KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_
 
 # 资源指标（每步耗时 + max RSS + exit code）
 cat /tmp/kx-bootstrap-resource.log
+# module preflight 额外输出：module_preflight_ok/errors/warnings/first_diagnostic（来自 check-modules --json）
 # 失败时会输出 [fail] 分类提示（timeout / signal / OOM-vmem 线索）
 
 # 注：所有 KX_* 开关按布尔解析（1/true/on 开启，0/false/off 关闭）
@@ -328,7 +329,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 是“只复用、不重建”模式；在全新 runner 或清空 `dist/`、`/tmp` 后会快速失败（预期行为，不是回归）。首次跑链路请先用默认 safe mode（不加 reuse-only）生成产物。
 - 本地 safe mode 默认启用冷启动护栏（`KX_SAFE_COLD_START_GUARD=1` / `KX_HEAVY_COLD_START_GUARD=1`），缺少 stage 复用产物时会快速失败，避免误触发全量重建打满资源；如需一次性冷启动重建，显式设为 `0`。CI 已新增对应 smoke，持续校验该 fail-fast 行为。
-- `bootstrap_v0_13.sh` 默认会执行 module-aware preflight（`check-modules examples/import_variant_main.kooix`）；若仅排查资源波动可临时设 `KX_MODULE_PREFLIGHT=0` / `KX_HEAVY_MODULE_PREFLIGHT=0` 跳过，但不建议长期关闭。
+- `bootstrap_v0_13.sh` 默认会执行 module-aware preflight（`check-modules examples/import_variant_main.kooix`）；若仅排查资源波动可临时设 `KX_MODULE_PREFLIGHT=0` / `KX_HEAVY_MODULE_PREFLIGHT=0` 跳过，但不建议长期关闭。当前资源日志/CI summary 会同步输出 preflight 的 `ok/errors/warnings` 计数与首条诊断，便于快速定位模块回归。
 - Linux 下若未设置 `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB`，脚本会按 `MemTotal * 85%` 自动设置 `ulimit -v`。部分 CI runner 上可能误杀 `llc/clang` 或 stage 编译进程；CI heavy workflow 已显式设 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`，本地也可按需设 `0` 关闭。
 - `KX_HEAVY_COMPILER_MAIN_SMOKE=1` 在当前 stage1 图上峰值 RSS 接近 15.5 GiB；若将 `KX_HEAVY_SAFE_MAX_VMEM_KB` 压到 6~12 GiB 可能触发 `exit=139`（SIGSEGV）。本地严格限载建议起步：`CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`。
 - 当前 `check/hir/mir/llvm/native/run` 主链路仍为 include-style 展开，`check-modules` 是 module-aware 语义检查原型；涉及 `Foo::...` 与跨文件命名隔离时，建议同时跑 `check-modules --json` 与 bootstrap smoke 做双重确认。

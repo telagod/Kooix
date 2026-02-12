@@ -173,6 +173,49 @@ run_limited() {
 
   return "$cmd_status"
 }
+
+sanitize_metric_value() {
+  local value="$1"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/}"
+  value="${value//$'\t'/ }"
+  echo "$value"
+}
+
+write_module_preflight_summary() {
+  local summary_ok="$1"
+  local summary_errors="$2"
+  local summary_warnings="$3"
+  local summary_first="$4"
+
+  summary_first="$(sanitize_metric_value "$summary_first")"
+
+  printf 'module_preflight_ok=%s\n' "$summary_ok" >> "$RESOURCE_LOG"
+  printf 'module_preflight_errors=%s\n' "$summary_errors" >> "$RESOURCE_LOG"
+  printf 'module_preflight_warnings=%s\n' "$summary_warnings" >> "$RESOURCE_LOG"
+  printf 'module_preflight_first_diagnostic=%s\n' "$summary_first" >> "$RESOURCE_LOG"
+}
+
+parse_module_preflight_json() {
+  local json_file="$1"
+  if [[ ! -s "$json_file" ]]; then
+    return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+
+  jq -r '
+    def diag_stream: (.modules[]?.diagnostics[]?), (.errors[]?);
+    [
+      (if (.ok | type) == "boolean" then (if .ok then "true" else "false" end) else "unknown" end),
+      ([diag_stream | select(.severity == "error")] | length | tostring),
+      ([diag_stream | select(.severity == "warning")] | length | tostring),
+      ([diag_stream | "\(.severity): \(.message)"] | .[0] // "none")
+    ] | @tsv
+  ' "$json_file"
+}
+
 SAFE_MODE="${KX_SAFE_MODE:-1}"
 DEFAULT_REUSE="${KX_DEFAULT_REUSE:-1}"
 SAFE_NICE="${KX_SAFE_NICE:-10}"
@@ -216,6 +259,7 @@ fi
 REUSE_ONLY="${KX_REUSE_ONLY:-0}"
 MODULE_PREFLIGHT="${KX_MODULE_PREFLIGHT:-1}"
 MODULE_PREFLIGHT_ENTRY="${KX_MODULE_PREFLIGHT_ENTRY:-examples/import_variant_main.kooix}"
+MODULE_PREFLIGHT_JSON="${KX_MODULE_PREFLIGHT_JSON:-/tmp/kx-module-preflight-$$.json}"
 
 if is_enabled "$SAFE_COLD_START_GUARD"; then
   SAFE_COLD_START_GUARD_LABEL="enabled"
@@ -243,6 +287,7 @@ printf 'reuse_only=%s\n' "$REUSE_ONLY" >> "$RESOURCE_LOG"
 printf 'cold_start_guard=%s\n' "$SAFE_COLD_START_GUARD_LABEL" >> "$RESOURCE_LOG"
 printf 'module_preflight=%s\n' "$MODULE_PREFLIGHT_LABEL" >> "$RESOURCE_LOG"
 printf 'module_preflight_entry=%s\n' "$MODULE_PREFLIGHT_ENTRY" >> "$RESOURCE_LOG"
+printf 'module_preflight_json=%s\n' "$MODULE_PREFLIGHT_JSON" >> "$RESOURCE_LOG"
 printf 'safe_max_vmem_kb=%s\n' "$SAFE_MAX_VMEM_KB" >> "$RESOURCE_LOG"
 printf 'safe_max_procs=%s\n' "$SAFE_MAX_PROCS" >> "$RESOURCE_LOG"
 
@@ -337,14 +382,49 @@ echo "ok: $STAGE3_ALIAS"
 
 if is_enabled "$MODULE_PREFLIGHT"; then
   if [[ ! -f "$MODULE_PREFLIGHT_ENTRY" ]]; then
+    write_module_preflight_summary "false" "n/a" "n/a" "entry not found: $MODULE_PREFLIGHT_ENTRY"
     echo "[preflight] module-aware check entry not found: $MODULE_PREFLIGHT_ENTRY" >&2
     exit 1
   fi
 
+  rm -f "$MODULE_PREFLIGHT_JSON"
   echo "[preflight] module-aware semantic check: $MODULE_PREFLIGHT_ENTRY"
-  run_limited module_preflight_check "$TIMEOUT_SMOKE" cargo run -p kooixc -j "$JOBS" -- check-modules "$MODULE_PREFLIGHT_ENTRY" --json >/dev/null
+
+  if run_limited module_preflight_check "$TIMEOUT_SMOKE" bash -lc 'set -euo pipefail; cargo run -p kooixc -j "$1" -- check-modules "$2" --json > "$3"' _ "$JOBS" "$MODULE_PREFLIGHT_ENTRY" "$MODULE_PREFLIGHT_JSON"; then
+    module_preflight_status=0
+  else
+    module_preflight_status="$?"
+  fi
+
+  module_preflight_ok="unknown"
+  module_preflight_errors="unknown"
+  module_preflight_warnings="unknown"
+  module_preflight_first_diagnostic="parse unavailable"
+
+  if module_preflight_summary="$(parse_module_preflight_json "$MODULE_PREFLIGHT_JSON" 2>/dev/null)"; then
+    IFS=$'\t' read -r module_preflight_ok module_preflight_errors module_preflight_warnings module_preflight_first_diagnostic <<< "$module_preflight_summary"
+  else
+    if [[ "$module_preflight_status" == "0" ]]; then
+      module_preflight_ok="true"
+      module_preflight_errors="0"
+      module_preflight_warnings="0"
+      module_preflight_first_diagnostic="none"
+    else
+      module_preflight_ok="false"
+    fi
+  fi
+
+  write_module_preflight_summary "$module_preflight_ok" "$module_preflight_errors" "$module_preflight_warnings" "$module_preflight_first_diagnostic"
+
+  if (( module_preflight_status != 0 )); then
+    echo "[preflight] module-aware check failed (exit=$module_preflight_status)" >&2
+    echo "[preflight] first diagnostic: $module_preflight_first_diagnostic" >&2
+    exit "$module_preflight_status"
+  fi
+
   echo "ok: module preflight passed: $MODULE_PREFLIGHT_ENTRY"
 else
+  write_module_preflight_summary "skipped" "n/a" "n/a" "none"
   echo "[preflight] module-aware semantic check skipped (KX_MODULE_PREFLIGHT=$MODULE_PREFLIGHT)"
 fi
 
