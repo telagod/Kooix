@@ -99,6 +99,13 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - **一致性指标**：`stage1(stage1)` 与 `stage2(stage1)` 的差分为 0（或允许白名单差异）
 - **回归策略**：新增语法/语义必须扩充 fixtures；禁止“只改实现不补样例”
 
+## 已知问题（截至 2026-02-12）
+
+- `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 属于 fail-fast 复用模式：冷启动环境缺少缓存产物时会直接失败，需先以默认 safe mode 预热。
+- 资源硬约束（默认 `MemTotal * 85%` 的 vmem cap）能压住大多数本地高占用，但在部分 CI runner 可能造成误杀；heavy workflow 已固定 `KX_HEAVY_SAFE_MAX_VMEM_KB=0` 规避该问题。
+- 当前仍处于“include-style 主链路 + module-aware check 并行演进”阶段；涉及 namespace/import 的变更需要双轨验证，直到真正 module graph 驱动主编译流程落地。
+
+
 ## 下一步（立刻可做）
 
 - P1（模块主线）把 module-aware check 从 CLI/API 推进到编译主链路：

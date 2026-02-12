@@ -204,6 +204,13 @@ KX_SMOKE_S1_RESOLVER=1 ./scripts/bootstrap_v0_13.sh
 KX_DEEP=1 ./scripts/bootstrap_v0_13.sh
 ```
 
+## 已知问题与排查建议
+
+- `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 是“只复用、不重建”开关：在全新环境（无 `dist/kooixc1`、无 stage2/stage3 产物）会快速失败，属预期行为。首次建议先运行：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_v0_13.sh`。
+- Linux 默认内存上限（`MemTotal * 85%`）在少数 CI runner 上会误伤 `llc/clang` 或 stage 二进制。若出现异常 kill，可显式设置：`KX_SAFE_MAX_VMEM_KB=0`（v0.13）或 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`（heavy gate）关闭该上限。
+- 当前编译主链路仍是 include-style，`check-modules` 是 module-aware 原型；当变更涉及 `import "x" as Foo; Foo::...` 时，建议同时执行：`cargo run -p kooixc -- check-modules <entry> --json` 与对应 bootstrap smoke，避免“检查通过但主链路行为差异”遗漏。
+
+
 ## 最短闭环（用 kooixc1 编译并链接一个程序）
 
 ```bash

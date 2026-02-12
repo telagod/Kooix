@@ -288,6 +288,14 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 ---
 
+## Known Issues (Read Before Running)
+
+- `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` means "reuse only, never rebuild". On fresh runners or after cleaning `dist/` and `/tmp`, it fails fast by design (not a regression). Seed artifacts first with default safe mode (without reuse-only).
+- On Linux, if `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB` is unset, scripts auto-apply `ulimit -v` at `MemTotal * 85%`. Some CI runners may kill `llc/clang` or stage binaries under this cap; the heavy CI workflow explicitly sets `KX_HEAVY_SAFE_MAX_VMEM_KB=0`, and local runs can do the same to disable the cap.
+- The main `check/hir/mir/llvm/native/run` pipeline is still include-style, while `check-modules` is a module-aware semantic-check prototype. For `Foo::...` and cross-file namespace isolation cases, run both `check-modules --json` and bootstrap smoke.
+
+---
+
 ## Suggested Next Step (Phase 8)
 
 Recommended order:

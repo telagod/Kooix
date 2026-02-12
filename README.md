@@ -289,6 +289,14 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 ---
 
+## 已知问题（执行前必读）
+
+- `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 是“只复用、不重建”模式；在全新 runner 或清空 `dist/`、`/tmp` 后会快速失败（预期行为，不是回归）。首次跑链路请先用默认 safe mode（不加 reuse-only）生成产物。
+- Linux 下若未设置 `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB`，脚本会按 `MemTotal * 85%` 自动设置 `ulimit -v`。部分 CI runner 上可能误杀 `llc/clang` 或 stage 编译进程；CI heavy workflow 已显式设 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`，本地也可按需设 `0` 关闭。
+- 当前 `check/hir/mir/llvm/native/run` 主链路仍为 include-style 展开，`check-modules` 是 module-aware 语义检查原型；涉及 `Foo::...` 与跨文件命名隔离时，建议同时跑 `check-modules --json` 与 bootstrap smoke 做双重确认。
+
+---
+
 ## 下一阶段建议（Phase 8）
 
 建议优先级：
