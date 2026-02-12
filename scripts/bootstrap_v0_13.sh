@@ -29,6 +29,7 @@ is_enabled() {
 
 REUSE_STAGE3="${KX_REUSE_STAGE3:-0}"
 REUSE_STAGE2="${KX_REUSE_STAGE2:-0}"
+REUSE_ONLY="${KX_REUSE_ONLY:-0}"
 
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"
@@ -46,6 +47,10 @@ if is_enabled "$REUSE_STAGE3" && [[ -x "$STAGE3_BIN" ]]; then
   echo "[reuse] using existing stage3 compiler: $STAGE3_BIN"
 else
   if is_enabled "$REUSE_STAGE3"; then
+    if is_enabled "$REUSE_ONLY"; then
+      echo "[reuse] stage3 missing and KX_REUSE_ONLY=1; abort: $STAGE3_BIN" >&2
+      exit 1
+    fi
     echo "[reuse] requested but missing stage3 compiler; rebuilding: $STAGE3_BIN"
   fi
 
@@ -55,6 +60,10 @@ else
     echo "[reuse] using existing stage2 compiler: $STAGE2_BIN"
   else
     if is_enabled "$REUSE_STAGE2"; then
+      if is_enabled "$REUSE_ONLY"; then
+        echo "[reuse] stage2 missing and KX_REUSE_ONLY=1; abort: $STAGE2_BIN" >&2
+        exit 1
+      fi
       echo "[reuse] requested but missing stage2 compiler; rebuilding: $STAGE2_BIN"
     fi
 

@@ -184,6 +184,9 @@ CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
 # Optional: disable/enable bootstrap artifact reuse (both enabled by default)
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 
+# Optional: enable reuse-only (fail fast if requested reuse artifacts are missing)
+CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
+
 # Optional: enable determinism compare
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 

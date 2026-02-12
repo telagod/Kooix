@@ -23,6 +23,11 @@ on:
         required: false
         default: true
         type: boolean
+      reuse_only:
+        description: Fail fast when requested reuse artifacts are missing
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "37 3 * * *"
 
@@ -52,11 +57,13 @@ jobs:
             echo "deep=${{ inputs.run_deep }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=${{ inputs.reuse_stage3 }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=${{ inputs.reuse_stage2 }}" >> "$GITHUB_OUTPUT"
+            echo "reuse_only=${{ inputs.reuse_only }}" >> "$GITHUB_OUTPUT"
           else
             echo "determinism=true" >> "$GITHUB_OUTPUT"
             echo "deep=false" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=true" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=true" >> "$GITHUB_OUTPUT"
+            echo "reuse_only=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run bootstrap-heavy gate script
@@ -66,6 +73,7 @@ jobs:
           KX_HEAVY_DEEP: ${{ steps.toggles.outputs.deep }}
           KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
           KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
+          KX_HEAVY_REUSE_ONLY: ${{ steps.toggles.outputs.reuse_only }}
         run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
@@ -104,6 +112,7 @@ jobs:
           reuse_stage3_hit="n/a"
           reuse_stage2="unknown"
           reuse_stage2_hit="n/a"
+          reuse_only="unknown"
           det_hash="n/a"
 
           if [ -f "$metrics_file" ]; then
@@ -119,6 +128,7 @@ jobs:
                 reuse_stage3_hit) reuse_stage3_hit="$value" ;;
                 reuse_stage2_enabled) reuse_stage2="$value" ;;
                 reuse_stage2_hit) reuse_stage2_hit="$value" ;;
+                reuse_only_enabled) reuse_only="$value" ;;
               esac
             done < "$metrics_file"
           fi
@@ -134,6 +144,7 @@ jobs:
             echo "- determinism mode: ${determinism}"
             echo "- reuse stage3: ${reuse_stage3} (hit=${reuse_stage3_hit})"
             echo "- reuse stage2: ${reuse_stage2} (hit=${reuse_stage2_hit})"
+            echo "- reuse-only mode: ${reuse_only}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"
             echo "- gate3 (determinism): ${gate3}s"

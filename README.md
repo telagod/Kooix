@@ -182,6 +182,9 @@ CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
 # 可选：关闭/开启 bootstrap 产物复用（默认均开启）
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
 
+# 可选：启用 reuse-only（要求命中复用，缺失即快速失败，避免误触发重建）
+CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
+
 # 可选：开启 deterministic 对比
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 

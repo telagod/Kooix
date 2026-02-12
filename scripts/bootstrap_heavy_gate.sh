@@ -16,6 +16,7 @@ HEAVY_DETERMINISM="${KX_HEAVY_DETERMINISM:-0}"
 HEAVY_DEEP="${KX_HEAVY_DEEP:-0}"
 HEAVY_REUSE_STAGE3="${KX_HEAVY_REUSE_STAGE3:-1}"
 HEAVY_REUSE_STAGE2="${KX_HEAVY_REUSE_STAGE2:-1}"
+HEAVY_REUSE_ONLY="${KX_HEAVY_REUSE_ONLY:-0}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
@@ -70,14 +71,20 @@ else
   REUSE_STAGE2_LABEL="disabled"
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL"
+if is_enabled "$HEAVY_REUSE_ONLY"; then
+  REUSE_ONLY_LABEL="enabled"
+else
+  REUSE_ONLY_LABEL="disabled"
+fi
+
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SMOKE_S1_CORE=1 KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SMOKE_S1_CORE=1 KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SMOKE_S1_CORE=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SMOKE_S1_CORE=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
 
@@ -138,6 +145,7 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "reuse_stage3_hit=$REUSE_STAGE3_HIT"
   echo "reuse_stage2_enabled=$REUSE_STAGE2_LABEL"
   echo "reuse_stage2_hit=$REUSE_STAGE2_HIT"
+  echo "reuse_only_enabled=$REUSE_ONLY_LABEL"
   echo "determinism_sha256=${sha_a}"
 } > "$METRICS_FILE"
 
