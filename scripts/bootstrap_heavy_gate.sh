@@ -174,6 +174,7 @@ HEAVY_REUSE_ONLY="${KX_HEAVY_REUSE_ONLY:-0}"
 HEAVY_S1_COMPILER="${KX_HEAVY_S1_COMPILER:-0}"
 HEAVY_SELFHOST_EQ="${KX_HEAVY_SELFHOST_EQ:-0}"
 HEAVY_IMPORT_SMOKE="${KX_HEAVY_IMPORT_SMOKE:-0}"
+HEAVY_COMPILER_MAIN_SMOKE="${KX_HEAVY_COMPILER_MAIN_SMOKE:-0}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
@@ -264,6 +265,12 @@ else
   IMPORT_SMOKE_LABEL="disabled"
 fi
 
+if is_enabled "$HEAVY_COMPILER_MAIN_SMOKE"; then
+  COMPILER_MAIN_SMOKE_LABEL="enabled"
+else
+  COMPILER_MAIN_SMOKE_LABEL="disabled"
+fi
+
 if is_enabled "$HEAVY_SAFE_MODE"; then
   SAFE_MODE_LABEL="enabled"
 else
@@ -274,14 +281,14 @@ if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; heavy gate timeout disabled" >&2
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_SMOKE_COMPILER_MAIN="$HEAVY_COMPILER_MAIN_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
 
@@ -293,6 +300,12 @@ stage1_import_variant_compile_seconds="n/a"
 stage1_import_variant_compile_maxrss_kb="n/a"
 stage1_import_variant_run_seconds="n/a"
 stage1_import_variant_run_maxrss_kb="n/a"
+compiler_main_smoke_stage3_compile_seconds="n/a"
+compiler_main_smoke_stage3_compile_maxrss_kb="n/a"
+compiler_main_smoke_stage4_compile_seconds="n/a"
+compiler_main_smoke_stage4_compile_maxrss_kb="n/a"
+compiler_main_smoke_stage4_run_seconds="n/a"
+compiler_main_smoke_stage4_run_maxrss_kb="n/a"
 if is_enabled "$HEAVY_IMPORT_SMOKE"; then
   import_variant_compile_seconds="$(resource_metric_or_default smoke_import_variant_compile_seconds n/a)"
   import_variant_compile_maxrss_kb="$(resource_metric_or_default smoke_import_variant_compile_maxrss_kb n/a)"
@@ -302,6 +315,15 @@ if is_enabled "$HEAVY_IMPORT_SMOKE"; then
   stage1_import_variant_compile_maxrss_kb="$(resource_metric_or_default smoke_s1_import_variant_compile_maxrss_kb n/a)"
   stage1_import_variant_run_seconds="$(resource_metric_or_default smoke_s1_import_variant_run_seconds n/a)"
   stage1_import_variant_run_maxrss_kb="$(resource_metric_or_default smoke_s1_import_variant_run_maxrss_kb n/a)"
+fi
+
+if is_enabled "$HEAVY_COMPILER_MAIN_SMOKE"; then
+  compiler_main_smoke_stage3_compile_seconds="$(resource_metric_or_default smoke_compiler_main_stage3_compile_seconds n/a)"
+  compiler_main_smoke_stage3_compile_maxrss_kb="$(resource_metric_or_default smoke_compiler_main_stage3_compile_maxrss_kb n/a)"
+  compiler_main_smoke_stage4_compile_seconds="$(resource_metric_or_default smoke_compiler_main_stage4_compile_seconds n/a)"
+  compiler_main_smoke_stage4_compile_maxrss_kb="$(resource_metric_or_default smoke_compiler_main_stage4_compile_maxrss_kb n/a)"
+  compiler_main_smoke_stage4_run_seconds="$(resource_metric_or_default smoke_compiler_main_stage4_run_seconds n/a)"
+  compiler_main_smoke_stage4_run_maxrss_kb="$(resource_metric_or_default smoke_compiler_main_stage4_run_maxrss_kb n/a)"
 fi
 
 if is_enabled "$HEAVY_REUSE_STAGE3"; then
@@ -386,6 +408,7 @@ fi
   echo "reuse_stage2_hit=$REUSE_STAGE2_HIT"
   echo "reuse_only_enabled=$REUSE_ONLY_LABEL"
   echo "s1_compiler_smoke_enabled=$S1_COMPILER_LABEL"
+  echo "compiler_main_smoke_enabled=$COMPILER_MAIN_SMOKE_LABEL"
   echo "import_smoke_enabled=$IMPORT_SMOKE_LABEL"
   echo "selfhost_eq_enabled=$SELFHOST_EQ_LABEL"
   echo "selfhost_eq_sha256=${selfhost_sha}"
@@ -397,6 +420,12 @@ fi
   echo "stage1_import_variant_compile_maxrss_kb=${stage1_import_variant_compile_maxrss_kb}"
   echo "stage1_import_variant_run_seconds=${stage1_import_variant_run_seconds}"
   echo "stage1_import_variant_run_maxrss_kb=${stage1_import_variant_run_maxrss_kb}"
+  echo "compiler_main_smoke_stage3_compile_seconds=${compiler_main_smoke_stage3_compile_seconds}"
+  echo "compiler_main_smoke_stage3_compile_maxrss_kb=${compiler_main_smoke_stage3_compile_maxrss_kb}"
+  echo "compiler_main_smoke_stage4_compile_seconds=${compiler_main_smoke_stage4_compile_seconds}"
+  echo "compiler_main_smoke_stage4_compile_maxrss_kb=${compiler_main_smoke_stage4_compile_maxrss_kb}"
+  echo "compiler_main_smoke_stage4_run_seconds=${compiler_main_smoke_stage4_run_seconds}"
+  echo "compiler_main_smoke_stage4_run_maxrss_kb=${compiler_main_smoke_stage4_run_maxrss_kb}"
   echo "determinism_sha256=${sha_a}"
 } >> "$METRICS_FILE"
 

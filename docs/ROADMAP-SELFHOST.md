@@ -103,6 +103,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 属于 fail-fast 复用模式：冷启动环境缺少缓存产物时会直接失败，需先以默认 safe mode 预热。
 - 资源硬约束（默认 `MemTotal * 85%` 的 vmem cap）能压住大多数本地高占用，但在部分 CI runner 可能造成误杀；heavy workflow 已固定 `KX_HEAVY_SAFE_MAX_VMEM_KB=0` 规避该问题。
+- `compiler_main` 二段闭环 smoke 在当前 Stage1 图上峰值 RSS 约 15.5 GiB；若本地把 `KX_HEAVY_SAFE_MAX_VMEM_KB` 限制在 6~12 GiB 可能触发 `exit=139`。建议先用 `KX_HEAVY_SAFE_MAX_VMEM_KB=16777216` 建立稳定基线，再逐步收紧。
 - 当前仍处于“include-style 主链路 + module-aware check 并行演进”阶段；涉及 namespace/import 的变更需要双轨验证，直到真正 module graph 驱动主编译流程落地。
 
 
@@ -126,7 +127,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_REUSE_ONLY=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh` + `CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh`（验证资源硬约束与复用优先策略不会误触发重建）。
 - P4（下一刀）推进 `dist/kooixc1` 的编译器本体负载：
   - ✅ DoD1：`compiler_main` 关键路径 smoke 已覆盖：`dist/kooixc1` 编译 `stage1/compiler_main.kooix` 产出 stage3 compiler，再由该编译器编译并运行 `stage1/stage2_min.kooix`（exit=0）。
-  - ✅ DoD2：已把“真实负载 smoke”纳入可选 CI gate：新增 `bootstrap-heavy` workflow（`workflow_dispatch` + nightly `schedule`，调用 `scripts/bootstrap_heavy_gate.sh` 低资源运行；dispatch 可选 `run_determinism`/`run_deep`/`run_compiler_smoke`/`run_import_smoke`/`run_selfhost_eq`/`reuse_stage3`/`reuse_stage2`/`reuse_only`）。
+  - ✅ DoD2：已把“真实负载 smoke”纳入可选 CI gate：新增 `bootstrap-heavy` workflow（`workflow_dispatch` + nightly `schedule`，调用 `scripts/bootstrap_heavy_gate.sh` 低资源运行；dispatch 可选 `run_determinism`/`run_deep`/`run_compiler_smoke`/`run_compiler_main_smoke`/`run_import_smoke`/`run_selfhost_eq`/`reuse_stage3`/`reuse_stage2`/`reuse_only`）。
   - ✅ DoD3：deterministic 证据已纳入可选 CI gate：`bootstrap-heavy` 新增 `compiler_main` 双次 emit + `sha256/cmp` 一致性校验（固定输入 bytes/hash 波动为 0），并输出 hash/耗时/复用命中 artifact（`bootstrap-heavy-determinism.sha256` + `bootstrap-heavy-metrics.txt` + `bootstrap-heavy-bootstrap.log`）。
   - ✅ DoD4：新增可选 self-host 收敛 gate：`stage3` 产出的 `compiler_main` IR 与 `stage4`（由 stage3 生成的编译器）再次 emit 的 `compiler_main` IR 做 `sha256/cmp` 对比；支持本地 `KX_SMOKE_SELFHOST_EQ=1` 与 CI `KX_HEAVY_SELFHOST_EQ=1`/`run_selfhost_eq=true`，并产出 `/tmp/bootstrap-heavy-selfhost.sha256`。
   - ✅ DoD5：新增可选 import namespace gate：`bootstrap-heavy` 在 gate1 可通过 `KX_HEAVY_IMPORT_SMOKE=1`（或 dispatch `run_import_smoke=true`）覆盖 `import "x" as Foo; Foo::bar` 与 `Foo::Option::Some`，并导出对应 IR/二进制 artifact。

@@ -65,10 +65,10 @@
 - `cargo test -p kooixc`
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 1 -- --test-threads=1`
-- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）；workflow 内部默认启用 `KX_HEAVY_SAFE_MODE=1` 与 timeout 配额（CI 显式 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`，避免 runner 因自动内存上限导致误杀）。
+- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_compiler_main_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）；workflow 内部默认启用 `KX_HEAVY_SAFE_MODE=1` 与 timeout 配额（CI 显式 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`，避免 runner 因自动内存上限导致误杀）。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
 - 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS、import variant smoke compile/run 耗时与 RSS、timeout/限载配置、每步 exit code）；summary 会基于 `*_exit_code` 直接给出 failure classification（timeout/signal/OOM-vmem 线索），并写入 artifact。
-- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke（`Foo::bar` + `Foo::Option::Some`），`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke（`Foo::bar` + `Foo::Option::Some`），`KX_HEAVY_COMPILER_MAIN_SMOKE=1` 开启 `compiler_main` 二段闭环 smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
 
 ## 一键复现（v0.13）
 
@@ -193,6 +193,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # 启用 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
+# 启用 compiler_main 二段闭环 smoke（stage3 编译器 -> stage4 stage2_min -> run）
+CARGO_BUILD_JOBS=1 KX_HEAVY_COMPILER_MAIN_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
+
 # 启用 import namespace smoke（覆盖 import "x" as Foo; Foo::bar 与 Foo::Option::Some）
 CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
@@ -216,6 +219,7 @@ KX_DEEP=1 ./scripts/bootstrap_v0_13.sh
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` 是“只复用、不重建”开关：在全新环境（无 `dist/kooixc1`、无 stage2/stage3 产物）会快速失败，属预期行为。首次建议先运行：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_v0_13.sh`。
 - Linux 默认内存上限（`MemTotal * 85%`）在少数 CI runner 上会误伤 `llc/clang` 或 stage 二进制。若出现异常 kill，可显式设置：`KX_SAFE_MAX_VMEM_KB=0`（v0.13）或 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`（heavy gate）关闭该上限。
+- `KX_HEAVY_COMPILER_MAIN_SMOKE=1` 在当前 stage1 图上的峰值 RSS 接近 15.5 GiB；若将 `KX_HEAVY_SAFE_MAX_VMEM_KB` 压到 6~12 GiB，可能出现 `exit=139`（SIGSEGV）。严格限载下建议先从 `KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`（16 GiB）起步，再逐步收紧。
 - 当前编译主链路仍是 include-style，`check-modules` 是 module-aware 原型；当变更涉及 `import "x" as Foo; Foo::...` 时，建议同时执行：`cargo run -p kooixc -- check-modules <entry> --json` 与对应 bootstrap smoke，避免“检查通过但主链路行为差异”遗漏。
 
 
