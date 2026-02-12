@@ -199,6 +199,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # 可选：开启 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
+# 可选：开启 import namespace smoke（覆盖 import "x" as Foo; Foo::bar）
+CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
+
 # 可选：开启 self-host 收敛对比（stage3/stage4 emit compiler_main IR 一致性）
 CARGO_BUILD_JOBS=1 KX_HEAVY_SELFHOST_EQ=1 ./scripts/bootstrap_heavy_gate.sh
 

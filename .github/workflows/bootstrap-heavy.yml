@@ -18,6 +18,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_import_smoke:
+        description: Enable import namespace smoke (import "x" as Foo; Foo::bar)
+        required: false
+        default: false
+        type: boolean
       run_selfhost_eq:
         description: Compare stage3/stage4 compiler_main IR for convergence
         required: false
@@ -66,6 +71,7 @@ jobs:
             echo "determinism=${{ inputs.run_determinism }}" >> "$GITHUB_OUTPUT"
             echo "deep=${{ inputs.run_deep }}" >> "$GITHUB_OUTPUT"
             echo "compiler_smoke=${{ inputs.run_compiler_smoke }}" >> "$GITHUB_OUTPUT"
+            echo "import_smoke=${{ inputs.run_import_smoke }}" >> "$GITHUB_OUTPUT"
             echo "selfhost_eq=${{ inputs.run_selfhost_eq }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=${{ inputs.reuse_stage3 }}" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=${{ inputs.reuse_stage2 }}" >> "$GITHUB_OUTPUT"
@@ -74,6 +80,7 @@ jobs:
             echo "determinism=true" >> "$GITHUB_OUTPUT"
             echo "deep=false" >> "$GITHUB_OUTPUT"
             echo "compiler_smoke=false" >> "$GITHUB_OUTPUT"
+            echo "import_smoke=false" >> "$GITHUB_OUTPUT"
             echo "selfhost_eq=false" >> "$GITHUB_OUTPUT"
             echo "reuse_stage3=true" >> "$GITHUB_OUTPUT"
             echo "reuse_stage2=true" >> "$GITHUB_OUTPUT"
@@ -86,6 +93,7 @@ jobs:
           KX_HEAVY_DETERMINISM: ${{ steps.toggles.outputs.determinism }}
           KX_HEAVY_DEEP: ${{ steps.toggles.outputs.deep }}
           KX_HEAVY_S1_COMPILER: ${{ steps.toggles.outputs.compiler_smoke }}
+          KX_HEAVY_IMPORT_SMOKE: ${{ steps.toggles.outputs.import_smoke }}
           KX_HEAVY_SELFHOST_EQ: ${{ steps.toggles.outputs.selfhost_eq }}
           KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
           KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
@@ -106,6 +114,12 @@ jobs:
             /tmp/kx-det-a.ll
             /tmp/kx-det-b.ll
             /tmp/kx-selfhost-eq.ll
+            dist/kooixc-stage3-examples-import-main
+            dist/kooixc-stage3-examples-import-alias-main
+            dist/kooixc-stage3-stage2-import-alias
+            /tmp/kooixc_stage3_examples_import_main.ll
+            /tmp/kooixc_stage3_examples_import_alias_main.ll
+            /tmp/kooixc_stage3_stage2_import_alias.ll
             dist/kooixc-stage3-stage2-s1-compiler-module-smoke
             /tmp/kooixc_stage3_stage2_s1_compiler_module_smoke.ll
             /tmp/bootstrap-heavy-bootstrap.log
@@ -135,6 +149,7 @@ jobs:
           reuse_stage2_hit="n/a"
           reuse_only="unknown"
           compiler_smoke="unknown"
+          import_smoke="unknown"
           selfhost_eq="unknown"
           det_hash="n/a"
           selfhost_hash="n/a"
@@ -154,6 +169,7 @@ jobs:
                 reuse_stage2_hit) reuse_stage2_hit="$value" ;;
                 reuse_only_enabled) reuse_only="$value" ;;
                 s1_compiler_smoke_enabled) compiler_smoke="$value" ;;
+                import_smoke_enabled) import_smoke="$value" ;;
                 selfhost_eq_enabled) selfhost_eq="$value" ;;
                 selfhost_eq_sha256) selfhost_hash="$value" ;;
               esac
@@ -176,6 +192,7 @@ jobs:
             echo "- reuse stage2: ${reuse_stage2} (hit=${reuse_stage2_hit})"
             echo "- reuse-only mode: ${reuse_only}"
             echo "- stage1 compiler module smoke: ${compiler_smoke}"
+            echo "- import namespace smoke: ${import_smoke}"
             echo "- self-host convergence mode: ${selfhost_eq}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"

@@ -64,10 +64,10 @@
 - `cargo test -p kooixc`
   - 其中包含 bootstrap smoke gate（例如：Stage1 self-host v0.13 产出 stage2 compiler，并运行该 stage2 compiler 自身再次 emit stage3 IR；以及 Stage1 compiler CLI driver 可用 argv 指定 entry/out 并写出 LLVM IR）。
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 2 -- --test-threads=1`
-- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）。
+- 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
-- 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并写入 summary + artifact；并记录 `stage1/compiler` smoke 与 `self-host convergence` 是否启用。
-- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败）。
+- 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并写入 summary + artifact；并记录 `stage1/compiler` smoke / `import namespace` smoke / `self-host convergence` 是否启用。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败）。
 
 ## 一键复现（v0.13）
 
@@ -174,6 +174,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 启用 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 启用 import namespace smoke（覆盖 import "x" as Foo; Foo::bar）
+CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 启用 self-host 收敛对比（stage3/stage4 emit compiler_main IR 一致性）
 CARGO_BUILD_JOBS=1 KX_HEAVY_SELFHOST_EQ=1 ./scripts/bootstrap_heavy_gate.sh

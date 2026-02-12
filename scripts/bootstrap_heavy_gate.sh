@@ -19,6 +19,7 @@ HEAVY_REUSE_STAGE2="${KX_HEAVY_REUSE_STAGE2:-1}"
 HEAVY_REUSE_ONLY="${KX_HEAVY_REUSE_ONLY:-0}"
 HEAVY_S1_COMPILER="${KX_HEAVY_S1_COMPILER:-0}"
 HEAVY_SELFHOST_EQ="${KX_HEAVY_SELFHOST_EQ:-0}"
+HEAVY_IMPORT_SMOKE="${KX_HEAVY_IMPORT_SMOKE:-0}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
@@ -95,14 +96,20 @@ else
   SELFHOST_EQ_LABEL="disabled"
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL"
+if is_enabled "$HEAVY_IMPORT_SMOKE"; then
+  IMPORT_SMOKE_LABEL="enabled"
+else
+  IMPORT_SMOKE_LABEL="disabled"
+fi
+
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
 
@@ -179,6 +186,7 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "reuse_stage2_hit=$REUSE_STAGE2_HIT"
   echo "reuse_only_enabled=$REUSE_ONLY_LABEL"
   echo "s1_compiler_smoke_enabled=$S1_COMPILER_LABEL"
+  echo "import_smoke_enabled=$IMPORT_SMOKE_LABEL"
   echo "selfhost_eq_enabled=$SELFHOST_EQ_LABEL"
   echo "selfhost_eq_sha256=${selfhost_sha}"
   echo "determinism_sha256=${sha_a}"

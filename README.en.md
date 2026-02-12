@@ -201,6 +201,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # Optional: enable stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
+# Optional: enable import namespace smoke (covers import "x" as Foo; Foo::bar)
+CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
+
 # Optional: enable self-host convergence check (stage3/stage4 compiler_main IR equality)
 CARGO_BUILD_JOBS=1 KX_HEAVY_SELFHOST_EQ=1 ./scripts/bootstrap_heavy_gate.sh
 
