@@ -177,6 +177,7 @@ jobs:
           import_smoke="unknown"
           selfhost_eq="unknown"
           safe_mode="unknown"
+          strict_local="unknown"
           heavy_timeout="n/a"
           heavy_timeout_smoke="n/a"
           heavy_vmem="n/a"
@@ -267,6 +268,7 @@ jobs:
                 import_smoke_enabled) import_smoke="$value" ;;
                 selfhost_eq_enabled) selfhost_eq="$value" ;;
                 safe_mode) safe_mode="$value" ;;
+                strict_local_mode) strict_local="$value" ;;
                 heavy_timeout_seconds) heavy_timeout="$value" ;;
                 heavy_timeout_smoke_seconds) heavy_timeout_smoke="$value" ;;
                 heavy_safe_max_vmem_kb) heavy_vmem="$value" ;;
@@ -349,6 +351,7 @@ jobs:
             echo "- import namespace smoke: ${import_smoke}"
             echo "- self-host convergence mode: ${selfhost_eq}"
             echo "- safe mode: ${safe_mode}"
+            echo "- strict local mode: ${strict_local}"
             echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
             echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"

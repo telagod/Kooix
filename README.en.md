@@ -243,6 +243,8 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 # Heavy gate resource metrics (gate2 max RSS + timeout config + per-step exit code)
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
+# Strict-local self-check (preset hit + active vmem cap)
+grep -E "^(strict_local_mode|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

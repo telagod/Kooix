@@ -241,6 +241,8 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 # heavy gate 资源指标（含 gate2 峰值 RSS / timeout 配置 / 每步 exit code）
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
+# 严格限载自检（是否命中 strict-local 预设 + 当前 vmem cap）
+grep -E "^(strict_local_mode|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 
 # 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

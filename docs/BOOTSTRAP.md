@@ -167,6 +167,12 @@ cat /tmp/kx-bootstrap-resource.log
 
 若步骤失败，脚本会额外输出 `[fail]` 分类提示（timeout / signal / OOM-vmem 线索），便于先判定是“业务失败”还是“资源约束失败”。
 
+严格限载自检（heavy gate 是否命中 strict-local 预设 + 当前 vmem cap）：
+
+```bash
+grep -E "^(strict_local_mode|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
+```
+
 一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环；本地默认不跑 deterministic 对比）：
 
 ```bash
