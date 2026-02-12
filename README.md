@@ -162,11 +162,20 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # 自举：产出 stage3 compiler（二进制）
 ./scripts/bootstrap_v0_13.sh
 
-# 复用已有 dist/kooixc-stage3（避免重复重建，降低资源占用）
-KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
+# 安全模式（默认开启）：强制单线程 + 默认优先复用 stage3/stage2 + 命令级 timeout/限载
+KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 
-# 若 stage3 丢失但 stage2 仍在，可复用 dist/kooixc-stage2 重建 stage3
-KX_REUSE_STAGE2=1 ./scripts/bootstrap_v0_13.sh
+# 更激进：只允许复用，缺失即快速失败（不触发重建）
+KX_REUSE_ONLY=1 ./scripts/bootstrap_v0_13.sh
+
+# 可选：显式关闭复用（强制重建；仅诊断场景使用）
+KX_REUSE_STAGE3=0 KX_REUSE_STAGE2=0 ./scripts/bootstrap_v0_13.sh
+
+# 可调：timeout（秒）与限载（KB/进程数，0 表示不限制）
+KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_SAFE_MAX_VMEM_KB=0 KX_SAFE_MAX_PROCS=0 ./scripts/bootstrap_v0_13.sh
+
+# 资源指标（每步耗时 + max RSS）
+cat /tmp/kx-bootstrap-resource.log
 
 # 注：所有 KX_* 开关按布尔解析（1/true/on 开启，0/false/off 关闭）
 
@@ -188,7 +197,10 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 
 # 一键重载门禁（同 bootstrap-heavy CI）：四模块 smoke + compiler_main 二段闭环（默认不跑 deterministic 对比）
-CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 可调：heavy gate timeout / 限载（0 表示不限制）
+CARGO_BUILD_JOBS=1 KX_HEAVY_TIMEOUT_BOOTSTRAP=900 KX_HEAVY_TIMEOUT=900 KX_HEAVY_TIMEOUT_SMOKE=300 KX_HEAVY_SAFE_MAX_VMEM_KB=0 KX_HEAVY_SAFE_MAX_PROCS=0 ./scripts/bootstrap_heavy_gate.sh
 
 # 可选：关闭/开启 bootstrap 产物复用（默认均开启）
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
@@ -210,6 +222,10 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 可选：开启 deep 链路（stage4 -> stage5）
 CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
+
+# heavy gate 资源指标（含 gate2 峰值 RSS / timeout 配置）
+cat /tmp/bootstrap-heavy-metrics.txt
+cat /tmp/bootstrap-heavy-resource.log
 
 # 扩展闭环：先用 dist/kooixc1 编译 compiler_main，再用产物编译并运行 stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

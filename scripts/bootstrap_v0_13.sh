@@ -16,10 +16,6 @@ if ! command -v clang >/dev/null 2>&1; then
   exit 1
 fi
 
-JOBS="${CARGO_BUILD_JOBS:-1}"
-OUT_DIR="${1:-$ROOT/dist}"
-mkdir -p "$OUT_DIR"
-
 is_enabled() {
   case "${1,,}" in
     1|true|yes|on) return 0 ;;
@@ -27,9 +23,136 @@ is_enabled() {
   esac
 }
 
-REUSE_STAGE3="${KX_REUSE_STAGE3:-0}"
-REUSE_STAGE2="${KX_REUSE_STAGE2:-0}"
+is_pos_int() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( "$1" > 0 ))
+}
+
+resolve_timeout_bin() {
+  if command -v timeout >/dev/null 2>&1; then
+    echo "timeout"
+    return
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    echo "gtimeout"
+    return
+  fi
+  echo ""
+}
+
+run_limited() {
+  local key="$1"
+  local timeout_s="$2"
+  shift 2
+  local -a cmd=("$@")
+
+  local start="$SECONDS"
+  local maxrss="na"
+  local time_file="/tmp/kx-bootstrap-time-${key//[^a-zA-Z0-9_.-]/_}-$$.txt"
+
+  local -a runner=()
+  if is_enabled "$SAFE_MODE" && [[ "$SAFE_NICE" =~ ^-?[0-9]+$ ]] && (( SAFE_NICE != 0 )) && command -v nice >/dev/null 2>&1; then
+    runner+=(nice -n "$SAFE_NICE")
+  fi
+
+  local -a watchdog=()
+  if [[ -n "$TIMEOUT_BIN" ]] && is_pos_int "$timeout_s"; then
+    watchdog+=("$TIMEOUT_BIN" --signal=TERM --kill-after=30 "${timeout_s}s")
+  fi
+
+  rm -f "$time_file"
+  echo "[run] ${key} (timeout=${timeout_s}s)"
+
+  local cmd_status=0
+  if is_enabled "$SAFE_MODE"; then
+    (
+      if is_pos_int "$SAFE_MAX_VMEM_KB"; then
+        ulimit -Sv "$SAFE_MAX_VMEM_KB"
+      fi
+      if is_pos_int "$SAFE_MAX_PROCS"; then
+        ulimit -u "$SAFE_MAX_PROCS"
+      fi
+      if command -v /usr/bin/time >/dev/null 2>&1; then
+        "${watchdog[@]}" "${runner[@]}" /usr/bin/time -f 'maxrss_kb=%M' -o "$time_file" "${cmd[@]}"
+      else
+        "${watchdog[@]}" "${runner[@]}" "${cmd[@]}"
+      fi
+    )
+    cmd_status=$?
+  else
+    if command -v /usr/bin/time >/dev/null 2>&1; then
+      "${watchdog[@]}" /usr/bin/time -f 'maxrss_kb=%M' -o "$time_file" "${cmd[@]}"
+    else
+      "${watchdog[@]}" "${cmd[@]}"
+    fi
+    cmd_status=$?
+  fi
+
+  local elapsed=$((SECONDS - start))
+  if [[ -s "$time_file" ]]; then
+    maxrss="$(awk -F= '/^maxrss_kb=/{print $2}' "$time_file" | tail -n 1)"
+    if [[ -z "$maxrss" ]]; then
+      maxrss="na"
+    fi
+  fi
+
+  printf '%s_seconds=%s\n' "$key" "$elapsed" >> "$RESOURCE_LOG"
+  printf '%s_maxrss_kb=%s\n' "$key" "$maxrss" >> "$RESOURCE_LOG"
+  rm -f "$time_file"
+  return "$cmd_status"
+}
+
+SAFE_MODE="${KX_SAFE_MODE:-1}"
+DEFAULT_REUSE="${KX_DEFAULT_REUSE:-1}"
+SAFE_NICE="${KX_SAFE_NICE:-10}"
+SAFE_MAX_VMEM_KB="${KX_SAFE_MAX_VMEM_KB:-0}"
+SAFE_MAX_PROCS="${KX_SAFE_MAX_PROCS:-0}"
+CMD_TIMEOUT="${KX_CMD_TIMEOUT:-900}"
+TIMEOUT_STAGE1_DRIVER="${KX_TIMEOUT_STAGE1_DRIVER:-$CMD_TIMEOUT}"
+TIMEOUT_STAGE_BUILD="${KX_TIMEOUT_STAGE_BUILD:-$CMD_TIMEOUT}"
+TIMEOUT_SMOKE="${KX_TIMEOUT_SMOKE:-300}"
+TIMEOUT_SELFHOST="${KX_TIMEOUT_SELFHOST:-$CMD_TIMEOUT}"
+TIMEOUT_BIN="$(resolve_timeout_bin)"
+RESOURCE_LOG="${KX_RESOURCE_LOG:-/tmp/kx-bootstrap-resource.log}"
+
+JOBS_RAW="${CARGO_BUILD_JOBS:-1}"
+if is_pos_int "$JOBS_RAW"; then
+  JOBS="$JOBS_RAW"
+else
+  echo "invalid CARGO_BUILD_JOBS=$JOBS_RAW; fallback to 1" >&2
+  JOBS=1
+fi
+
+if is_enabled "$SAFE_MODE" && (( JOBS > 1 )); then
+  echo "[safe] KX_SAFE_MODE=1 forces CARGO_BUILD_JOBS=1 (requested=$JOBS)"
+  JOBS=1
+fi
+
+OUT_DIR="${1:-$ROOT/dist}"
+mkdir -p "$OUT_DIR"
+
+if is_enabled "$SAFE_MODE"; then
+  SAFE_MODE_LABEL="enabled"
+  export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
+  REUSE_STAGE3="${KX_REUSE_STAGE3:-$DEFAULT_REUSE}"
+  REUSE_STAGE2="${KX_REUSE_STAGE2:-$DEFAULT_REUSE}"
+else
+  SAFE_MODE_LABEL="disabled"
+  REUSE_STAGE3="${KX_REUSE_STAGE3:-0}"
+  REUSE_STAGE2="${KX_REUSE_STAGE2:-0}"
+fi
 REUSE_ONLY="${KX_REUSE_ONLY:-0}"
+
+if [[ -z "$TIMEOUT_BIN" ]]; then
+  echo "[safe] timeout/gtimeout not found; command timeout disabled" >&2
+fi
+
+echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none}"
+: > "$RESOURCE_LOG"
+printf 'safe_mode=%s\n' "$SAFE_MODE_LABEL" >> "$RESOURCE_LOG"
+printf 'cargo_build_jobs=%s\n' "$JOBS" >> "$RESOURCE_LOG"
+printf 'reuse_stage3=%s\n' "$REUSE_STAGE3" >> "$RESOURCE_LOG"
+printf 'reuse_stage2=%s\n' "$REUSE_STAGE2" >> "$RESOURCE_LOG"
+printf 'reuse_only=%s\n' "$REUSE_ONLY" >> "$RESOURCE_LOG"
 
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"
@@ -70,7 +193,7 @@ else
     rm -f "$STAGE1_DRIVER_OUT" "$STAGE2_BIN" "$STAGE2_IR" "$STAGE2_BIN_SRC"
 
     echo "[1/2] stage1 -> stage2 IR + stage2 compiler (compile+run stage1 self-host driver)"
-    cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
+    run_limited stage1_driver "$TIMEOUT_STAGE1_DRIVER" cargo run -p kooixc -j "$JOBS" -- native stage1/self_host_stage1_compiler_main.kooix "$STAGE1_DRIVER_OUT" --run >/dev/null
     test -s "$STAGE2_IR"
     test -x "$STAGE2_BIN_SRC"
 
@@ -81,7 +204,7 @@ else
   fi
 
   echo "[2/2] stage2 compiler -> stage3 IR -> stage3 compiler"
-  "$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
+  run_limited stage2_to_stage3 "$TIMEOUT_STAGE_BUILD" "$STAGE2_BIN" stage1/compiler_main.kooix "$STAGE3_IR" "$STAGE3_BIN" >/dev/null
   test -s "$STAGE3_IR"
   test -x "$STAGE3_BIN"
 
@@ -106,10 +229,10 @@ if is_enabled "${KX_SMOKE:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-min"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_min.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_stage2_min_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_min.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_stage2_min_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -120,11 +243,11 @@ if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-main"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" examples/import_main.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_import_main_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" examples/import_main.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
   set +e
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_import_main_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
   code="$?"
   set -e
   if [[ "$code" != "42" ]]; then
@@ -139,11 +262,11 @@ if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   SMOKE_ALIAS_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-alias-main"
   rm -f "$SMOKE_ALIAS_IR" "$SMOKE_ALIAS_BIN"
 
-  "$STAGE3_BIN" examples/import_alias_main.kooix "$SMOKE_ALIAS_IR" "$SMOKE_ALIAS_BIN" >/dev/null
+  run_limited smoke_import_alias_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" examples/import_alias_main.kooix "$SMOKE_ALIAS_IR" "$SMOKE_ALIAS_BIN" >/dev/null
   test -s "$SMOKE_ALIAS_IR"
   test -x "$SMOKE_ALIAS_BIN"
   set +e
-  "$SMOKE_ALIAS_BIN" >/dev/null
+  run_limited smoke_import_alias_run "$TIMEOUT_SMOKE" "$SMOKE_ALIAS_BIN" >/dev/null
   code="$?"
   set -e
   if [[ "$code" != "42" ]]; then
@@ -158,10 +281,10 @@ if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   SMOKE_S1_ALIAS_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-import-alias"
   rm -f "$SMOKE_S1_ALIAS_IR" "$SMOKE_S1_ALIAS_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_import_alias_smoke.kooix "$SMOKE_S1_ALIAS_IR" "$SMOKE_S1_ALIAS_BIN" >/dev/null
+  run_limited smoke_s1_import_alias_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_import_alias_smoke.kooix "$SMOKE_S1_ALIAS_IR" "$SMOKE_S1_ALIAS_BIN" >/dev/null
   test -s "$SMOKE_S1_ALIAS_IR"
   test -x "$SMOKE_S1_ALIAS_BIN"
-  "$SMOKE_S1_ALIAS_BIN" >/dev/null
+  run_limited smoke_s1_import_alias_run "$TIMEOUT_SMOKE" "$SMOKE_S1_ALIAS_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_S1_ALIAS_BIN"
 fi
@@ -172,11 +295,11 @@ if is_enabled "${KX_SMOKE_STDLIB:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-stdlib-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" examples/stdlib_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_stdlib_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" examples/stdlib_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
   set +e
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_stdlib_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
   code="$?"
   set -e
   if [[ "$code" != "11" ]]; then
@@ -193,11 +316,11 @@ if is_enabled "${KX_SMOKE_HOST_READ:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-host-read-file"
   rm -f "$SMOKE_IR" "$SMOKE_BIN" "/tmp/kooixc_stage2_host_read_file_in.txt"
 
-  "$STAGE3_BIN" stage1/stage2_host_read_file_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_host_read_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_host_read_file_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
   set +e
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_host_read_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
   code="$?"
   set -e
   if [[ "$code" != "0" ]]; then
@@ -214,10 +337,10 @@ if is_enabled "${KX_SMOKE_S1_LEXER:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-lexer-module-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_s1_lexer_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_lexer_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_s1_lexer_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_lexer_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -228,10 +351,10 @@ if is_enabled "${KX_SMOKE_S1_PARSER:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-parser-module-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_s1_parser_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_parser_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_s1_parser_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_parser_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -242,10 +365,10 @@ if is_enabled "${KX_SMOKE_S1_TYPECHECK:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-typecheck-module-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_s1_typecheck_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_typecheck_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_s1_typecheck_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_typecheck_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -256,10 +379,10 @@ if is_enabled "${KX_SMOKE_S1_RESOLVER:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-resolver-module-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_s1_resolver_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_resolver_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_s1_resolver_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_resolver_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -270,10 +393,10 @@ if is_enabled "${KX_SMOKE_S1_COMPILER:-0}"; then
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-compiler-module-smoke"
   rm -f "$SMOKE_IR" "$SMOKE_BIN"
 
-  "$STAGE3_BIN" stage1/stage2_s1_compiler_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_compiler_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_s1_compiler_module_smoke.kooix "$SMOKE_IR" "$SMOKE_BIN" >/dev/null
   test -s "$SMOKE_IR"
   test -x "$SMOKE_BIN"
-  "$SMOKE_BIN" >/dev/null
+  run_limited smoke_s1_compiler_run "$TIMEOUT_SMOKE" "$SMOKE_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
@@ -282,11 +405,11 @@ if is_enabled "${KX_SMOKE_SELFHOST_EQ:-0}"; then
   echo "[smoke] self-host IR convergence (stage3->stage4->stage5 for compiler_main)"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
 
-  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
+  run_limited selfhost_stage4_compile "$TIMEOUT_SELFHOST" "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
   test -s "$STAGE4_IR"
   test -x "$STAGE4_BIN"
 
-  "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
+  run_limited selfhost_stage5_emit "$TIMEOUT_SELFHOST" "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
   test -s "$STAGE5_IR"
 
   selfhost_sha4=$(sha256sum "$STAGE4_IR" | awk '{print $1}')
@@ -301,11 +424,11 @@ if is_enabled "${KX_DEEP:-0}"; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
 
-  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
+  run_limited deep_stage4_compile "$TIMEOUT_SELFHOST" "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
   test -s "$STAGE4_IR"
   test -x "$STAGE4_BIN"
 
-  "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
+  run_limited deep_stage5_emit "$TIMEOUT_SELFHOST" "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
   test -s "$STAGE5_IR"
 
   echo "ok: $STAGE4_BIN"

@@ -164,11 +164,20 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Bootstrap: build a stage3 compiler binary
 ./scripts/bootstrap_v0_13.sh
 
-# Reuse existing dist/kooixc-stage3 (avoid rebuild, lower resource usage)
-KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
+# Safe mode (enabled by default): force single-thread build + reuse stage3/stage2 + per-command timeout/limits
+KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 
-# If stage3 is missing but stage2 still exists, rebuild stage3 from dist/kooixc-stage2
-KX_REUSE_STAGE2=1 ./scripts/bootstrap_v0_13.sh
+# Stricter mode: reuse-only (fail fast, never trigger rebuild when artifacts are missing)
+KX_REUSE_ONLY=1 ./scripts/bootstrap_v0_13.sh
+
+# Optional: explicitly disable reuse (force rebuild; diagnostics only)
+KX_REUSE_STAGE3=0 KX_REUSE_STAGE2=0 ./scripts/bootstrap_v0_13.sh
+
+# Tunables: timeout (seconds) and safety caps (KB/processes, 0 means unlimited)
+KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_SAFE_MAX_VMEM_KB=0 KX_SAFE_MAX_PROCS=0 ./scripts/bootstrap_v0_13.sh
+
+# Resource metrics (per-step elapsed + max RSS)
+cat /tmp/kx-bootstrap-resource.log
 
 # Note: all KX_* toggles are boolean (1/true/on = enabled, 0/false/off = disabled)
 
@@ -190,7 +199,10 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
-CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
+CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
+
+# Tunables: heavy gate timeout / safety caps (0 means unlimited)
+CARGO_BUILD_JOBS=1 KX_HEAVY_TIMEOUT_BOOTSTRAP=900 KX_HEAVY_TIMEOUT=900 KX_HEAVY_TIMEOUT_SMOKE=300 KX_HEAVY_SAFE_MAX_VMEM_KB=0 KX_HEAVY_SAFE_MAX_PROCS=0 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: disable/enable bootstrap artifact reuse (both enabled by default)
 CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_STAGE3=0 KX_HEAVY_REUSE_STAGE2=0 ./scripts/bootstrap_heavy_gate.sh
@@ -212,6 +224,10 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable deep chain (stage4 -> stage5)
 CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
+
+# Heavy gate resource metrics (gate2 max RSS + timeout config)
+cat /tmp/bootstrap-heavy-metrics.txt
+cat /tmp/bootstrap-heavy-resource.log
 
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

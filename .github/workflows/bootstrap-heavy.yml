@@ -98,6 +98,10 @@ jobs:
           KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
           KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
           KX_HEAVY_REUSE_ONLY: ${{ steps.toggles.outputs.reuse_only }}
+          KX_HEAVY_SAFE_MODE: "1"
+          KX_HEAVY_TIMEOUT_BOOTSTRAP: "900"
+          KX_HEAVY_TIMEOUT: "900"
+          KX_HEAVY_TIMEOUT_SMOKE: "300"
         run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
@@ -123,6 +127,7 @@ jobs:
             dist/kooixc-stage3-stage2-s1-compiler-module-smoke
             /tmp/kooixc_stage3_stage2_s1_compiler_module_smoke.ll
             /tmp/bootstrap-heavy-bootstrap.log
+            /tmp/bootstrap-heavy-resource.log
             /tmp/bootstrap-heavy-metrics.txt
             /tmp/bootstrap-heavy-determinism.sha256
             /tmp/bootstrap-heavy-selfhost.sha256
@@ -151,6 +156,14 @@ jobs:
           compiler_smoke="unknown"
           import_smoke="unknown"
           selfhost_eq="unknown"
+          safe_mode="unknown"
+          heavy_timeout="n/a"
+          heavy_timeout_smoke="n/a"
+          heavy_vmem="n/a"
+          heavy_procs="n/a"
+          gate2_stage3_rss="n/a"
+          gate2_stage4_rss="n/a"
+          gate2_stage4_run_rss="n/a"
           det_hash="n/a"
           selfhost_hash="n/a"
 
@@ -171,6 +184,14 @@ jobs:
                 s1_compiler_smoke_enabled) compiler_smoke="$value" ;;
                 import_smoke_enabled) import_smoke="$value" ;;
                 selfhost_eq_enabled) selfhost_eq="$value" ;;
+                safe_mode) safe_mode="$value" ;;
+                heavy_timeout_seconds) heavy_timeout="$value" ;;
+                heavy_timeout_smoke_seconds) heavy_timeout_smoke="$value" ;;
+                heavy_safe_max_vmem_kb) heavy_vmem="$value" ;;
+                heavy_safe_max_procs) heavy_procs="$value" ;;
+                gate2_stage3_compile_maxrss_kb) gate2_stage3_rss="$value" ;;
+                gate2_stage4_compile_maxrss_kb) gate2_stage4_rss="$value" ;;
+                gate2_stage4_run_maxrss_kb) gate2_stage4_run_rss="$value" ;;
                 selfhost_eq_sha256) selfhost_hash="$value" ;;
               esac
             done < "$metrics_file"
@@ -194,8 +215,12 @@ jobs:
             echo "- stage1 compiler module smoke: ${compiler_smoke}"
             echo "- import namespace smoke: ${import_smoke}"
             echo "- self-host convergence mode: ${selfhost_eq}"
+            echo "- safe mode: ${safe_mode}"
+            echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
+            echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"
+            echo "- gate2 max RSS (stage3/stage4/run): ${gate2_stage3_rss} KB / ${gate2_stage4_rss} KB / ${gate2_stage4_run_rss} KB"
             echo "- gate3 (self-host + determinism): ${gate3}s"
             echo "- total: ${total}s"
             echo "- self-host convergence sha256: ${selfhost_hash}"

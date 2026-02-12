@@ -10,7 +10,103 @@ cd "$ROOT"
 OUT_DIR="${1:-$ROOT/dist}"
 mkdir -p "$OUT_DIR"
 
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+is_enabled() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_pos_int() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( "$1" > 0 ))
+}
+
+resolve_timeout_bin() {
+  if command -v timeout >/dev/null 2>&1; then
+    echo "timeout"
+    return
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    echo "gtimeout"
+    return
+  fi
+  echo ""
+}
+
+run_limited() {
+  local key="$1"
+  local timeout_s="$2"
+  shift 2
+  local -a cmd=("$@")
+
+  local start="$SECONDS"
+  local maxrss="na"
+  local time_file="/tmp/bootstrap-heavy-time-${key//[^a-zA-Z0-9_.-]/_}-$$.txt"
+
+  local -a runner=()
+  if [[ "$HEAVY_SAFE_NICE" =~ ^-?[0-9]+$ ]] && (( HEAVY_SAFE_NICE != 0 )) && command -v nice >/dev/null 2>&1; then
+    runner+=(nice -n "$HEAVY_SAFE_NICE")
+  fi
+
+  local -a watchdog=()
+  if [[ -n "$TIMEOUT_BIN" ]] && is_pos_int "$timeout_s"; then
+    watchdog+=("$TIMEOUT_BIN" --signal=TERM --kill-after=30 "${timeout_s}s")
+  fi
+
+  rm -f "$time_file"
+  echo "[run] ${key} (timeout=${timeout_s}s)"
+
+  local cmd_status=0
+  (
+    if is_pos_int "$HEAVY_SAFE_MAX_VMEM_KB"; then
+      ulimit -Sv "$HEAVY_SAFE_MAX_VMEM_KB"
+    fi
+    if is_pos_int "$HEAVY_SAFE_MAX_PROCS"; then
+      ulimit -u "$HEAVY_SAFE_MAX_PROCS"
+    fi
+    if command -v /usr/bin/time >/dev/null 2>&1; then
+      "${watchdog[@]}" "${runner[@]}" /usr/bin/time -f 'maxrss_kb=%M' -o "$time_file" "${cmd[@]}"
+    else
+      "${watchdog[@]}" "${runner[@]}" "${cmd[@]}"
+    fi
+  )
+  cmd_status=$?
+
+  local elapsed=$((SECONDS - start))
+  if [[ -s "$time_file" ]]; then
+    maxrss="$(awk -F= '/^maxrss_kb=/{print $2}' "$time_file" | tail -n 1)"
+    if [[ -z "$maxrss" ]]; then
+      maxrss="na"
+    fi
+  fi
+
+  printf '%s_seconds=%s\n' "$key" "$elapsed" >> "$METRICS_FILE"
+  printf '%s_maxrss_kb=%s\n' "$key" "$maxrss" >> "$METRICS_FILE"
+  rm -f "$time_file"
+  return "$cmd_status"
+}
+
+HEAVY_SAFE_MODE="${KX_HEAVY_SAFE_MODE:-1}"
+HEAVY_SAFE_NICE="${KX_HEAVY_SAFE_NICE:-10}"
+HEAVY_SAFE_MAX_VMEM_KB="${KX_HEAVY_SAFE_MAX_VMEM_KB:-0}"
+HEAVY_SAFE_MAX_PROCS="${KX_HEAVY_SAFE_MAX_PROCS:-0}"
+HEAVY_TIMEOUT_BOOTSTRAP="${KX_HEAVY_TIMEOUT_BOOTSTRAP:-900}"
+HEAVY_TIMEOUT="${KX_HEAVY_TIMEOUT:-900}"
+HEAVY_TIMEOUT_SMOKE="${KX_HEAVY_TIMEOUT_SMOKE:-300}"
+TIMEOUT_BIN="$(resolve_timeout_bin)"
+
+JOBS_RAW="${CARGO_BUILD_JOBS:-1}"
+if is_pos_int "$JOBS_RAW"; then
+  CARGO_JOBS="$JOBS_RAW"
+else
+  echo "invalid CARGO_BUILD_JOBS=$JOBS_RAW; fallback to 1" >&2
+  CARGO_JOBS=1
+fi
+if is_enabled "$HEAVY_SAFE_MODE" && (( CARGO_JOBS > 1 )); then
+  echo "[safe] KX_HEAVY_SAFE_MODE=1 forces CARGO_BUILD_JOBS=1 (requested=$CARGO_JOBS)"
+  CARGO_JOBS=1
+fi
+export CARGO_BUILD_JOBS="$CARGO_JOBS"
 
 HEAVY_DETERMINISM="${KX_HEAVY_DETERMINISM:-0}"
 HEAVY_DEEP="${KX_HEAVY_DEEP:-0}"
@@ -33,13 +129,7 @@ METRICS_FILE="/tmp/bootstrap-heavy-metrics.txt"
 DET_SHA_FILE="/tmp/bootstrap-heavy-determinism.sha256"
 SELFHOST_EQ_SHA_FILE="/tmp/bootstrap-heavy-selfhost.sha256"
 BOOTSTRAP_LOG="/tmp/bootstrap-heavy-bootstrap.log"
-
-is_enabled() {
-  case "${1,,}" in
-    1|true|yes|on) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+BOOTSTRAP_RESOURCE_LOG="/tmp/kx-bootstrap-resource.log"
 
 rm -f \
   "$STAGE3_LL" \
@@ -102,14 +192,24 @@ else
   IMPORT_SMOKE_LABEL="disabled"
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL"
+if is_enabled "$HEAVY_SAFE_MODE"; then
+  SAFE_MODE_LABEL="enabled"
+else
+  SAFE_MODE_LABEL="disabled"
+fi
+
+if [[ -z "$TIMEOUT_BIN" ]]; then
+  echo "[safe] timeout/gtimeout not found; heavy gate timeout disabled" >&2
+fi
+
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
 if is_enabled "$HEAVY_DEEP"; then
-  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_DEEP=1 KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 else
-  KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
+  KX_SAFE_MODE="$HEAVY_SAFE_MODE" KX_SAFE_NICE="$HEAVY_SAFE_NICE" KX_SAFE_MAX_VMEM_KB="$HEAVY_SAFE_MAX_VMEM_KB" KX_SAFE_MAX_PROCS="$HEAVY_SAFE_MAX_PROCS" KX_TIMEOUT_STAGE1_DRIVER="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_STAGE_BUILD="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SELFHOST="$HEAVY_TIMEOUT_BOOTSTRAP" KX_TIMEOUT_SMOKE="$HEAVY_TIMEOUT_SMOKE" KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER="$HEAVY_S1_COMPILER" KX_SMOKE_IMPORT="$HEAVY_IMPORT_SMOKE" KX_REUSE_STAGE3="$HEAVY_REUSE_STAGE3" KX_REUSE_STAGE2="$HEAVY_REUSE_STAGE2" KX_REUSE_ONLY="$HEAVY_REUSE_ONLY" ./scripts/bootstrap_v0_13.sh "$OUT_DIR" | tee "$BOOTSTRAP_LOG"
 fi
 gate1_seconds=$((SECONDS - gate1_start))
 
@@ -135,16 +235,16 @@ fi
 
 gate2_start="$SECONDS"
 echo "[gate 2/3] compiler_main two-hop loop"
-"$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE3_LL" "$STAGE3_COMPILER_BIN" >/dev/null
-"$STAGE3_COMPILER_BIN" stage1/stage2_min.kooix "$STAGE4_LL" "$STAGE4_BIN" >/dev/null
-"$STAGE4_BIN" >/dev/null
+run_limited gate2_stage3_compile "$HEAVY_TIMEOUT" "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE3_LL" "$STAGE3_COMPILER_BIN" >/dev/null
+run_limited gate2_stage4_compile "$HEAVY_TIMEOUT" "$STAGE3_COMPILER_BIN" stage1/stage2_min.kooix "$STAGE4_LL" "$STAGE4_BIN" >/dev/null
+run_limited gate2_stage4_run "$HEAVY_TIMEOUT_SMOKE" "$STAGE4_BIN" >/dev/null
 gate2_seconds=$((SECONDS - gate2_start))
 
 gate3_start="$SECONDS"
 selfhost_sha=""
 if is_enabled "$HEAVY_SELFHOST_EQ"; then
   echo "[gate 3/3] self-host convergence smoke"
-  "$STAGE3_COMPILER_BIN" stage1/compiler_main.kooix "$SELFHOST_EQ_LL" >/dev/null
+  run_limited gate3_selfhost_emit "$HEAVY_TIMEOUT" "$STAGE3_COMPILER_BIN" stage1/compiler_main.kooix "$SELFHOST_EQ_LL" >/dev/null
   stage3_sha=$(sha256sum "$STAGE3_LL" | awk '{print $1}')
   selfhost_sha=$(sha256sum "$SELFHOST_EQ_LL" | awk '{print $1}')
   test "$stage3_sha" = "$selfhost_sha"
@@ -157,8 +257,8 @@ fi
 
 if is_enabled "$HEAVY_DETERMINISM"; then
   echo "[gate 3/3] compiler_main determinism smoke"
-  "$STAGE3_BIN" stage1/compiler_main.kooix "$DET_A_LL" >/dev/null
-  "$STAGE3_BIN" stage1/compiler_main.kooix "$DET_B_LL" >/dev/null
+  run_limited gate3_det_a "$HEAVY_TIMEOUT" "$STAGE3_BIN" stage1/compiler_main.kooix "$DET_A_LL" >/dev/null
+  run_limited gate3_det_b "$HEAVY_TIMEOUT" "$STAGE3_BIN" stage1/compiler_main.kooix "$DET_B_LL" >/dev/null
   sha_a=$(sha256sum "$DET_A_LL" | awk '{print $1}')
   sha_b=$(sha256sum "$DET_B_LL" | awk '{print $1}')
   test "$sha_a" = "$sha_b"
@@ -173,6 +273,10 @@ gate3_seconds=$((SECONDS - gate3_start))
 
 total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
 
+if [ -f "$BOOTSTRAP_RESOURCE_LOG" ]; then
+  cp "$BOOTSTRAP_RESOURCE_LOG" /tmp/bootstrap-heavy-resource.log
+fi
+
 {
   echo "gate1_seconds=$gate1_seconds"
   echo "gate2_seconds=$gate2_seconds"
@@ -180,6 +284,11 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "total_seconds=$total_seconds"
   echo "deep_enabled=$DEEP_LABEL"
   echo "determinism_enabled=$DET_LABEL"
+  echo "safe_mode=$SAFE_MODE_LABEL"
+  echo "heavy_timeout_seconds=$HEAVY_TIMEOUT"
+  echo "heavy_timeout_smoke_seconds=$HEAVY_TIMEOUT_SMOKE"
+  echo "heavy_safe_max_vmem_kb=$HEAVY_SAFE_MAX_VMEM_KB"
+  echo "heavy_safe_max_procs=$HEAVY_SAFE_MAX_PROCS"
   echo "reuse_stage3_enabled=$REUSE_STAGE3_LABEL"
   echo "reuse_stage3_hit=$REUSE_STAGE3_HIT"
   echo "reuse_stage2_enabled=$REUSE_STAGE2_LABEL"
@@ -190,7 +299,7 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "selfhost_eq_enabled=$SELFHOST_EQ_LABEL"
   echo "selfhost_eq_sha256=${selfhost_sha}"
   echo "determinism_sha256=${sha_a}"
-} > "$METRICS_FILE"
+} >> "$METRICS_FILE"
 
 echo "ok: metrics saved: $METRICS_FILE"
 if [ -s "$SELFHOST_EQ_SHA_FILE" ]; then
