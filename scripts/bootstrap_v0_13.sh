@@ -214,6 +214,8 @@ else
   REUSE_STAGE2="${KX_REUSE_STAGE2:-0}"
 fi
 REUSE_ONLY="${KX_REUSE_ONLY:-0}"
+MODULE_PREFLIGHT="${KX_MODULE_PREFLIGHT:-1}"
+MODULE_PREFLIGHT_ENTRY="${KX_MODULE_PREFLIGHT_ENTRY:-examples/import_variant_main.kooix}"
 
 if is_enabled "$SAFE_COLD_START_GUARD"; then
   SAFE_COLD_START_GUARD_LABEL="enabled"
@@ -221,11 +223,17 @@ else
   SAFE_COLD_START_GUARD_LABEL="disabled"
 fi
 
+if is_enabled "$MODULE_PREFLIGHT"; then
+  MODULE_PREFLIGHT_LABEL="enabled"
+else
+  MODULE_PREFLIGHT_LABEL="disabled"
+fi
+
 if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; command timeout disabled" >&2
 fi
 
-echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL cold_start_guard=$SAFE_COLD_START_GUARD_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none} vmem_cap_kb=$SAFE_MAX_VMEM_KB proc_cap=$SAFE_MAX_PROCS"
+echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL cold_start_guard=$SAFE_COLD_START_GUARD_LABEL module_preflight=$MODULE_PREFLIGHT_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none} vmem_cap_kb=$SAFE_MAX_VMEM_KB proc_cap=$SAFE_MAX_PROCS"
 : > "$RESOURCE_LOG"
 printf 'safe_mode=%s\n' "$SAFE_MODE_LABEL" >> "$RESOURCE_LOG"
 printf 'cargo_build_jobs=%s\n' "$JOBS" >> "$RESOURCE_LOG"
@@ -233,6 +241,8 @@ printf 'reuse_stage3=%s\n' "$REUSE_STAGE3" >> "$RESOURCE_LOG"
 printf 'reuse_stage2=%s\n' "$REUSE_STAGE2" >> "$RESOURCE_LOG"
 printf 'reuse_only=%s\n' "$REUSE_ONLY" >> "$RESOURCE_LOG"
 printf 'cold_start_guard=%s\n' "$SAFE_COLD_START_GUARD_LABEL" >> "$RESOURCE_LOG"
+printf 'module_preflight=%s\n' "$MODULE_PREFLIGHT_LABEL" >> "$RESOURCE_LOG"
+printf 'module_preflight_entry=%s\n' "$MODULE_PREFLIGHT_ENTRY" >> "$RESOURCE_LOG"
 printf 'safe_max_vmem_kb=%s\n' "$SAFE_MAX_VMEM_KB" >> "$RESOURCE_LOG"
 printf 'safe_max_procs=%s\n' "$SAFE_MAX_PROCS" >> "$RESOURCE_LOG"
 
@@ -324,6 +334,19 @@ if [[ "$STAGE3_ALIAS" != "$STAGE3_BIN" ]]; then
   cp "$STAGE3_BIN" "$STAGE3_ALIAS"
 fi
 echo "ok: $STAGE3_ALIAS"
+
+if is_enabled "$MODULE_PREFLIGHT"; then
+  if [[ ! -f "$MODULE_PREFLIGHT_ENTRY" ]]; then
+    echo "[preflight] module-aware check entry not found: $MODULE_PREFLIGHT_ENTRY" >&2
+    exit 1
+  fi
+
+  echo "[preflight] module-aware semantic check: $MODULE_PREFLIGHT_ENTRY"
+  run_limited module_preflight_check "$TIMEOUT_SMOKE" cargo run -p kooixc -j "$JOBS" -- check-modules "$MODULE_PREFLIGHT_ENTRY" --json >/dev/null
+  echo "ok: module preflight passed: $MODULE_PREFLIGHT_ENTRY"
+else
+  echo "[preflight] module-aware semantic check skipped (KX_MODULE_PREFLIGHT=$MODULE_PREFLIGHT)"
+fi
 
 if is_enabled "${KX_SMOKE_S1_CORE:-0}"; then
   KX_SMOKE_S1_LEXER=1

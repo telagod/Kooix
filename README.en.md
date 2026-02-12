@@ -171,6 +171,12 @@ KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 # If a one-time cold rebuild is intentional, disable it once:
 CARGO_BUILD_JOBS=1 KX_SAFE_COLD_START_GUARD=0 ./scripts/bootstrap_v0_13.sh
 
+# Module-aware preflight is enabled by default (check-modules examples/import_variant_main.kooix)
+# If you need to skip it temporarily:
+CARGO_BUILD_JOBS=1 KX_MODULE_PREFLIGHT=0 ./scripts/bootstrap_v0_13.sh
+# Or choose a specific preflight entry (default: examples/import_variant_main.kooix)
+CARGO_BUILD_JOBS=1 KX_MODULE_PREFLIGHT_ENTRY=examples/import_alias_main.kooix ./scripts/bootstrap_v0_13.sh
+
 # If KX_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
 
 # Stricter mode: reuse-only (fail fast, never trigger rebuild when artifacts are missing)
@@ -214,6 +220,12 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
 # Local heavy cold-start guard is enabled by default (KX_HEAVY_COLD_START_GUARD=1): fail fast when stage artifacts are missing to avoid accidental rebuild spikes
 # If a one-time cold rebuild is intentional, disable it once:
 CARGO_BUILD_JOBS=1 KX_HEAVY_COLD_START_GUARD=0 ./scripts/bootstrap_heavy_gate.sh
+
+# Heavy gate also enables module-aware preflight by default via bootstrap_v0_13
+# If you need to skip it temporarily:
+CARGO_BUILD_JOBS=1 KX_HEAVY_MODULE_PREFLIGHT=0 ./scripts/bootstrap_heavy_gate.sh
+# Or choose a specific heavy preflight entry (default: examples/import_variant_main.kooix)
+CARGO_BUILD_JOBS=1 KX_HEAVY_MODULE_PREFLIGHT_ENTRY=examples/import_alias_main.kooix ./scripts/bootstrap_heavy_gate.sh
 
 # If KX_HEAVY_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
 
@@ -315,6 +327,7 @@ cargo test -p kooixc -j 2 -- --test-threads=1
 
 - `KX_REUSE_ONLY=1` / `KX_HEAVY_REUSE_ONLY=1` means "reuse only, never rebuild". On fresh runners or after cleaning `dist/` and `/tmp`, it fails fast by design (not a regression). Seed artifacts first with default safe mode (without reuse-only).
 - Local safe mode now enables cold-start guards by default (`KX_SAFE_COLD_START_GUARD=1` / `KX_HEAVY_COLD_START_GUARD=1`), so missing stage artifacts fail fast instead of triggering accidental full rebuild spikes. Set them to `0` only for intentional one-off cold rebuilds. CI now includes a dedicated smoke check for this fail-fast behavior.
+- `bootstrap_v0_13.sh` now runs a module-aware preflight by default (`check-modules examples/import_variant_main.kooix`). For resource triage you can temporarily set `KX_MODULE_PREFLIGHT=0` / `KX_HEAVY_MODULE_PREFLIGHT=0`, but keeping it enabled is recommended for regression coverage.
 - On Linux, if `KX_SAFE_MAX_VMEM_KB` / `KX_HEAVY_SAFE_MAX_VMEM_KB` is unset, scripts auto-apply `ulimit -v` at `MemTotal * 85%`. Some CI runners may kill `llc/clang` or stage binaries under this cap; the heavy CI workflow explicitly sets `KX_HEAVY_SAFE_MAX_VMEM_KB=0`, and local runs can do the same to disable the cap.
 - With `KX_HEAVY_COMPILER_MAIN_SMOKE=1`, peak RSS on the current Stage1 graph is close to 15.5 GiB. Setting `KX_HEAVY_SAFE_MAX_VMEM_KB` to 6-12 GiB may trigger `exit=139` (SIGSEGV). A strict-but-practical local baseline is: `CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`.
 - The main `check/hir/mir/llvm/native/run` pipeline is still include-style, while `check-modules` is a module-aware semantic-check prototype. For `Foo::...` and cross-file namespace isolation cases, run both `check-modules --json` and bootstrap smoke.

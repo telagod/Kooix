@@ -106,6 +106,8 @@ jobs:
           KX_HEAVY_REUSE_STAGE3: ${{ steps.toggles.outputs.reuse_stage3 }}
           KX_HEAVY_REUSE_STAGE2: ${{ steps.toggles.outputs.reuse_stage2 }}
           KX_HEAVY_REUSE_ONLY: ${{ steps.toggles.outputs.reuse_only }}
+          KX_HEAVY_MODULE_PREFLIGHT: "1"
+          KX_HEAVY_MODULE_PREFLIGHT_ENTRY: "examples/import_variant_main.kooix"
           KX_HEAVY_SAFE_MODE: "1"
           KX_HEAVY_TIMEOUT_BOOTSTRAP: "900"
           KX_HEAVY_TIMEOUT: "900"
@@ -179,6 +181,10 @@ jobs:
           safe_mode="unknown"
           strict_local="unknown"
           cold_start_guard="unknown"
+          module_preflight="unknown"
+          module_preflight_entry="n/a"
+          module_preflight_s="n/a"
+          module_preflight_rss="n/a"
           heavy_timeout="n/a"
           heavy_timeout_smoke="n/a"
           heavy_vmem="n/a"
@@ -271,6 +277,10 @@ jobs:
                 safe_mode) safe_mode="$value" ;;
                 strict_local_mode) strict_local="$value" ;;
                 cold_start_guard) cold_start_guard="$value" ;;
+                module_preflight_enabled) module_preflight="$value" ;;
+                module_preflight_entry) module_preflight_entry="$value" ;;
+                module_preflight_seconds) module_preflight_s="$value" ;;
+                module_preflight_maxrss_kb) module_preflight_rss="$value" ;;
                 heavy_timeout_seconds) heavy_timeout="$value" ;;
                 heavy_timeout_smoke_seconds) heavy_timeout_smoke="$value" ;;
                 heavy_safe_max_vmem_kb) heavy_vmem="$value" ;;
@@ -355,6 +365,8 @@ jobs:
             echo "- safe mode: ${safe_mode}"
             echo "- strict local mode: ${strict_local}"
             echo "- cold-start guard: ${cold_start_guard}"
+            echo "- module preflight: ${module_preflight} (${module_preflight_entry})"
+            echo "- module preflight runtime: ${module_preflight_s}s (max RSS ${module_preflight_rss} KB)"
             echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
             echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
