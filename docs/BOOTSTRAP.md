@@ -152,11 +152,13 @@ CARGO_BUILD_JOBS=1 KX_REUSE_STAGE2=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_1
 CARGO_BUILD_JOBS=1 KX_REUSE_ONLY=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
-资源观测（每步耗时 + max RSS）：
+资源观测（每步耗时 + max RSS + exit code）：
 
 ```bash
 cat /tmp/kx-bootstrap-resource.log
 ```
+
+若步骤失败，脚本会额外输出 `[fail]` 分类提示（timeout / signal / OOM-vmem 线索），便于先判定是“业务失败”还是“资源约束失败”。
 
 一键重载门禁（与 `bootstrap-heavy` workflow 对齐：四模块 smoke + `compiler_main` 二段闭环；本地默认不跑 deterministic 对比）：
 

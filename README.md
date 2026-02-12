@@ -176,8 +176,9 @@ KX_REUSE_STAGE3=0 KX_REUSE_STAGE2=0 ./scripts/bootstrap_v0_13.sh
 # 可调：timeout（秒）与限载（KB/进程数，0 表示不限制）
 KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_SAFE_MAX_VMEM_KB=0 KX_SAFE_MAX_PROCS=0 ./scripts/bootstrap_v0_13.sh
 
-# 资源指标（每步耗时 + max RSS）
+# 资源指标（每步耗时 + max RSS + exit code）
 cat /tmp/kx-bootstrap-resource.log
+# 失败时会输出 [fail] 分类提示（timeout / signal / OOM-vmem 线索）
 
 # 注：所有 KX_* 开关按布尔解析（1/true/on 开启，0/false/off 关闭）
 
@@ -227,7 +228,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 # 可选：开启 deep 链路（stage4 -> stage5）
 CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 
-# heavy gate 资源指标（含 gate2 峰值 RSS / timeout 配置）
+# heavy gate 资源指标（含 gate2 峰值 RSS / timeout 配置 / 每步 exit code）
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
 

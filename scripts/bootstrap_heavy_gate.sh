@@ -56,6 +56,34 @@ resolve_default_vmem_limit_kb() {
   echo "0"
 }
 
+log_run_failure_hint() {
+  local key="$1"
+  local status="$2"
+  local timeout_s="$3"
+  local maxrss="$4"
+
+  case "$status" in
+    124)
+      echo "[fail] ${key}: timeout after ${timeout_s}s (tune KX_HEAVY_TIMEOUT* or narrow gates)" >&2
+      ;;
+    137)
+      echo "[fail] ${key}: killed (exit=137). Possible OOM/vmem cap hit; KX_HEAVY_SAFE_MAX_VMEM_KB=${HEAVY_SAFE_MAX_VMEM_KB}" >&2
+      ;;
+    143)
+      echo "[fail] ${key}: terminated (exit=143, likely timeout watchdog TERM before kill)" >&2
+      ;;
+    *)
+      if (( status >= 128 )); then
+        echo "[fail] ${key}: terminated by signal $((status - 128)) (exit=${status})" >&2
+      fi
+      ;;
+  esac
+
+  if [[ "$maxrss" != "na" ]]; then
+    echo "[fail] ${key}: observed maxrss_kb=${maxrss}" >&2
+  fi
+}
+
 run_limited() {
   local key="$1"
   local timeout_s="$2"
@@ -80,6 +108,7 @@ run_limited() {
   echo "[run] ${key} (timeout=${timeout_s}s)"
 
   local cmd_status=0
+  set +e
   (
     if is_pos_int "$HEAVY_SAFE_MAX_VMEM_KB"; then
       ulimit -Sv "$HEAVY_SAFE_MAX_VMEM_KB"
@@ -94,6 +123,7 @@ run_limited() {
     fi
   )
   cmd_status=$?
+  set -e
 
   local elapsed=$((SECONDS - start))
   if [[ -s "$time_file" ]]; then
@@ -105,10 +135,15 @@ run_limited() {
 
   printf '%s_seconds=%s\n' "$key" "$elapsed" >> "$METRICS_FILE"
   printf '%s_maxrss_kb=%s\n' "$key" "$maxrss" >> "$METRICS_FILE"
+  printf '%s_exit_code=%s\n' "$key" "$cmd_status" >> "$METRICS_FILE"
   rm -f "$time_file"
+
+  if (( cmd_status != 0 )); then
+    log_run_failure_hint "$key" "$cmd_status" "$timeout_s" "$maxrss"
+  fi
+
   return "$cmd_status"
 }
-
 HEAVY_SAFE_MODE="${KX_HEAVY_SAFE_MODE:-1}"
 HEAVY_SAFE_NICE="${KX_HEAVY_SAFE_NICE:-10}"
 HEAVY_SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"

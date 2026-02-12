@@ -178,8 +178,9 @@ KX_REUSE_STAGE3=0 KX_REUSE_STAGE2=0 ./scripts/bootstrap_v0_13.sh
 # Tunables: timeout (seconds) and safety caps (KB/processes, 0 means unlimited)
 KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_SAFE_MAX_VMEM_KB=0 KX_SAFE_MAX_PROCS=0 ./scripts/bootstrap_v0_13.sh
 
-# Resource metrics (per-step elapsed + max RSS)
+# Resource metrics (per-step elapsed + max RSS + exit code)
 cat /tmp/kx-bootstrap-resource.log
+# Failures now emit [fail] hints (timeout / signal / OOM-vmem clues)
 
 # Note: all KX_* toggles are boolean (1/true/on = enabled, 0/false/off = disabled)
 
@@ -229,7 +230,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh
 # Optional: enable deep chain (stage4 -> stage5)
 CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 
-# Heavy gate resource metrics (gate2 max RSS + timeout config)
+# Heavy gate resource metrics (gate2 max RSS + timeout config + per-step exit code)
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
 
