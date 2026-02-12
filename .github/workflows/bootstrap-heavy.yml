@@ -146,6 +146,8 @@ jobs:
           metrics_file=/tmp/bootstrap-heavy-metrics.txt
           det_file=/tmp/bootstrap-heavy-determinism.sha256
           selfhost_file=/tmp/bootstrap-heavy-selfhost.sha256
+          gate1_resource_file=/tmp/bootstrap-heavy-resource.log
+          fallback_gate1_resource_file=/tmp/kx-bootstrap-resource.log
 
           gate1="n/a"
           gate2="n/a"
@@ -178,10 +180,52 @@ jobs:
           stage1_import_variant_run_s="n/a"
           stage1_import_variant_run_rss="n/a"
           det_hash="n/a"
+          det_hash_metrics="n/a"
           selfhost_hash="n/a"
+          failure_count=0
+          failure_lines=""
+          first_failure=""
+
+          classify_exit_reason() {
+            local code="$1"
+            case "$code" in
+              124) echo "timeout" ;;
+              137) echo "killed (SIGKILL, possible OOM/vmem cap)" ;;
+              143) echo "terminated (SIGTERM, likely timeout watchdog)" ;;
+              *)
+                if (( code >= 128 )); then
+                  echo "terminated by signal $((code - 128))"
+                else
+                  echo "command error"
+                fi
+                ;;
+            esac
+          }
+
+          record_exit_code() {
+            local scope="$1"
+            local key="$2"
+            local raw="$3"
+
+            if [[ ! "$raw" =~ ^[0-9]+$ ]]; then
+              return
+            fi
+            if (( raw == 0 )); then
+              return
+            fi
+
+            local reason
+            reason="$(classify_exit_reason "$raw")"
+            failure_count=$((failure_count + 1))
+            failure_lines+="- ${scope}:${key} -> exit=${raw} (${reason})\n"
+
+            if [ -z "$first_failure" ]; then
+              first_failure="${scope}:${key} -> exit=${raw} (${reason})"
+            fi
+          }
 
           if [ -f "$metrics_file" ]; then
-            while IFS='=' read -r key value; do
+            while IFS='=' read -r key value || [ -n "$key" ]; do
               case "$key" in
                 gate1_seconds) gate1="$value" ;;
                 gate2_seconds) gate2="$value" ;;
@@ -214,15 +258,39 @@ jobs:
                 stage1_import_variant_run_seconds) stage1_import_variant_run_s="$value" ;;
                 stage1_import_variant_run_maxrss_kb) stage1_import_variant_run_rss="$value" ;;
                 selfhost_eq_sha256) selfhost_hash="$value" ;;
+                determinism_sha256) det_hash_metrics="$value" ;;
               esac
+
+              if [[ "$key" == *_exit_code ]]; then
+                record_exit_code "heavy" "$key" "$value"
+              fi
             done < "$metrics_file"
+          fi
+
+          if [ ! -f "$gate1_resource_file" ] && [ -f "$fallback_gate1_resource_file" ]; then
+            gate1_resource_file="$fallback_gate1_resource_file"
+          fi
+
+          if [ -f "$gate1_resource_file" ]; then
+            while IFS='=' read -r key value || [ -n "$key" ]; do
+              if [[ "$key" == *_exit_code ]]; then
+                record_exit_code "gate1" "$key" "$value"
+              fi
+            done < "$gate1_resource_file"
           fi
 
           if [ -s "$det_file" ]; then
             det_hash=$(awk '{print $1}' "$det_file")
+          elif [ -n "$det_hash_metrics" ] && [ "$det_hash_metrics" != "n/a" ]; then
+            det_hash="$det_hash_metrics"
           fi
+
           if [ -s "$selfhost_file" ]; then
             selfhost_hash=$(awk '{print $1}' "$selfhost_file")
+          fi
+
+          if [ -z "$first_failure" ]; then
+            first_failure="none"
           fi
 
           {
@@ -248,6 +316,14 @@ jobs:
             echo "- import variant smoke RSS (stage1 compile/run): ${stage1_import_variant_compile_rss} KB / ${stage1_import_variant_run_rss} KB"
             echo "- gate3 (self-host + determinism): ${gate3}s"
             echo "- total: ${total}s"
+            echo "- failure signals observed: ${failure_count}"
+            echo "- first non-zero step: ${first_failure}"
             echo "- self-host convergence sha256: ${selfhost_hash}"
             echo "- determinism sha256: ${det_hash}"
+
+            if [ "$failure_count" -gt 0 ]; then
+              echo ""
+              echo "#### Failure Classification"
+              printf '%b' "$failure_lines"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
