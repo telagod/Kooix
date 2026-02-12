@@ -264,6 +264,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 # Heavy gate resource metrics (gate2 max RSS + timeout config + per-step exit code)
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
+# module_preflight_json in metrics records the raw check-modules JSON path (CI artifact also uploads /tmp/kx-module-preflight-*.json)
 # Strict-local self-check (preset hit + active vmem cap)
 grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # Or use scripted assertions for strict-local guardrails

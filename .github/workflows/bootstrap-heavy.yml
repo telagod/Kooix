@@ -148,6 +148,7 @@ jobs:
             /tmp/bootstrap-heavy-bootstrap.log
             /tmp/bootstrap-heavy-resource.log
             /tmp/bootstrap-heavy-metrics.txt
+            /tmp/kx-module-preflight-*.json
             /tmp/bootstrap-heavy-determinism.sha256
             /tmp/bootstrap-heavy-selfhost.sha256
             /tmp/kooixc_stage4_stage1_compiler.ll
@@ -183,6 +184,7 @@ jobs:
           cold_start_guard="unknown"
           module_preflight="unknown"
           module_preflight_entry="n/a"
+          module_preflight_json="n/a"
           module_preflight_s="n/a"
           module_preflight_rss="n/a"
           module_preflight_ok="n/a"
@@ -283,6 +285,7 @@ jobs:
                 cold_start_guard) cold_start_guard="$value" ;;
                 module_preflight_enabled) module_preflight="$value" ;;
                 module_preflight_entry) module_preflight_entry="$value" ;;
+                module_preflight_json) module_preflight_json="$value" ;;
                 module_preflight_seconds) module_preflight_s="$value" ;;
                 module_preflight_maxrss_kb) module_preflight_rss="$value" ;;
                 module_preflight_ok) module_preflight_ok="$value" ;;
@@ -329,6 +332,7 @@ jobs:
               case "$key" in
                 module_preflight) if [ "$module_preflight" = "unknown" ]; then module_preflight="$value"; fi ;;
                 module_preflight_entry) if [ "$module_preflight_entry" = "n/a" ]; then module_preflight_entry="$value"; fi ;;
+                module_preflight_json) if [ "$module_preflight_json" = "n/a" ]; then module_preflight_json="$value"; fi ;;
                 module_preflight_check_seconds) if [ "$module_preflight_s" = "n/a" ]; then module_preflight_s="$value"; fi ;;
                 module_preflight_check_maxrss_kb) if [ "$module_preflight_rss" = "n/a" ]; then module_preflight_rss="$value"; fi ;;
                 module_preflight_ok) if [ "$module_preflight_ok" = "n/a" ]; then module_preflight_ok="$value"; fi ;;
@@ -351,6 +355,10 @@ jobs:
 
           if [ -s "$selfhost_file" ]; then
             selfhost_hash=$(awk '{print $1}' "$selfhost_file")
+          fi
+
+          if [ "$module_preflight" != "enabled" ]; then
+            module_preflight_json="n/a"
           fi
 
           if [ -z "$first_failure" ]; then
@@ -385,6 +393,7 @@ jobs:
             echo "- strict local mode: ${strict_local}"
             echo "- cold-start guard: ${cold_start_guard}"
             echo "- module preflight: ${module_preflight} (${module_preflight_entry})"
+            echo "- module preflight json: ${module_preflight_json}"
             echo "- module preflight runtime: ${module_preflight_s}s (max RSS ${module_preflight_rss} KB)"
             echo "- module preflight diagnostics: ok=${module_preflight_ok}, errors=${module_preflight_errors}, warnings=${module_preflight_warnings}"
             echo "- module preflight first diagnostic: ${module_preflight_first_diag}"

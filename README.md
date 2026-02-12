@@ -262,6 +262,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_DEEP=1 ./scripts/bootstrap_heavy_gate.sh
 # heavy gate 资源指标（含 gate2 峰值 RSS / timeout 配置 / 每步 exit code）
 cat /tmp/bootstrap-heavy-metrics.txt
 cat /tmp/bootstrap-heavy-resource.log
+# module preflight JSON 原始输出路径也会写入 metrics 的 module_preflight_json 字段（CI artifact 同步上传 /tmp/kx-module-preflight-*.json）
 # 严格限载自检（是否命中 strict-local 预设 + 当前 vmem cap）
 grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_safe_max_vmem_kb|reuse_only_enabled)=" /tmp/bootstrap-heavy-metrics.txt
 # 或使用脚本化校验（断言 strict-local 关键开关命中）

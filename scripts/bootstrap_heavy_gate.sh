@@ -399,6 +399,7 @@ gate1_seconds=$((SECONDS - gate1_start))
 
 module_preflight_mode="unknown"
 module_preflight_entry="n/a"
+module_preflight_json="n/a"
 module_preflight_seconds="n/a"
 module_preflight_maxrss_kb="n/a"
 module_preflight_ok="n/a"
@@ -422,6 +423,7 @@ compiler_main_smoke_stage4_run_maxrss_kb="n/a"
 
 module_preflight_mode="$(resource_metric_or_default module_preflight unknown)"
 module_preflight_entry="$(resource_metric_or_default module_preflight_entry n/a)"
+module_preflight_json="$(resource_metric_or_default module_preflight_json n/a)"
 module_preflight_ok="$(resource_metric_or_default module_preflight_ok n/a)"
 module_preflight_errors="$(resource_metric_or_default module_preflight_errors n/a)"
 module_preflight_warnings="$(resource_metric_or_default module_preflight_warnings n/a)"
@@ -429,6 +431,8 @@ module_preflight_first_diagnostic="$(resource_metric_or_default module_preflight
 if [[ "$module_preflight_mode" == "enabled" ]]; then
   module_preflight_seconds="$(resource_metric_or_default module_preflight_check_seconds n/a)"
   module_preflight_maxrss_kb="$(resource_metric_or_default module_preflight_check_maxrss_kb n/a)"
+else
+  module_preflight_json="n/a"
 fi
 
 if is_enabled "$HEAVY_IMPORT_SMOKE"; then
@@ -527,6 +531,7 @@ fi
   echo "cold_start_guard=$COLD_START_GUARD_LABEL"
   echo "module_preflight_enabled=$module_preflight_mode"
   echo "module_preflight_entry=$module_preflight_entry"
+  echo "module_preflight_json=$module_preflight_json"
   echo "module_preflight_seconds=$module_preflight_seconds"
   echo "module_preflight_maxrss_kb=$module_preflight_maxrss_kb"
   echo "module_preflight_ok=$module_preflight_ok"
