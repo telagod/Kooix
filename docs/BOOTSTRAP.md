@@ -203,6 +203,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 # 启用 compiler_main 二段闭环 smoke（stage3 编译器 -> stage4 stage2_min -> run）
 CARGO_BUILD_JOBS=1 KX_HEAVY_COMPILER_MAIN_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
+# 严格限载最小回归（默认 16 GiB vmem + reuse-only + compiler_main 二段 smoke）
+CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh
+
 # 启用 import namespace smoke（覆盖 import "x" as Foo; Foo::bar 与 Foo::Option::Some）
 CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 

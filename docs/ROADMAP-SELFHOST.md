@@ -134,3 +134,5 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD5：新增可选 import namespace gate：`bootstrap-heavy` 在 gate1 可通过 `KX_HEAVY_IMPORT_SMOKE=1`（或 dispatch `run_import_smoke=true`）覆盖 `import "x" as Foo; Foo::bar` 与 `Foo::Option::Some`，并导出对应 IR/二进制 artifact。
   - 验证命令（2026-02-11）：`./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main && /tmp/kx-stage3-compiler-main stage1/stage2_min.kooix /tmp/kx-stage4-stage2-min.ll /tmp/kx-stage4-stage2-min && /tmp/kx-stage4-stage2-min`。
   - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_REUSE_ONLY=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh`（低资源复用模式下执行 `compiler_main` 二段闭环 smoke）。
+  - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh`（严格限载预设回归通过，本地）。
+  - CI 记录（2026-02-12）：`bootstrap-heavy` workflow_dispatch（run id `21934708384`）成功，`ci` push 校验（run id `21934821843`、`21934899933`）均成功。
