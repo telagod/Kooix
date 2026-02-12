@@ -15,11 +15,12 @@
 3. **L2 Self-Compile (Bootstrap)**：`kooixc0` 编译出 `kooixc1`，且 `kooixc1` 能编译自身得到 `kooixc2`。
 4. **L3 Reproducible Bootstrap**：`kooixc1` 与 `kooixc2` 对同一输入产生可比对输出（语义等价为底线，bit-identical 为进阶）。
 
-## 当前状态（截至 2026-02-11）
+## 当前状态（截至 2026-02-12）
 
 - 现状：仓库目前是 **AI-native 强类型 DSL/MVP**，能做声明级检查与 workflow 数据流类型推导；已支持函数体/基础表达式的解析与类型检查（Frontend），并提供最小 interpreter（纯函数体子集、禁用 effects，支持 enum/match）。
 - 进展：bootstrap 链路已跑通 v0（Stage1 Kooix 代码生成 LLVM IR 文本并通过 `native-llvm` 链接运行；当前目标程序为 `stage1/stage2_min.kooix`，输出 `/tmp/kooixc_stage2.ll`；已覆盖 block expr（含 stmtful `let`）并保证 phi incoming block label 正确性）。已新增 v0.1 Text smoke（StringLit 常量 + `text_concat/int_to_text/text_len/text_starts_with`；目标 `stage1/stage2_text_smoke.kooix`，输出 `/tmp/kooixc_stage2_text.ll`），v0.2 Text eq（`==/!=` via `strcmp`；目标 `stage1/stage2_text_eq_smoke.kooix`，输出 `/tmp/kooixc_stage2_text_eq.ll`），v0.3 host_eprintln smoke（目标 `stage1/stage2_host_eprintln_smoke.kooix`，输出 `/tmp/kooixc_stage2_host_eprintln.ll`），v0.4 enum/match/IO smoke（Stage2 侧新增 `%Option/%Result` enum layout、`Option<Int>` ctor + 2-arm `match`、`host_write_file/host_load_source_map` lowering；目标 `stage1/stage2_option_match_smoke.kooix` 输出 `/tmp/kooixc_stage2_option_match.ll`，目标 `stage1/stage2_host_write_file_smoke.kooix` 输出 `/tmp/kooixc_stage2_host_write_file.ll`），v0.5 `text_byte_at` smoke（Stage2 侧新增 `text_byte_at(Text, Int) -> Option<Int>` lowering；目标 `stage1/stage2_text_byte_at_smoke.kooix` 输出 `/tmp/kooixc_stage2_text_byte_at.ll`），v0.6 `text_slice` smoke（Stage2 侧新增 `text_slice(Text, Int, Int) -> Option<Text>` lowering；目标 `stage1/stage2_text_slice_smoke.kooix` 输出 `/tmp/kooixc_stage2_text_slice.ll`），v0.7 lexer canary（Stage2 侧新增 `byte_is_ascii_*` lowering；目标 `stage1/stage2_lexer_canary_smoke.kooix` 输出 `/tmp/kooixc_stage2_lexer_canary.ll`），v0.8 lexer ident smoke（目标 `stage1/stage2_lexer_ident_smoke.kooix` 输出 `/tmp/kooixc_stage2_lexer_ident.ll`），v0.9 typed direct call smoke（Stage2 侧扩展“非 Int-only 的函数签名/调用”能力：`Text/Bool` 参数与返回；目标 `stage1/stage2_fn_text_call_smoke.kooix` 输出 `/tmp/kooixc_stage2_fn_text_call.ll`），v0.10 List smoke（Stage2 侧新增 List<T> lowering：`%List` enum layout、`Nil/Cons` ctor、`match List`、`ListCons<T>` record literal + member access；目标 `stage1/stage2_list_smoke.kooix` 输出 `/tmp/kooixc_stage2_list.ll`），v0.11 import loader smoke（Stage2 侧验证 include 风格 `import "path";` 的 source-map 展开与链接：目标 `stage1/stage2_import_smoke.kooix` + `stage1/stage2_import_lib.kooix` 输出 `/tmp/kooixc_stage2_import.ll`），v0.12 stage1 compiler IR emit（Stage1 直接对 `stage1/compiler_main.kooix` 生成 LLVM IR：`stage1/self_host_stage1_compiler_main.kooix` → `/tmp/kooixc_stage2_stage1_compiler.ll`；LLVM emitter 改为“按 function 分 chunk 收集 + round-based join”，避免 `text_concat` 二次方内存爆炸），以及 v0.13 stage2 self-emit（运行 v0.12 产出的 stage2 compiler，再次对 `stage1/compiler_main.kooix` 生成 IR：输出 `/tmp/kooixc_stage3_stage1_compiler.ll`）。另：native runtime 增加 `kx_runtime_init`（best-effort 提升 stack limit），并提供 `main(argc, argv)` wrapper 调用 `kx_program_main` 以暴露 `host_argc/host_argv` 做 CLI；`stage1/compiler_main.kooix` 支持 argv 传入 entry/out；Stage1 lexer 增加 string escapes（`\\n/\\r/\\t/\\\"/\\\\`）以保证 stage2 emit 的 LLVM IR 换行是可被 `llc` 解析的真实换行。
 - 补充：新增 v0.14 host_read_file smoke（目标 `stage1/stage2_host_read_file_smoke.kooix` 输出 `/tmp/kooixc_stage2_host_read_file.ll`），验证 `host_read_file` 在 Stage1 emitter / Stage2 runtime 链路可跑通。
+- 补充：新增 v0.15 import namespace enum variant smoke（目标 `examples/import_variant_main.kooix` 输出 `/tmp/kooixc_stage3_examples_import_variant_main.ll`，目标 `stage1/stage2_import_variant_smoke.kooix` 输出 `/tmp/kooixc_stage3_stage2_import_variant.ll`），覆盖 `import "x" as Foo; Foo::Option::Some/Foo::Option::None`。
 - 补充：已验证 `dist/kooixc1` 对 Stage1 真实模块子图的编译+链接+运行链路（`lexer/parser/typecheck/resolver`）。推荐低资源命令：`CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh`（该开关会自动启用 `KX_SMOKE_S1_LEXER/PARSER/TYPECHECK/RESOLVER`）。
 - 补充：已验证 `compiler_main` 关键路径 smoke：`dist/kooixc1` 可编译 `stage1/compiler_main.kooix` 生成 stage3 compiler，再由该编译器编译并运行 `stage1/stage2_min.kooix`（exit=0）。
 - 补充：Stage1 侧新增 Kooix 实现的 include loader：`stage1/source_map.kooix:s1_load_source_map`（基于 `host_read_file` 扫描并递归展开顶层 `import "path";`），并将 `stage1/compiler_main.kooix` 与 `stage1/self_host_*_main.kooix` 的入口加载从 `host_load_source_map` 切换为该实现，以减少对“host 级复合 intrinsics”的依赖。
@@ -67,7 +68,7 @@
 - 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）；workflow 内部默认启用 `KX_HEAVY_SAFE_MODE=1` 与 timeout 配额。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
 - 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS 与 timeout/限载配置），写入 summary + artifact。
-- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke（`Foo::bar` + `Foo::Option::Some`），`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
 
 ## 一键复现（v0.13）
 
@@ -89,7 +90,7 @@
 KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
-可选 smoke（验证 stage3 compiler 的 import loader / stdlib prelude 在更贴近日常用法的目标上可跑通；`KX_SMOKE_IMPORT` 额外覆盖 `import "x" as Foo; Foo::bar`）：
+可选 smoke（验证 stage3 compiler 的 import loader / stdlib prelude 在更贴近日常用法的目标上可跑通；`KX_SMOKE_IMPORT` 额外覆盖 `import "x" as Foo; Foo::bar` 与 `Foo::Option::Some`）：
 
 ```bash
 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
@@ -184,7 +185,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # 启用 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
-# 启用 import namespace smoke（覆盖 import "x" as Foo; Foo::bar）
+# 启用 import namespace smoke（覆盖 import "x" as Foo; Foo::bar 与 Foo::Option::Some）
 CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 启用 self-host 收敛对比（stage3/stage4 emit compiler_main IR 一致性）

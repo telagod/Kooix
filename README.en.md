@@ -194,7 +194,7 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 # Optional: include stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
 
-# Optional: import namespace smoke (covers import "x" as Foo; Foo::bar)
+# Optional: import namespace smoke (covers import "x" as Foo; Foo::bar and Foo::Option::Some)
 CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 
 # Optional: self-host IR convergence smoke (stage3->stage4->stage5 compiler_main IR equality)
@@ -217,7 +217,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # Optional: enable stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
-# Optional: enable import namespace smoke (covers import "x" as Foo; Foo::bar)
+# Optional: enable import namespace smoke (covers import "x" as Foo; Foo::bar and Foo::Option::Some)
 CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable self-host convergence check (stage3/stage4 compiler_main IR equality)
@@ -258,6 +258,8 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - `examples/import_lib.kooix`
   - `examples/import_alias_main.kooix`
   - `examples/import_alias_lib.kooix`
+  - `examples/import_variant_main.kooix`
+  - `examples/import_variant_lib.kooix`
   - `examples/module_check_gate_warn.kooix`
   - `examples/module_check_gate_error.kooix`
   - `examples/stdlib_smoke.kooix`

@@ -312,6 +312,37 @@ if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   run_limited smoke_s1_import_alias_run "$TIMEOUT_SMOKE" "$SMOKE_S1_ALIAS_BIN" >/dev/null
 
   echo "ok: smoke binary ran: $SMOKE_S1_ALIAS_BIN"
+
+  echo "[smoke] stage3 compiler compiles examples/import_variant_main and runs it (namespace enum variant: Foo::Option::Some)"
+  SMOKE_VARIANT_IR="/tmp/kooixc_stage3_examples_import_variant_main.ll"
+  SMOKE_VARIANT_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-variant-main"
+  rm -f "$SMOKE_VARIANT_IR" "$SMOKE_VARIANT_BIN"
+
+  run_limited smoke_import_variant_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" examples/import_variant_main.kooix "$SMOKE_VARIANT_IR" "$SMOKE_VARIANT_BIN" >/dev/null
+  test -s "$SMOKE_VARIANT_IR"
+  test -x "$SMOKE_VARIANT_BIN"
+  set +e
+  run_limited smoke_import_variant_run "$TIMEOUT_SMOKE" "$SMOKE_VARIANT_BIN" >/dev/null
+  code="$?"
+  set -e
+  if [[ "$code" != "42" ]]; then
+    echo "smoke failure: expected exit=42, got exit=$code ($SMOKE_VARIANT_BIN)" >&2
+    exit 1
+  fi
+
+  echo "ok: smoke binary ran: $SMOKE_VARIANT_BIN"
+
+  echo "[smoke] stage3 compiler compiles stage1/stage2_import_variant_smoke and runs it (stage1 namespace enum variant)"
+  SMOKE_S1_VARIANT_IR="/tmp/kooixc_stage3_stage2_import_variant.ll"
+  SMOKE_S1_VARIANT_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-import-variant"
+  rm -f "$SMOKE_S1_VARIANT_IR" "$SMOKE_S1_VARIANT_BIN"
+
+  run_limited smoke_s1_import_variant_compile "$TIMEOUT_SMOKE" "$STAGE3_BIN" stage1/stage2_import_variant_smoke.kooix "$SMOKE_S1_VARIANT_IR" "$SMOKE_S1_VARIANT_BIN" >/dev/null
+  test -s "$SMOKE_S1_VARIANT_IR"
+  test -x "$SMOKE_S1_VARIANT_BIN"
+  run_limited smoke_s1_import_variant_run "$TIMEOUT_SMOKE" "$SMOKE_S1_VARIANT_BIN" >/dev/null
+
+  echo "ok: smoke binary ran: $SMOKE_S1_VARIANT_BIN"
 fi
 
 if is_enabled "${KX_SMOKE_STDLIB:-0}"; then

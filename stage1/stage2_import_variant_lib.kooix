@@ -1,0 +1,4 @@
+enum Option<T> { Some(T); None; };
+
+fn mk_some(x: Int) -> Option<Int> { Option::Some(x) };
+fn mk_none() -> Option<Int> { Option::None() };

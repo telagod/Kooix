@@ -431,8 +431,17 @@ fn s1_tc_enum_ctx_from_type(
         Some(pair) => {
           match s1_mod_lookup(mods, pair.a) {
             None => {
-              ok = false;
-              diag = s1_diag(Error, 0, 0, "typecheck: match scrutinee uses unknown imported module");
+              // Include-style fallback: imported file items are flattened into local scope.
+              enum_opt = s1_tc_lookup_enum(items, pair.b);
+              ty_path_out = s1_tc_simple_path(pair.b);
+              match enum_opt {
+                None => {
+                  ok = false;
+                  diag = s1_diag(Error, 0, 0, "typecheck: match scrutinee uses unknown imported module");
+                  0
+                };
+                Some(_) => 0;
+              };
               0
             };
             Some(m) => {
@@ -2139,12 +2148,19 @@ fn s1_tc_expr_type(
                         };
 
                         let expect: S1Path = s1_tc_ns_path2(ns, en);
+                        let expect_local: S1Path = s1_tc_simple_path(en);
                         if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
                           vn = vv;
                           0
                         } else {
-                          ok = false;
-                          diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                          if s1_tc_texts_eq(expect_local.segments, ctx.ty_path.segments) == true {
+                            vn = vv;
+                            0
+                          } else {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                            0
+                          };
                           0
                         };
                         0
@@ -2247,12 +2263,19 @@ fn s1_tc_expr_type(
                         };
 
                         let expect: S1Path = s1_tc_ns_path2(ns, en);
+                        let expect_local: S1Path = s1_tc_simple_path(en);
                         if s1_tc_texts_eq(expect.segments, ctx.ty_path.segments) == true {
                           vn = vv;
                           0
                         } else {
-                          ok = false;
-                          diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                          if s1_tc_texts_eq(expect_local.segments, ctx.ty_path.segments) == true {
+                            vn = vv;
+                            0
+                          } else {
+                            ok = false;
+                            diag = s1_diag(Error, 0, 0, "typecheck: match pattern targets different enum");
+                            0
+                          };
                           0
                         };
                         0

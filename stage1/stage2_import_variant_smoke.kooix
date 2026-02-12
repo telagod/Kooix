@@ -1,0 +1,17 @@
+import "stage2_import_variant_lib" as Lib;
+
+fn main() -> Int {
+  let a: Int = match Lib::mk_some(7) {
+    Lib::Option::Some(v) => v;
+    Lib::Option::None => 0;
+  };
+
+  let b: Int = match Lib::mk_none() {
+    Lib::Option::Some(v) => v;
+    Lib::Option::None => 0;
+  };
+
+  if a == 7 {
+    if b == 0 { 0 } else { 1 }
+  } else { 1 }
+};

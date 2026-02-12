@@ -192,7 +192,7 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 # 可选：增加 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
 
-# 可选：import namespace smoke（含 import "x" as Foo; Foo::bar）
+# 可选：import namespace smoke（含 import "x" as Foo; Foo::bar 与 Foo::Option::Some）
 CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
 
 # 可选：开启 self-host IR 收敛 smoke（stage3->stage4->stage5 的 compiler_main IR 一致性）
@@ -215,7 +215,7 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 # 可选：开启 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
 
-# 可选：开启 import namespace smoke（覆盖 import "x" as Foo; Foo::bar）
+# 可选：开启 import namespace smoke（覆盖 import "x" as Foo; Foo::bar 与 Foo::Option::Some）
 CARGO_BUILD_JOBS=1 KX_HEAVY_IMPORT_SMOKE=1 ./scripts/bootstrap_heavy_gate.sh
 
 # 可选：开启 self-host 收敛对比（stage3/stage4 emit compiler_main IR 一致性）
@@ -256,6 +256,8 @@ cargo test -p kooixc -j 2 -- --test-threads=1
   - `examples/import_lib.kooix`
   - `examples/import_alias_main.kooix`
   - `examples/import_alias_lib.kooix`
+  - `examples/import_variant_main.kooix`
+  - `examples/import_variant_lib.kooix`
   - `examples/module_check_gate_warn.kooix`
   - `examples/module_check_gate_error.kooix`
   - `examples/stdlib_smoke.kooix`

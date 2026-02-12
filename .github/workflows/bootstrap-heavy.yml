@@ -120,10 +120,14 @@ jobs:
             /tmp/kx-selfhost-eq.ll
             dist/kooixc-stage3-examples-import-main
             dist/kooixc-stage3-examples-import-alias-main
+            dist/kooixc-stage3-examples-import-variant-main
             dist/kooixc-stage3-stage2-import-alias
+            dist/kooixc-stage3-stage2-import-variant
             /tmp/kooixc_stage3_examples_import_main.ll
             /tmp/kooixc_stage3_examples_import_alias_main.ll
+            /tmp/kooixc_stage3_examples_import_variant_main.ll
             /tmp/kooixc_stage3_stage2_import_alias.ll
+            /tmp/kooixc_stage3_stage2_import_variant.ll
             dist/kooixc-stage3-stage2-s1-compiler-module-smoke
             /tmp/kooixc_stage3_stage2_s1_compiler_module_smoke.ll
             /tmp/bootstrap-heavy-bootstrap.log
