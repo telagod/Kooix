@@ -169,6 +169,14 @@ jobs:
           gate2_stage3_rss="n/a"
           gate2_stage4_rss="n/a"
           gate2_stage4_run_rss="n/a"
+          import_variant_compile_s="n/a"
+          import_variant_compile_rss="n/a"
+          import_variant_run_s="n/a"
+          import_variant_run_rss="n/a"
+          stage1_import_variant_compile_s="n/a"
+          stage1_import_variant_compile_rss="n/a"
+          stage1_import_variant_run_s="n/a"
+          stage1_import_variant_run_rss="n/a"
           det_hash="n/a"
           selfhost_hash="n/a"
 
@@ -197,6 +205,14 @@ jobs:
                 gate2_stage3_compile_maxrss_kb) gate2_stage3_rss="$value" ;;
                 gate2_stage4_compile_maxrss_kb) gate2_stage4_rss="$value" ;;
                 gate2_stage4_run_maxrss_kb) gate2_stage4_run_rss="$value" ;;
+                import_variant_compile_seconds) import_variant_compile_s="$value" ;;
+                import_variant_compile_maxrss_kb) import_variant_compile_rss="$value" ;;
+                import_variant_run_seconds) import_variant_run_s="$value" ;;
+                import_variant_run_maxrss_kb) import_variant_run_rss="$value" ;;
+                stage1_import_variant_compile_seconds) stage1_import_variant_compile_s="$value" ;;
+                stage1_import_variant_compile_maxrss_kb) stage1_import_variant_compile_rss="$value" ;;
+                stage1_import_variant_run_seconds) stage1_import_variant_run_s="$value" ;;
+                stage1_import_variant_run_maxrss_kb) stage1_import_variant_run_rss="$value" ;;
                 selfhost_eq_sha256) selfhost_hash="$value" ;;
               esac
             done < "$metrics_file"
@@ -226,6 +242,10 @@ jobs:
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
             echo "- gate2 (compiler_main two-hop): ${gate2}s"
             echo "- gate2 max RSS (stage3/stage4/run): ${gate2_stage3_rss} KB / ${gate2_stage4_rss} KB / ${gate2_stage4_run_rss} KB"
+            echo "- import variant smoke (examples compile/run): ${import_variant_compile_s}s / ${import_variant_run_s}s"
+            echo "- import variant smoke RSS (examples compile/run): ${import_variant_compile_rss} KB / ${import_variant_run_rss} KB"
+            echo "- import variant smoke (stage1 compile/run): ${stage1_import_variant_compile_s}s / ${stage1_import_variant_run_s}s"
+            echo "- import variant smoke RSS (stage1 compile/run): ${stage1_import_variant_compile_rss} KB / ${stage1_import_variant_run_rss} KB"
             echo "- gate3 (self-host + determinism): ${gate3}s"
             echo "- total: ${total}s"
             echo "- self-host convergence sha256: ${selfhost_hash}"
