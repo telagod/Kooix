@@ -170,6 +170,8 @@ KX_REUSE_STAGE3=1 ./scripts/bootstrap_v0_13.sh
 # If stage3 is missing but stage2 still exists, rebuild stage3 from dist/kooixc-stage2
 KX_REUSE_STAGE2=1 ./scripts/bootstrap_v0_13.sh
 
+# Note: all KX_* toggles are boolean (1/true/on = enabled, 0/false/off = disabled)
+
 # Shortest loop: use dist/kooixc1 to compile+link a program (stage2_min)
 ./dist/kooixc1 stage1/stage2_min.kooix /tmp/kx-stage2-min.ll /tmp/kx-stage2-min
 /tmp/kx-stage2-min
@@ -180,6 +182,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 
 # Optional: include stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
+
+# Optional: self-host IR convergence smoke (stage3->stage4->stage5 compiler_main IR equality)
+CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_heavy_gate.sh
@@ -192,6 +197,9 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_REUSE_ONLY=1 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_HEAVY_S1_COMPILER=1 ./scripts/bootstrap_heavy_gate.sh
+
+# Optional: enable self-host convergence check (stage3/stage4 compiler_main IR equality)
+CARGO_BUILD_JOBS=1 KX_HEAVY_SELFHOST_EQ=1 ./scripts/bootstrap_heavy_gate.sh
 
 # Optional: enable determinism compare
 CARGO_BUILD_JOBS=1 KX_HEAVY_DETERMINISM=1 ./scripts/bootstrap_heavy_gate.sh

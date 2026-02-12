@@ -93,14 +93,14 @@ if [[ "$STAGE3_ALIAS" != "$STAGE3_BIN" ]]; then
 fi
 echo "ok: $STAGE3_ALIAS"
 
-if [[ "${KX_SMOKE_S1_CORE:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_CORE:-0}"; then
   KX_SMOKE_S1_LEXER=1
   KX_SMOKE_S1_PARSER=1
   KX_SMOKE_S1_TYPECHECK=1
   KX_SMOKE_S1_RESOLVER=1
 fi
 
-if [[ "${KX_SMOKE:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE:-0}"; then
   echo "[smoke] stage3 compiler compiles stage2_min and runs it"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_min.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-min"
@@ -114,7 +114,7 @@ if [[ "${KX_SMOKE:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_IMPORT:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   echo "[smoke] stage3 compiler compiles examples/import_main and runs it (import loader)"
   SMOKE_IR="/tmp/kooixc_stage3_examples_import_main.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-main"
@@ -135,7 +135,7 @@ if [[ "${KX_SMOKE_IMPORT:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_STDLIB:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_STDLIB:-0}"; then
   echo "[smoke] stage3 compiler compiles examples/stdlib_smoke and runs it (stdlib/prelude)"
   SMOKE_IR="/tmp/kooixc_stage3_examples_stdlib_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-examples-stdlib-smoke"
@@ -156,7 +156,7 @@ if [[ "${KX_SMOKE_STDLIB:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_HOST_READ:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_HOST_READ:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_host_read_file_smoke and runs it (host_read_file)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_host_read_file.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-host-read-file"
@@ -177,7 +177,7 @@ if [[ "${KX_SMOKE_HOST_READ:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_S1_LEXER:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_LEXER:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_lexer_module_smoke and runs it (imports stage1/lexer)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_lexer_module_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-lexer-module-smoke"
@@ -191,7 +191,7 @@ if [[ "${KX_SMOKE_S1_LEXER:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_S1_PARSER:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_PARSER:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_parser_module_smoke and runs it (imports stage1/parser)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_parser_module_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-parser-module-smoke"
@@ -205,7 +205,7 @@ if [[ "${KX_SMOKE_S1_PARSER:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_S1_TYPECHECK:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_TYPECHECK:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_typecheck_module_smoke and runs it (imports stage1/typecheck)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_typecheck_module_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-typecheck-module-smoke"
@@ -219,7 +219,7 @@ if [[ "${KX_SMOKE_S1_TYPECHECK:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_S1_RESOLVER:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_RESOLVER:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_resolver_module_smoke and runs it (imports stage1/resolver)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_resolver_module_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-resolver-module-smoke"
@@ -233,7 +233,7 @@ if [[ "${KX_SMOKE_S1_RESOLVER:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_SMOKE_S1_COMPILER:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_S1_COMPILER:-0}"; then
   echo "[smoke] stage3 compiler compiles stage1/stage2_s1_compiler_module_smoke and runs it (imports stage1/compiler)"
   SMOKE_IR="/tmp/kooixc_stage3_stage2_s1_compiler_module_smoke.ll"
   SMOKE_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-s1-compiler-module-smoke"
@@ -247,7 +247,26 @@ if [[ "${KX_SMOKE_S1_COMPILER:-}" != "" ]]; then
   echo "ok: smoke binary ran: $SMOKE_BIN"
 fi
 
-if [[ "${KX_DEEP:-}" != "" ]]; then
+if is_enabled "${KX_SMOKE_SELFHOST_EQ:-0}"; then
+  echo "[smoke] self-host IR convergence (stage3->stage4->stage5 for compiler_main)"
+  rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
+
+  "$STAGE3_BIN" stage1/compiler_main.kooix "$STAGE4_IR" "$STAGE4_BIN" >/dev/null
+  test -s "$STAGE4_IR"
+  test -x "$STAGE4_BIN"
+
+  "$STAGE4_BIN" stage1/compiler_main.kooix "$STAGE5_IR" >/dev/null
+  test -s "$STAGE5_IR"
+
+  selfhost_sha4=$(sha256sum "$STAGE4_IR" | awk '{print $1}')
+  selfhost_sha5=$(sha256sum "$STAGE5_IR" | awk '{print $1}')
+  test "$selfhost_sha4" = "$selfhost_sha5"
+  cmp -s "$STAGE4_IR" "$STAGE5_IR"
+
+  echo "ok: self-host IR convergence sha256=$selfhost_sha4"
+fi
+
+if is_enabled "${KX_DEEP:-0}"; then
   echo "[deep] stage3 -> stage4 compiler (binary), then stage4 -> stage5 IR"
   rm -f "$STAGE4_IR" "$STAGE4_BIN" "$STAGE5_IR"
 

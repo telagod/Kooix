@@ -18,6 +18,7 @@ HEAVY_REUSE_STAGE3="${KX_HEAVY_REUSE_STAGE3:-1}"
 HEAVY_REUSE_STAGE2="${KX_HEAVY_REUSE_STAGE2:-1}"
 HEAVY_REUSE_ONLY="${KX_HEAVY_REUSE_ONLY:-0}"
 HEAVY_S1_COMPILER="${KX_HEAVY_S1_COMPILER:-0}"
+HEAVY_SELFHOST_EQ="${KX_HEAVY_SELFHOST_EQ:-0}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
@@ -26,8 +27,10 @@ STAGE4_LL="/tmp/kx-stage4-stage2-min.ll"
 STAGE4_BIN="/tmp/kx-stage4-stage2-min"
 DET_A_LL="/tmp/kx-det-a.ll"
 DET_B_LL="/tmp/kx-det-b.ll"
+SELFHOST_EQ_LL="/tmp/kx-selfhost-eq.ll"
 METRICS_FILE="/tmp/bootstrap-heavy-metrics.txt"
 DET_SHA_FILE="/tmp/bootstrap-heavy-determinism.sha256"
+SELFHOST_EQ_SHA_FILE="/tmp/bootstrap-heavy-selfhost.sha256"
 BOOTSTRAP_LOG="/tmp/bootstrap-heavy-bootstrap.log"
 
 is_enabled() {
@@ -44,8 +47,10 @@ rm -f \
   "$STAGE4_BIN" \
   "$DET_A_LL" \
   "$DET_B_LL" \
+  "$SELFHOST_EQ_LL" \
   "$METRICS_FILE" \
   "$DET_SHA_FILE" \
+  "$SELFHOST_EQ_SHA_FILE" \
   "$BOOTSTRAP_LOG"
 
 if is_enabled "$HEAVY_DEEP"; then
@@ -84,7 +89,13 @@ else
   S1_COMPILER_LABEL="disabled"
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL"
+if is_enabled "$HEAVY_SELFHOST_EQ"; then
+  SELFHOST_EQ_LABEL="enabled"
+else
+  SELFHOST_EQ_LABEL="disabled"
+fi
+
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
@@ -123,6 +134,20 @@ echo "[gate 2/3] compiler_main two-hop loop"
 gate2_seconds=$((SECONDS - gate2_start))
 
 gate3_start="$SECONDS"
+selfhost_sha=""
+if is_enabled "$HEAVY_SELFHOST_EQ"; then
+  echo "[gate 3/3] self-host convergence smoke"
+  "$STAGE3_COMPILER_BIN" stage1/compiler_main.kooix "$SELFHOST_EQ_LL" >/dev/null
+  stage3_sha=$(sha256sum "$STAGE3_LL" | awk '{print $1}')
+  selfhost_sha=$(sha256sum "$SELFHOST_EQ_LL" | awk '{print $1}')
+  test "$stage3_sha" = "$selfhost_sha"
+  cmp -s "$STAGE3_LL" "$SELFHOST_EQ_LL"
+  printf '%s  %s\n' "$selfhost_sha" "stage1/compiler_main.kooix" > "$SELFHOST_EQ_SHA_FILE"
+  echo "ok: self-host convergence sha256=$selfhost_sha"
+else
+  echo "[gate 3/3] self-host convergence skipped (KX_HEAVY_SELFHOST_EQ=$HEAVY_SELFHOST_EQ)"
+fi
+
 if is_enabled "$HEAVY_DETERMINISM"; then
   echo "[gate 3/3] compiler_main determinism smoke"
   "$STAGE3_BIN" stage1/compiler_main.kooix "$DET_A_LL" >/dev/null
@@ -135,7 +160,7 @@ if is_enabled "$HEAVY_DETERMINISM"; then
   echo "ok: determinism sha256=$sha_a"
 else
   sha_a=""
-  echo "[gate 3/3] skipped (KX_HEAVY_DETERMINISM=$HEAVY_DETERMINISM)"
+  echo "[gate 3/3] determinism skipped (KX_HEAVY_DETERMINISM=$HEAVY_DETERMINISM)"
 fi
 gate3_seconds=$((SECONDS - gate3_start))
 
@@ -154,10 +179,15 @@ total_seconds=$((gate1_seconds + gate2_seconds + gate3_seconds))
   echo "reuse_stage2_hit=$REUSE_STAGE2_HIT"
   echo "reuse_only_enabled=$REUSE_ONLY_LABEL"
   echo "s1_compiler_smoke_enabled=$S1_COMPILER_LABEL"
+  echo "selfhost_eq_enabled=$SELFHOST_EQ_LABEL"
+  echo "selfhost_eq_sha256=${selfhost_sha}"
   echo "determinism_sha256=${sha_a}"
 } > "$METRICS_FILE"
 
 echo "ok: metrics saved: $METRICS_FILE"
+if [ -s "$SELFHOST_EQ_SHA_FILE" ]; then
+  echo "ok: self-host convergence hash saved: $SELFHOST_EQ_SHA_FILE"
+fi
 if [ -s "$DET_SHA_FILE" ]; then
   echo "ok: determinism hash saved: $DET_SHA_FILE"
 fi
