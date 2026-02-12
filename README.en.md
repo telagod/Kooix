@@ -183,6 +183,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 # Optional: include stage1/compiler module smoke
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
 
+# Optional: import namespace smoke (covers import "x" as Foo; Foo::bar)
+CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
+
 # Optional: self-host IR convergence smoke (stage3->stage4->stage5 compiler_main IR equality)
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 

@@ -1,0 +1,6 @@
+import "stage2_import_lib" as Lib;
+
+fn main() -> Int {
+  let v: Int = Lib::add1(41);
+  if v == 42 { 0 } else { 1 }
+};

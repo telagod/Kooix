@@ -692,6 +692,41 @@ fn s1_tc_lookup_fn(fns: List<S1FnSig>, name: Text) -> Option<S1FnSig> {
   out
 };
 
+fn s1_tc_has_import_ns(items: List<S1Item>, ns: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => {
+        done = true;
+        0
+      };
+      Cons(cell) => {
+        match cell.head {
+          Import(imp) => {
+            if imp.ns == ns {
+              found = true;
+              done = true;
+              0
+            } else {
+              cur = cell.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = cell.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  found
+};
+
 fn s1_tc_lookup_enum(items: List<S1Item>, name: Text) -> Option<S1Enum> {
   let out: Option<S1Enum> = None;
   let cur: List<S1Item> = items;
@@ -2659,12 +2694,33 @@ fn s1_tc_expr_type(
                         variant_name = pair.b;
                         enum_opt = s1_tc_lookup_enum(items, pair.a);
                         match enum_opt {
+                          Some(_) => 0;
                           None => {
-                            ok = false;
-                            diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                            if s1_tc_has_import_ns(items, pair.a) == true {
+                              let fallback_call: S1Expr =
+                                S1Expr.Call(S1Call { callee: S1Expr.Path(s1_tc_simple_path(pair.b)); args: c.args; });
+                              let fallback_r: Result<S1Type, S1Diagnostic> =
+                                s1_tc_expr_type(items, mods, fns, env, expected, fallback_call);
+                              match fallback_r {
+                                Err(e2) => {
+                                  ok = false;
+                                  diag = e2;
+                                  0
+                                };
+                                Ok(t2) => {
+                                  ty = t2;
+                                  handled_import_fn = true;
+                                  0
+                                };
+                              };
+                              0
+                            } else {
+                              ok = false;
+                              diag = s1_diag(Error, 0, 0, "typecheck: unknown enum in constructor call");
+                              0
+                            };
                             0
                           };
-                          Some(_) => 0;
                         };
                         0
                       };

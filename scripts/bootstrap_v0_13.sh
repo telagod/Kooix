@@ -133,6 +133,37 @@ if is_enabled "${KX_SMOKE_IMPORT:-0}"; then
   fi
 
   echo "ok: smoke binary ran: $SMOKE_BIN"
+
+  echo "[smoke] stage3 compiler compiles examples/import_alias_main and runs it (namespace call: Foo::bar)"
+  SMOKE_ALIAS_IR="/tmp/kooixc_stage3_examples_import_alias_main.ll"
+  SMOKE_ALIAS_BIN="${OUT_DIR%/}/kooixc-stage3-examples-import-alias-main"
+  rm -f "$SMOKE_ALIAS_IR" "$SMOKE_ALIAS_BIN"
+
+  "$STAGE3_BIN" examples/import_alias_main.kooix "$SMOKE_ALIAS_IR" "$SMOKE_ALIAS_BIN" >/dev/null
+  test -s "$SMOKE_ALIAS_IR"
+  test -x "$SMOKE_ALIAS_BIN"
+  set +e
+  "$SMOKE_ALIAS_BIN" >/dev/null
+  code="$?"
+  set -e
+  if [[ "$code" != "42" ]]; then
+    echo "smoke failure: expected exit=42, got exit=$code ($SMOKE_ALIAS_BIN)" >&2
+    exit 1
+  fi
+
+  echo "ok: smoke binary ran: $SMOKE_ALIAS_BIN"
+
+  echo "[smoke] stage3 compiler compiles stage1/stage2_import_alias_smoke and runs it (stage1 import alias)"
+  SMOKE_S1_ALIAS_IR="/tmp/kooixc_stage3_stage2_import_alias.ll"
+  SMOKE_S1_ALIAS_BIN="${OUT_DIR%/}/kooixc-stage3-stage2-import-alias"
+  rm -f "$SMOKE_S1_ALIAS_IR" "$SMOKE_S1_ALIAS_BIN"
+
+  "$STAGE3_BIN" stage1/stage2_import_alias_smoke.kooix "$SMOKE_S1_ALIAS_IR" "$SMOKE_S1_ALIAS_BIN" >/dev/null
+  test -s "$SMOKE_S1_ALIAS_IR"
+  test -x "$SMOKE_S1_ALIAS_BIN"
+  "$SMOKE_S1_ALIAS_BIN" >/dev/null
+
+  echo "ok: smoke binary ran: $SMOKE_S1_ALIAS_BIN"
 fi
 
 if is_enabled "${KX_SMOKE_STDLIB:-0}"; then

@@ -181,6 +181,9 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 ./scripts/bootstrap_v0_13.sh
 # 可选：增加 stage1/compiler 模块 smoke
 CARGO_BUILD_JOBS=1 KX_SMOKE_S1_CORE=1 KX_SMOKE_S1_COMPILER=1 ./scripts/bootstrap_v0_13.sh
 
+# 可选：import namespace smoke（含 import "x" as Foo; Foo::bar）
+CARGO_BUILD_JOBS=1 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
+
 # 可选：开启 self-host IR 收敛 smoke（stage3->stage4->stage5 的 compiler_main IR 一致性）
 CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 

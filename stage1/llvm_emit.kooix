@@ -520,6 +520,62 @@ fn s1_cg_path_last_name(path: S1Path) -> Option<Text> {
   out
 };
 
+fn s1_cg_path_two(path: S1Path) -> Option<Pair<Text, Text>> {
+  let out: Option<Pair<Text, Text>> = None;
+  match path.segments {
+    Nil => 0;
+    Cons(c0) => {
+      match c0.tail {
+        Nil => 0;
+        Cons(c1) => {
+          match c1.tail {
+            Nil => {
+              out = Some(Pair<Text, Text> { a: c0.head; b: c1.head; });
+              0
+            };
+            _ => 0;
+          };
+          0
+        };
+      };
+      0
+    };
+  };
+  out
+};
+
+fn s1_cg_has_import_ns(items: List<S1Item>, ns: Text) -> Bool {
+  let found: Bool = false;
+  let cur: List<S1Item> = items;
+  let done: Bool = false;
+  while done == false {
+    match cur {
+      Nil => { done = true; 0 };
+      Cons(c0) => {
+        match c0.head {
+          Import(imp) => {
+            if imp.ns == ns {
+              found = true;
+              done = true;
+              0
+            } else {
+              cur = c0.tail;
+              0
+            };
+            0
+          };
+          _ => {
+            cur = c0.tail;
+            0
+          };
+        };
+        0
+      };
+    }
+  };
+  found
+};
+
 fn s1_cg_lookup_env(env: List<S1CgEnvBind>, name: Text) -> Option<S1CgEnvBind> {
   let out: Option<S1CgEnvBind> = None;
   let cur: List<S1CgEnvBind> = env;
@@ -1972,7 +2028,30 @@ fn s1_cg_emit_expr_min(out: Text, env: List<S1CgEnvBind>, next_tmp: Int, bb: Tex
                 s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: unsupported List variant in v0"))
               }
             } else {
+          let fname_opt: Option<Text> = None;
           match s1_cg_path_single_name(p) {
+            Some(name0) => {
+              fname_opt = Some(name0);
+              0
+            };
+            None => {
+              match s1_cg_path_two(p) {
+                None => 0;
+                Some(pair) => {
+                  if s1_cg_has_import_ns(items, pair.a) == true {
+                    fname_opt = Some(pair.b);
+                    0
+                  } else {
+                    0
+                  };
+                  0
+                };
+              };
+              0
+            };
+          };
+
+          match fname_opt {
             None => s1_cg_expr_err(s1_diag(Error, 0, 0, "codegen: callee path not supported"));
             Some(fname) => {
               // Evaluate args left-to-right.

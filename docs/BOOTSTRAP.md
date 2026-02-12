@@ -89,7 +89,7 @@
 KX_SMOKE=1 ./scripts/bootstrap_v0_13.sh
 ```
 
-可选 smoke（验证 stage3 compiler 的 import loader / stdlib prelude 在更贴近日常用法的目标上可跑通）：
+可选 smoke（验证 stage3 compiler 的 import loader / stdlib prelude 在更贴近日常用法的目标上可跑通；`KX_SMOKE_IMPORT` 额外覆盖 `import "x" as Foo; Foo::bar`）：
 
 ```bash
 KX_SMOKE_IMPORT=1 ./scripts/bootstrap_v0_13.sh
