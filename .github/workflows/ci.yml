@@ -83,6 +83,32 @@ jobs:
             exit 1
           fi
 
+      - name: Module-preflight metrics script smoke
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/module-preflight-enabled.metrics <<'EOF'
+          module_preflight_enabled=enabled
+          module_preflight_entry=examples/import_variant_main.kooix
+          module_preflight_json=module-check-pass.json
+          module_preflight_ok=true
+          module_preflight_errors=0
+          module_preflight_warnings=0
+          module_preflight_first_diagnostic=none
+          EOF
+          ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-enabled.metrics --assert
+
+          cat > /tmp/module-preflight-disabled.metrics <<'EOF'
+          module_preflight_enabled=disabled
+          module_preflight_entry=examples/import_variant_main.kooix
+          module_preflight_json=n/a
+          module_preflight_ok=skipped
+          module_preflight_errors=n/a
+          module_preflight_warnings=n/a
+          module_preflight_first_diagnostic=none
+          EOF
+          ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-disabled.metrics --assert
+
       - name: Upload module-check artifact
         if: always()
         uses: actions/upload-artifact@v4
