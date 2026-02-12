@@ -102,6 +102,7 @@ jobs:
           KX_HEAVY_TIMEOUT_BOOTSTRAP: "900"
           KX_HEAVY_TIMEOUT: "900"
           KX_HEAVY_TIMEOUT_SMOKE: "300"
+          KX_HEAVY_SAFE_MAX_VMEM_KB: "0"
         run: ./scripts/bootstrap_heavy_gate.sh
 
       - name: Upload bootstrap-heavy artifacts
