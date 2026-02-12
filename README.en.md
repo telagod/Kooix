@@ -167,6 +167,8 @@ cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run --ti
 # Safe mode (enabled by default): force single-thread build + reuse stage3/stage2 + per-command timeout/limits
 KX_SAFE_MODE=1 ./scripts/bootstrap_v0_13.sh
 
+# If KX_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
+
 # Stricter mode: reuse-only (fail fast, never trigger rebuild when artifacts are missing)
 KX_REUSE_ONLY=1 ./scripts/bootstrap_v0_13.sh
 
@@ -200,6 +202,8 @@ CARGO_BUILD_JOBS=1 KX_SMOKE_SELFHOST_EQ=1 ./scripts/bootstrap_v0_13.sh
 
 # One-shot heavy gate (aligned with bootstrap-heavy CI): 4-module smoke + compiler_main two-hop (determinism disabled by default)
 CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
+
+# If KX_HEAVY_SAFE_MAX_VMEM_KB is not set, the default cap is 85% of MemTotal on Linux; set 0 to disable the memory cap
 
 # Tunables: heavy gate timeout / safety caps (0 means unlimited)
 CARGO_BUILD_JOBS=1 KX_HEAVY_TIMEOUT_BOOTSTRAP=900 KX_HEAVY_TIMEOUT=900 KX_HEAVY_TIMEOUT_SMOKE=300 KX_HEAVY_SAFE_MAX_VMEM_KB=0 KX_HEAVY_SAFE_MAX_PROCS=0 ./scripts/bootstrap_heavy_gate.sh

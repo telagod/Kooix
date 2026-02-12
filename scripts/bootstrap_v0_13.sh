@@ -39,6 +39,29 @@ resolve_timeout_bin() {
   echo ""
 }
 
+resolve_default_vmem_limit_kb() {
+  if [[ -n "${KX_SAFE_MAX_VMEM_KB+x}" ]]; then
+    echo "${KX_SAFE_MAX_VMEM_KB:-0}"
+    return
+  fi
+  if ! is_enabled "$SAFE_MODE"; then
+    echo "0"
+    return
+  fi
+  if [[ -r /proc/meminfo ]]; then
+    local mem_total
+    mem_total="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo | head -n 1)"
+    if is_pos_int "$mem_total"; then
+      local cap=$((mem_total * 85 / 100))
+      if (( cap > 0 )); then
+        echo "$cap"
+        return
+      fi
+    fi
+  fi
+  echo "0"
+}
+
 run_limited() {
   local key="$1"
   local timeout_s="$2"
@@ -104,7 +127,7 @@ run_limited() {
 SAFE_MODE="${KX_SAFE_MODE:-1}"
 DEFAULT_REUSE="${KX_DEFAULT_REUSE:-1}"
 SAFE_NICE="${KX_SAFE_NICE:-10}"
-SAFE_MAX_VMEM_KB="${KX_SAFE_MAX_VMEM_KB:-0}"
+SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"
 SAFE_MAX_PROCS="${KX_SAFE_MAX_PROCS:-0}"
 CMD_TIMEOUT="${KX_CMD_TIMEOUT:-900}"
 TIMEOUT_STAGE1_DRIVER="${KX_TIMEOUT_STAGE1_DRIVER:-$CMD_TIMEOUT}"
@@ -146,13 +169,15 @@ if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; command timeout disabled" >&2
 fi
 
-echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none}"
+echo "bootstrap-v0.13: safe_mode=$SAFE_MODE_LABEL jobs=$JOBS reuse_stage3=$REUSE_STAGE3 reuse_stage2=$REUSE_STAGE2 reuse_only=$REUSE_ONLY timeout_bin=${TIMEOUT_BIN:-none} vmem_cap_kb=$SAFE_MAX_VMEM_KB proc_cap=$SAFE_MAX_PROCS"
 : > "$RESOURCE_LOG"
 printf 'safe_mode=%s\n' "$SAFE_MODE_LABEL" >> "$RESOURCE_LOG"
 printf 'cargo_build_jobs=%s\n' "$JOBS" >> "$RESOURCE_LOG"
 printf 'reuse_stage3=%s\n' "$REUSE_STAGE3" >> "$RESOURCE_LOG"
 printf 'reuse_stage2=%s\n' "$REUSE_STAGE2" >> "$RESOURCE_LOG"
 printf 'reuse_only=%s\n' "$REUSE_ONLY" >> "$RESOURCE_LOG"
+printf 'safe_max_vmem_kb=%s\n' "$SAFE_MAX_VMEM_KB" >> "$RESOURCE_LOG"
+printf 'safe_max_procs=%s\n' "$SAFE_MAX_PROCS" >> "$RESOURCE_LOG"
 
 STAGE1_DRIVER_OUT="/tmp/kx-stage1-selfhost-stage1-compiler-main"
 STAGE2_IR="/tmp/kooixc_stage2_stage1_compiler.ll"

@@ -33,6 +33,29 @@ resolve_timeout_bin() {
   echo ""
 }
 
+resolve_default_vmem_limit_kb() {
+  if [[ -n "${KX_HEAVY_SAFE_MAX_VMEM_KB+x}" ]]; then
+    echo "${KX_HEAVY_SAFE_MAX_VMEM_KB:-0}"
+    return
+  fi
+  if ! is_enabled "$HEAVY_SAFE_MODE"; then
+    echo "0"
+    return
+  fi
+  if [[ -r /proc/meminfo ]]; then
+    local mem_total
+    mem_total="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo | head -n 1)"
+    if is_pos_int "$mem_total"; then
+      local cap=$((mem_total * 85 / 100))
+      if (( cap > 0 )); then
+        echo "$cap"
+        return
+      fi
+    fi
+  fi
+  echo "0"
+}
+
 run_limited() {
   local key="$1"
   local timeout_s="$2"
@@ -88,7 +111,7 @@ run_limited() {
 
 HEAVY_SAFE_MODE="${KX_HEAVY_SAFE_MODE:-1}"
 HEAVY_SAFE_NICE="${KX_HEAVY_SAFE_NICE:-10}"
-HEAVY_SAFE_MAX_VMEM_KB="${KX_HEAVY_SAFE_MAX_VMEM_KB:-0}"
+HEAVY_SAFE_MAX_VMEM_KB="$(resolve_default_vmem_limit_kb)"
 HEAVY_SAFE_MAX_PROCS="${KX_HEAVY_SAFE_MAX_PROCS:-0}"
 HEAVY_TIMEOUT_BOOTSTRAP="${KX_HEAVY_TIMEOUT_BOOTSTRAP:-900}"
 HEAVY_TIMEOUT="${KX_HEAVY_TIMEOUT:-900}"
@@ -202,7 +225,7 @@ if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "[safe] timeout/gtimeout not found; heavy gate timeout disabled" >&2
 fi
 
-echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s"
+echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"

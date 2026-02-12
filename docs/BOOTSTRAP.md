@@ -67,7 +67,7 @@
 - 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）；workflow 内部默认启用 `KX_HEAVY_SAFE_MODE=1` 与 timeout 配额。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
 - 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS 与 timeout/限载配置），写入 summary + artifact。
-- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载）。
+- 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
 
 ## 一键复现（v0.13）
 
@@ -78,7 +78,7 @@
 # 产物：dist/kooixc-stage3（同时复制为 dist/kooixc1）
 ```
 
-> 资源策略：`scripts/bootstrap_v0_13.sh` 默认启用 `KX_SAFE_MODE=1`（强制 `CARGO_BUILD_JOBS=1`、默认优先复用 stage3/stage2、命令级 timeout + 可选 `ulimit` 限载）。
+> 资源策略：`scripts/bootstrap_v0_13.sh` 默认启用 `KX_SAFE_MODE=1`（强制 `CARGO_BUILD_JOBS=1`、默认优先复用 stage3/stage2、命令级 timeout + `ulimit` 限载）；若未显式设置 `KX_SAFE_MAX_VMEM_KB`，Linux 下默认按 `MemTotal * 85%` 自动设定内存上限（设 `0` 可关闭）。
 > 复用策略：safe mode 下默认 `KX_REUSE_STAGE3=1` / `KX_REUSE_STAGE2=1`；`KX_REUSE_ONLY=1` 可强制“只复用、缺失即失败”，避免误触发重建。
 
 > 开关语义：`KX_*` 参数按布尔解析（`1/true/on/yes` 开启，`0/false/off/no` 关闭），避免误触发重负载步骤。
