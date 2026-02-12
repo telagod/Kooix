@@ -192,6 +192,8 @@ HEAVY_IMPORT_SMOKE="${KX_HEAVY_IMPORT_SMOKE:-0}"
 HEAVY_COMPILER_MAIN_SMOKE="${KX_HEAVY_COMPILER_MAIN_SMOKE:-0}"
 
 STAGE3_BIN="${OUT_DIR%/}/kooixc1"
+STAGE3_REUSE_BIN="${OUT_DIR%/}/kooixc-stage3"
+STAGE2_REUSE_BIN="${OUT_DIR%/}/kooixc-stage2"
 STAGE3_LL="/tmp/kx-stage3-compiler-main.ll"
 STAGE3_COMPILER_BIN="/tmp/kx-stage3-compiler-main"
 STAGE4_LL="/tmp/kx-stage4-stage2-min.ll"
@@ -217,6 +219,29 @@ resource_metric_or_default() {
     fi
   fi
   echo "$fallback"
+}
+
+preflight_reuse_only() {
+  if ! is_enabled "$HEAVY_REUSE_ONLY"; then
+    return
+  fi
+
+  if is_enabled "$HEAVY_REUSE_STAGE3" && [[ ! -x "$STAGE3_REUSE_BIN" ]]; then
+    echo "[preflight] reuse-only miss: stage3 artifact not found: $STAGE3_REUSE_BIN" >&2
+    if is_enabled "$STRICT_LOCAL"; then
+      echo "[preflight] strict-local hint: cold start needs one prewarm run:" >&2
+      echo "  CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 KX_HEAVY_REUSE_ONLY=0 ./scripts/bootstrap_heavy_gate.sh $OUT_DIR" >&2
+    else
+      echo "[preflight] hint: rerun once with KX_HEAVY_REUSE_ONLY=0 to build artifacts, then switch back to reuse-only" >&2
+    fi
+    exit 1
+  fi
+
+  if ! is_enabled "$HEAVY_REUSE_STAGE3" && is_enabled "$HEAVY_REUSE_STAGE2" && [[ ! -x "$STAGE2_REUSE_BIN" ]]; then
+    echo "[preflight] reuse-only miss: stage2 artifact not found while reuse_stage3=0: $STAGE2_REUSE_BIN" >&2
+    echo "[preflight] hint: allow one rebuild via KX_HEAVY_REUSE_ONLY=0, or provide stage2/stage3 artifacts first" >&2
+    exit 1
+  fi
 }
 
 rm -f \
@@ -303,6 +328,8 @@ if [[ -z "$TIMEOUT_BIN" ]]; then
 fi
 
 echo "bootstrap-heavy: jobs=$CARGO_BUILD_JOBS safe_mode=$SAFE_MODE_LABEL strict_local=$STRICT_LOCAL_LABEL deep=$DEEP_LABEL determinism=$DET_LABEL reuse_stage3=$REUSE_STAGE3_LABEL reuse_stage2=$REUSE_STAGE2_LABEL reuse_only=$REUSE_ONLY_LABEL s1_compiler_smoke=$S1_COMPILER_LABEL compiler_main_smoke=$COMPILER_MAIN_SMOKE_LABEL selfhost_eq=$SELFHOST_EQ_LABEL import_smoke=$IMPORT_SMOKE_LABEL timeout=${HEAVY_TIMEOUT}s timeout_smoke=${HEAVY_TIMEOUT_SMOKE}s vmem_cap_kb=$HEAVY_SAFE_MAX_VMEM_KB proc_cap=$HEAVY_SAFE_MAX_PROCS"
+
+preflight_reuse_only
 
 gate1_start="$SECONDS"
 echo "[gate 1/3] low-resource stage1 real-workload smokes"
