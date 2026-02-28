@@ -36,7 +36,8 @@ fn check_warning_is_non_fatal_by_default() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("ok: semantic checks passed with warnings"),
+        String::from_utf8_lossy(&output.stdout)
+            .contains("ok: semantic checks passed with warnings"),
         "unexpected stdout: {}",
         String::from_utf8_lossy(&output.stdout)
     );
@@ -72,8 +73,8 @@ fn check_strict_warnings_fails_on_warning() {
 }
 
 #[test]
-fn check_unknown_option_fails_with_usage_error() {
-    let dir = make_temp_dir("unknown-option");
+fn check_json_output_reports_ok_state() {
+    let dir = make_temp_dir("json-pass");
     let main = dir.join("main.kooix");
 
     fs::write(&main, "fn main() -> Int { 0 };\n").expect("write main");
@@ -85,10 +86,127 @@ fn check_unknown_option_fails_with_usage_error() {
         .output()
         .expect("run check --json");
 
+    assert!(
+        output.status.success(),
+        "check --json should pass, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":true"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"diagnostics\":[]"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_json_warning_is_ok_without_strict() {
+    let dir = make_temp_dir("json-warning-default");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .arg("--json")
+        .output()
+        .expect("run check --json");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":true"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"severity\":\"warning\""),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_json_warning_fails_with_strict() {
+    let dir = make_temp_dir("json-warning-strict");
+    let main = dir.join("main.kooix");
+
+    fs::write(
+        &main,
+        "cap Net<\"example.com\">;\nfn main() -> Int requires [Net<\"example.com\">] { 0 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .arg("--json")
+        .arg("--strict-warnings")
+        .output()
+        .expect("run check --json --strict-warnings");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":false"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_pretty_without_json_fails() {
+    let dir = make_temp_dir("pretty-no-json");
+    let main = dir.join("main.kooix");
+
+    fs::write(&main, "fn main() -> Int { 0 };\n").expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .arg("--pretty")
+        .output()
+        .expect("run check --pretty");
+
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("unknown check option '--json'"),
+        stderr.contains("--pretty requires --json"),
+        "unexpected stderr: {stderr}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_unknown_option_fails_with_usage_error() {
+    let dir = make_temp_dir("unknown-option");
+    let main = dir.join("main.kooix");
+
+    fs::write(&main, "fn main() -> Int { 0 };\n").expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .arg("--bad")
+        .output()
+        .expect("run check --bad");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unknown check option '--bad'"),
         "unexpected stderr: {stderr}"
     );
     assert!(stderr.contains("usage: "), "unexpected stderr: {stderr}");
