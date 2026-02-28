@@ -53,3 +53,39 @@
   - 更新本文件兼容矩阵。
   - 更新 `scripts/check_json_contract.sh` 与消费者脚本。
   - 在 CI summary 明确显示 `schema_version` 与 `summary.phase`。
+
+## Schema Bump Playbook
+
+目标：把 producer 从 `N` 升级到 `N+1` 时，保证 consumer 渐进迁移且可快速回滚。
+
+1. 设计与改码（producer）
+   - 在 `kooixc` JSON 输出中实现 `schema_version=N+1` 与新字段语义。
+   - 保留旧字段兼容读取路径，直到所有 consumer 完成迁移。
+
+2. 打开迁移窗口（consumer）
+   - 将 contract gate 从严格模式调整为窗口模式：`[N,N+1]`。
+   - 推荐命令：
+     - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=N KX_CHECK_JSON_MAX_SCHEMA_VERSION=$((N+1)) ./scripts/check_json_contract.sh --assert`
+
+3. 增加双向回归
+   - 正向：`[N,N+1]` 必须通过（新旧 producer 都可被接受）。
+   - 反向：`[N+1,N+1]` 对旧 producer 必须失败（验证门禁真有效）。
+
+4. 分批迁移 consumer
+   - 优先迁移强门禁链路：主 `ci`、`bootstrap-heavy`、preflight 解析脚本。
+   - 迁移完成前，保持窗口模式；迁移完成后再收紧为 `[N+1,N+1]`。
+
+5. 收敛与清理
+   - CI/脚本全部稳定后，把默认区间切到 `[N+1,N+1]`。
+   - 删除旧 schema 的 fallback 分支，并同步更新文档与 roadmap。
+
+6. 回滚策略（必须预置）
+   - 若上线后发现 consumer break：
+     - 立即把 consumer 区间回退为 `[N,N+1]`；
+     - 必要时回滚 producer 到 `N`；
+     - 保留失败样本 JSON，补回归后再重试收敛。
+
+7. 迁移节奏建议
+   - T0：producer 合并（输出 `N+1`）+ consumer 窗口放开 `[N,N+1]`。
+   - T0+1：核心 consumer 完成迁移并验证。
+   - T0+2：收紧到 `[N+1,N+1]`，关闭旧 schema fallback。
