@@ -22,6 +22,9 @@
 
 - CI / contract smoke：严格模式，只接受 `[1,1]`。
 - 迁移窗口：允许区间模式（例如 `[1,2]`），用于分批升级消费者。
+- CI 迁移窗口回归：
+  - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert` 必须通过。
+  - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=2 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`（当前 producer=1）必须失败。
 
 ## Consumer Guardrails
 

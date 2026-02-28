@@ -87,6 +87,21 @@ jobs:
         run: |
           ./scripts/check_json_contract.sh --assert
 
+      - name: Check JSON schema migration-window smoke
+        run: |
+          set -euo pipefail
+
+          # migration window: current producer schema_version=1 should pass in [1,2]
+          KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 \
+          KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 \
+          ./scripts/check_json_contract.sh --assert
+
+          # strict v2-only consumer should reject current schema_version=1
+          if KX_CHECK_JSON_MIN_SCHEMA_VERSION=2 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert; then
+            echo "expected schema window [2,2] to fail against current producer schema_version=1" >&2
+            exit 1
+          fi
+
       - name: Module-preflight metrics script smoke
         run: |
           set -euo pipefail
