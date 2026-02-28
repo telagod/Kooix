@@ -187,13 +187,18 @@ write_module_preflight_summary() {
   local summary_errors="$2"
   local summary_warnings="$3"
   local summary_first="$4"
+  local summary_schema_version="$5"
+  local summary_phase="$6"
 
   summary_first="$(sanitize_metric_value "$summary_first")"
+  summary_phase="$(sanitize_metric_value "$summary_phase")"
 
   printf 'module_preflight_ok=%s\n' "$summary_ok" >> "$RESOURCE_LOG"
   printf 'module_preflight_errors=%s\n' "$summary_errors" >> "$RESOURCE_LOG"
   printf 'module_preflight_warnings=%s\n' "$summary_warnings" >> "$RESOURCE_LOG"
   printf 'module_preflight_first_diagnostic=%s\n' "$summary_first" >> "$RESOURCE_LOG"
+  printf 'module_preflight_schema_version=%s\n' "$summary_schema_version" >> "$RESOURCE_LOG"
+  printf 'module_preflight_phase=%s\n' "$summary_phase" >> "$RESOURCE_LOG"
 }
 
 parse_module_preflight_json() {
@@ -221,7 +226,12 @@ parse_module_preflight_json() {
       (if (.ok | type) == "boolean" then (if .ok then "true" else "false" end) else "unknown" end),
       (summary_errors | tostring),
       (summary_warnings | tostring),
-      ([diag_stream | "\(.severity): \(.message)"] | .[0] // "none")
+      ([diag_stream | "\(.severity): \(.message)"] | .[0] // "none"),
+      (if (.schema_version | type) == "number" and (.schema_version == (.schema_version | floor))
+       then (.schema_version | floor | tostring)
+       else "n/a"
+       end),
+      (.summary.phase // .phase // "n/a")
     ] | @tsv
   ' "$json_file"
 }
@@ -392,7 +402,7 @@ echo "ok: $STAGE3_ALIAS"
 
 if is_enabled "$MODULE_PREFLIGHT"; then
   if [[ ! -f "$MODULE_PREFLIGHT_ENTRY" ]]; then
-    write_module_preflight_summary "false" "n/a" "n/a" "entry not found: $MODULE_PREFLIGHT_ENTRY"
+    write_module_preflight_summary "false" "n/a" "n/a" "entry not found: $MODULE_PREFLIGHT_ENTRY" "n/a" "n/a"
     echo "[preflight] module-aware check entry not found: $MODULE_PREFLIGHT_ENTRY" >&2
     exit 1
   fi
@@ -410,21 +420,37 @@ if is_enabled "$MODULE_PREFLIGHT"; then
   module_preflight_errors="unknown"
   module_preflight_warnings="unknown"
   module_preflight_first_diagnostic="parse unavailable"
+  module_preflight_schema_version="n/a"
+  module_preflight_phase="n/a"
 
   if module_preflight_summary="$(parse_module_preflight_json "$MODULE_PREFLIGHT_JSON" 2>/dev/null)"; then
-    IFS=$'\t' read -r module_preflight_ok module_preflight_errors module_preflight_warnings module_preflight_first_diagnostic <<< "$module_preflight_summary"
+    IFS=$'\t' read -r \
+      module_preflight_ok \
+      module_preflight_errors \
+      module_preflight_warnings \
+      module_preflight_first_diagnostic \
+      module_preflight_schema_version \
+      module_preflight_phase <<< "$module_preflight_summary"
   else
     if [[ "$module_preflight_status" == "0" ]]; then
       module_preflight_ok="true"
       module_preflight_errors="0"
       module_preflight_warnings="0"
       module_preflight_first_diagnostic="none"
+      module_preflight_phase="check-modules"
     else
       module_preflight_ok="false"
+      module_preflight_phase="unknown"
     fi
   fi
 
-  write_module_preflight_summary "$module_preflight_ok" "$module_preflight_errors" "$module_preflight_warnings" "$module_preflight_first_diagnostic"
+  write_module_preflight_summary \
+    "$module_preflight_ok" \
+    "$module_preflight_errors" \
+    "$module_preflight_warnings" \
+    "$module_preflight_first_diagnostic" \
+    "$module_preflight_schema_version" \
+    "$module_preflight_phase"
 
   if (( module_preflight_status != 0 )); then
     echo "[preflight] module-aware check failed (exit=$module_preflight_status)" >&2
@@ -434,7 +460,7 @@ if is_enabled "$MODULE_PREFLIGHT"; then
 
   echo "ok: module preflight passed: $MODULE_PREFLIGHT_ENTRY"
 else
-  write_module_preflight_summary "skipped" "n/a" "n/a" "none"
+  write_module_preflight_summary "skipped" "n/a" "n/a" "none" "n/a" "n/a"
   echo "[preflight] module-aware semantic check skipped (KX_MODULE_PREFLIGHT=$MODULE_PREFLIGHT)"
 fi
 

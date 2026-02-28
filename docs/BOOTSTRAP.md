@@ -71,7 +71,7 @@
 - 本地新增 `scripts/bootstrap_ci_sanity.sh`：单命令串行执行 strict-local + module preflight enabled/disabled 校验（默认 `CARGO_BUILD_JOBS=1`、reuse-only），用于推送前快速自检。
 - 新增 `scripts/bootstrap_ci_sanity_smoke.sh`：mock heavy gate 的轻量 smoke，便于本地复现 CI 的 sanity 脚本回归。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
-- 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS、import variant smoke compile/run 耗时与 RSS、module preflight 耗时与 RSS + `ok/errors/warnings/first_diagnostic` + `module_preflight_json`、timeout/限载配置、冷启动护栏状态、每步 exit code）；summary 会基于 `*_exit_code` 直接给出 failure classification（timeout/signal/OOM-vmem 线索），并在出现 `exit=139` 时追加 Resource Hint（建议 vmem cap 起步值）。
+- 可选复用可观测：`bootstrap-heavy` 会记录 `reuse_stage3/reuse_stage2` 命中情况与 bootstrap 日志（`/tmp/bootstrap-heavy-bootstrap.log`），并额外导出资源观测（`/tmp/bootstrap-heavy-metrics.txt` + `/tmp/bootstrap-heavy-resource.log`，含 gate2 峰值 RSS、import variant smoke compile/run 耗时与 RSS、module preflight 耗时与 RSS + `ok/errors/warnings/first_diagnostic/schema_version/phase` + `module_preflight_json`、timeout/限载配置、冷启动护栏状态、每步 exit code）；summary 会基于 `*_exit_code` 直接给出 failure classification（timeout/signal/OOM-vmem 线索），并在出现 `exit=139` 时追加 Resource Hint（建议 vmem cap 起步值）。
 - 本地复现同款重载门禁：`CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh`（脚本本地默认 `KX_HEAVY_DETERMINISM=0`；可显式传 `KX_HEAVY_DETERMINISM=1` 开启对比，`KX_HEAVY_IMPORT_SMOKE=1` 开启 import namespace smoke（`Foo::bar` + `Foo::Option::Some`），`KX_HEAVY_COMPILER_MAIN_SMOKE=1` 开启 `compiler_main` 二段闭环 smoke，`KX_HEAVY_SELFHOST_EQ=1` 开启 stage3/stage4 收敛对比，或 `KX_HEAVY_DEEP=1` 打开 deep 链路；`KX_HEAVY_REUSE_ONLY=1` 可在复用缺失时快速失败；`KX_HEAVY_TIMEOUT*`/`KX_HEAVY_SAFE_MAX_*` 可调限时与限载；未显式设置 `KX_HEAVY_SAFE_MAX_VMEM_KB` 时 Linux 下默认按 `MemTotal * 85%` 自动设定上限）。
 - 严格本地限载预设：`KX_HEAVY_STRICT_LOCAL=1` 会默认注入 `KX_HEAVY_SAFE_MODE=1`、`KX_HEAVY_SAFE_MAX_VMEM_KB=16777216`、`KX_HEAVY_REUSE_ONLY=1`，并关闭 `determinism/deep/import/selfhost/s1_compiler`，仅保留 `compiler_main` 二段闭环 smoke；可用显式环境变量覆盖该预设。若开启了 `reuse-only` 但缺少复用产物，脚本会在 preflight 阶段快速失败并给出预热命令提示。另：本地默认开启冷启动护栏（`KX_HEAVY_COLD_START_GUARD=1`，CI 默认关闭），用于阻断“缺复用产物时的意外全量重建”。
 
@@ -179,7 +179,7 @@ CARGO_BUILD_JOBS=1 KX_MODULE_PREFLIGHT=0 ./scripts/bootstrap_v0_13.sh
 CARGO_BUILD_JOBS=1 KX_MODULE_PREFLIGHT_ENTRY=examples/import_alias_main.kooix ./scripts/bootstrap_v0_13.sh
 ```
 
-资源观测（每步耗时 + max RSS + exit code；module preflight 额外输出 `module_preflight_ok/errors/warnings/first_diagnostic/module_preflight_json`）：
+资源观测（每步耗时 + max RSS + exit code；module preflight 额外输出 `module_preflight_ok/errors/warnings/first_diagnostic/schema_version/phase/module_preflight_json`）：
 
 ```bash
 cat /tmp/kx-bootstrap-resource.log

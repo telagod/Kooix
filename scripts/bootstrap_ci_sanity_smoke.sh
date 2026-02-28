@@ -32,6 +32,8 @@ module_preflight_ok=true
 module_preflight_errors=0
 module_preflight_warnings=0
 module_preflight_first_diagnostic=none
+module_preflight_schema_version=1
+module_preflight_phase=check-modules
 METRICS
 else
   cat > "$metrics_file" <<'METRICS'
@@ -48,6 +50,8 @@ module_preflight_ok=skipped
 module_preflight_errors=n/a
 module_preflight_warnings=n/a
 module_preflight_first_diagnostic=none
+module_preflight_schema_version=n/a
+module_preflight_phase=n/a
 METRICS
 fi
 EOF

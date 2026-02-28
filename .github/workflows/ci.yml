@@ -99,6 +99,8 @@ jobs:
           module_preflight_errors=0
           module_preflight_warnings=0
           module_preflight_first_diagnostic=none
+          module_preflight_schema_version=1
+          module_preflight_phase=check-modules
           EOF
           KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 \
           ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-enabled.metrics --assert
@@ -111,6 +113,8 @@ jobs:
           module_preflight_errors=n/a
           module_preflight_warnings=n/a
           module_preflight_first_diagnostic=none
+          module_preflight_schema_version=n/a
+          module_preflight_phase=n/a
           EOF
           ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-disabled.metrics --assert
 

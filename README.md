@@ -195,7 +195,7 @@ KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_
 
 # 资源指标（每步耗时 + max RSS + exit code）
 cat /tmp/kx-bootstrap-resource.log
-# module preflight 额外输出：module_preflight_ok/errors/warnings/first_diagnostic（来自 check-modules --json）
+# module preflight 额外输出：module_preflight_ok/errors/warnings/first_diagnostic/schema_version/phase（来自 check-modules --json）
 # 失败时会输出 [fail] 分类提示（timeout / signal / OOM-vmem 线索）
 
 # 注：所有 KX_* 开关按布尔解析（1/true/on 开启，0/false/off 关闭）

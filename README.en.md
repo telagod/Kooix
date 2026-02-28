@@ -197,7 +197,7 @@ KX_TIMEOUT_STAGE1_DRIVER=900 KX_TIMEOUT_STAGE_BUILD=900 KX_TIMEOUT_SMOKE=300 KX_
 
 # Resource metrics (per-step elapsed + max RSS + exit code)
 cat /tmp/kx-bootstrap-resource.log
-# Module preflight also emits module_preflight_ok/errors/warnings/first_diagnostic (from check-modules --json)
+# Module preflight also emits module_preflight_ok/errors/warnings/first_diagnostic/schema_version/phase (from check-modules --json)
 # Failures now emit [fail] hints (timeout / signal / OOM-vmem clues)
 
 # Note: all KX_* toggles are boolean (1/true/on = enabled, 0/false/off = disabled)

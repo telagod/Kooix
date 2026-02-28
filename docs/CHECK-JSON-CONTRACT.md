@@ -33,6 +33,15 @@
   - `KX_MODULE_PREFLIGHT_MIN_SCHEMA_VERSION` / `KX_MODULE_PREFLIGHT_MAX_SCHEMA_VERSION`（默认 `1/1`）
   - `KX_MODULE_PREFLIGHT_ALLOWED_PHASES`（默认 `check-modules,load`）
 
+## Preflight Metrics Bridge
+
+`bootstrap_v0_13.sh` 会把 preflight JSON 关键契约字段同步到 metrics：
+
+- `module_preflight_schema_version`
+- `module_preflight_phase`
+
+这样 `bootstrap_heavy_gate.sh` 和 CI summary 可以在不重新解析 artifact 的情况下直接观测版本漂移。
+
 ## Evolution Rules
 
 - 新增可选字段：保持 `schema_version` 不变。

@@ -406,6 +406,8 @@ module_preflight_ok="n/a"
 module_preflight_errors="n/a"
 module_preflight_warnings="n/a"
 module_preflight_first_diagnostic="n/a"
+module_preflight_schema_version="n/a"
+module_preflight_phase="n/a"
 import_variant_compile_seconds="n/a"
 import_variant_compile_maxrss_kb="n/a"
 import_variant_run_seconds="n/a"
@@ -428,11 +430,15 @@ module_preflight_ok="$(resource_metric_or_default module_preflight_ok n/a)"
 module_preflight_errors="$(resource_metric_or_default module_preflight_errors n/a)"
 module_preflight_warnings="$(resource_metric_or_default module_preflight_warnings n/a)"
 module_preflight_first_diagnostic="$(resource_metric_or_default module_preflight_first_diagnostic n/a)"
+module_preflight_schema_version="$(resource_metric_or_default module_preflight_schema_version n/a)"
+module_preflight_phase="$(resource_metric_or_default module_preflight_phase n/a)"
 if [[ "$module_preflight_mode" == "enabled" ]]; then
   module_preflight_seconds="$(resource_metric_or_default module_preflight_check_seconds n/a)"
   module_preflight_maxrss_kb="$(resource_metric_or_default module_preflight_check_maxrss_kb n/a)"
 else
   module_preflight_json="n/a"
+  module_preflight_schema_version="n/a"
+  module_preflight_phase="n/a"
 fi
 
 if is_enabled "$HEAVY_IMPORT_SMOKE"; then
@@ -538,6 +544,8 @@ fi
   echo "module_preflight_errors=$module_preflight_errors"
   echo "module_preflight_warnings=$module_preflight_warnings"
   echo "module_preflight_first_diagnostic=$module_preflight_first_diagnostic"
+  echo "module_preflight_schema_version=$module_preflight_schema_version"
+  echo "module_preflight_phase=$module_preflight_phase"
   echo "heavy_timeout_seconds=$HEAVY_TIMEOUT"
   echo "heavy_timeout_smoke_seconds=$HEAVY_TIMEOUT_SMOKE"
   echo "heavy_safe_max_vmem_kb=$HEAVY_SAFE_MAX_VMEM_KB"

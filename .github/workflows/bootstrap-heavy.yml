@@ -117,7 +117,7 @@ jobs:
 
       - name: Validate module preflight json metrics
         if: success()
-        run: ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+        run: KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 
       - name: Upload bootstrap-heavy artifacts
         if: always()
@@ -195,6 +195,8 @@ jobs:
           module_preflight_errors="n/a"
           module_preflight_warnings="n/a"
           module_preflight_first_diag="n/a"
+          module_preflight_schema="n/a"
+          module_preflight_phase="n/a"
           heavy_timeout="n/a"
           heavy_timeout_smoke="n/a"
           heavy_vmem="n/a"
@@ -296,6 +298,8 @@ jobs:
                 module_preflight_errors) module_preflight_errors="$value" ;;
                 module_preflight_warnings) module_preflight_warnings="$value" ;;
                 module_preflight_first_diagnostic) module_preflight_first_diag="$value" ;;
+                module_preflight_schema_version) module_preflight_schema="$value" ;;
+                module_preflight_phase) module_preflight_phase="$value" ;;
                 heavy_timeout_seconds) heavy_timeout="$value" ;;
                 heavy_timeout_smoke_seconds) heavy_timeout_smoke="$value" ;;
                 heavy_safe_max_vmem_kb) heavy_vmem="$value" ;;
@@ -343,6 +347,8 @@ jobs:
                 module_preflight_errors) if [ "$module_preflight_errors" = "n/a" ]; then module_preflight_errors="$value"; fi ;;
                 module_preflight_warnings) if [ "$module_preflight_warnings" = "n/a" ]; then module_preflight_warnings="$value"; fi ;;
                 module_preflight_first_diagnostic) if [ "$module_preflight_first_diag" = "n/a" ]; then module_preflight_first_diag="$value"; fi ;;
+                module_preflight_schema_version) if [ "$module_preflight_schema" = "n/a" ]; then module_preflight_schema="$value"; fi ;;
+                module_preflight_phase) if [ "$module_preflight_phase" = "n/a" ]; then module_preflight_phase="$value"; fi ;;
               esac
 
               if [[ "$key" == *_exit_code ]]; then
@@ -363,6 +369,8 @@ jobs:
 
           if [ "$module_preflight" != "enabled" ]; then
             module_preflight_json="n/a"
+            module_preflight_schema="n/a"
+            module_preflight_phase="n/a"
           fi
 
           if [ -z "$first_failure" ]; then
@@ -401,6 +409,7 @@ jobs:
             echo "- module preflight artifact hint: bootstrap-heavy-artifacts -> ${module_preflight_json}"
             echo "- module preflight runtime: ${module_preflight_s}s (max RSS ${module_preflight_rss} KB)"
             echo "- module preflight diagnostics: ok=${module_preflight_ok}, errors=${module_preflight_errors}, warnings=${module_preflight_warnings}"
+            echo "- module preflight contract: schema=${module_preflight_schema}, phase=${module_preflight_phase}"
             echo "- module preflight first diagnostic: ${module_preflight_first_diag}"
             echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
             echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"

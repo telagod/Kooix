@@ -51,6 +51,8 @@ module_ok="$(metric module_preflight_ok)"
 module_errors="$(metric module_preflight_errors)"
 module_warnings="$(metric module_preflight_warnings)"
 module_first_diag="$(metric module_preflight_first_diagnostic)"
+module_schema_version="$(metric module_preflight_schema_version)"
+module_phase="$(metric module_preflight_phase)"
 
 printf 'metrics_file=%s\n' "$METRICS_FILE"
 printf 'module_preflight_enabled=%s\n' "${module_mode:-missing}"
@@ -60,6 +62,8 @@ printf 'module_preflight_ok=%s\n' "${module_ok:-missing}"
 printf 'module_preflight_errors=%s\n' "${module_errors:-missing}"
 printf 'module_preflight_warnings=%s\n' "${module_warnings:-missing}"
 printf 'module_preflight_first_diagnostic=%s\n' "${module_first_diag:-missing}"
+printf 'module_preflight_schema_version=%s\n' "${module_schema_version:-missing}"
+printf 'module_preflight_phase=%s\n' "${module_phase:-missing}"
 
 if [[ "$ASSERT_MODE" == "--assert" ]]; then
   ok=1
@@ -111,6 +115,15 @@ if [[ "$ASSERT_MODE" == "--assert" ]]; then
       fi
 
       if is_enabled "$SCHEMA_ASSERT"; then
+        if [[ ! "$module_schema_version" =~ ^[0-9]+$ ]]; then
+          echo "assert fail: module_preflight_schema_version is '$module_schema_version' (expected positive integer when schema assert enabled)" >&2
+          ok=0
+        fi
+        if ! phase_allowed "$module_phase"; then
+          echo "assert fail: module_preflight_phase is '$module_phase' (allowed: $ALLOWED_PHASES)" >&2
+          ok=0
+        fi
+
         if [[ ! -s "$module_json" ]]; then
           echo "assert fail: schema assertion requires a non-empty json file, got '$module_json'" >&2
           ok=0
@@ -134,6 +147,15 @@ if [[ "$ASSERT_MODE" == "--assert" ]]; then
             echo "assert fail: summary.phase is '$summary_phase' (allowed: $ALLOWED_PHASES)" >&2
             ok=0
           fi
+
+          if [[ "$module_schema_version" =~ ^[0-9]+$ ]] && [[ "$module_schema_version" != "$schema_version" ]]; then
+            echo "assert fail: module_preflight_schema_version=$module_schema_version mismatches json schema_version=$schema_version" >&2
+            ok=0
+          fi
+          if phase_allowed "$module_phase" && [[ "$module_phase" != "$summary_phase" ]]; then
+            echo "assert fail: module_preflight_phase=$module_phase mismatches json summary.phase=$summary_phase" >&2
+            ok=0
+          fi
         fi
       fi
       ;;
@@ -146,6 +168,15 @@ if [[ "$ASSERT_MODE" == "--assert" ]]; then
 
       if [[ "$module_ok" != "skipped" && "$module_ok" != "n/a" ]]; then
         echo "assert fail: module_preflight_ok is '$module_ok' (expected skipped/n/a when disabled)" >&2
+        ok=0
+      fi
+
+      if [[ "$module_schema_version" != "n/a" && -n "$module_schema_version" ]]; then
+        echo "assert fail: module_preflight_schema_version is '$module_schema_version' (expected n/a when disabled)" >&2
+        ok=0
+      fi
+      if [[ "$module_phase" != "n/a" && -n "$module_phase" ]]; then
+        echo "assert fail: module_preflight_phase is '$module_phase' (expected n/a when disabled)" >&2
         ok=0
       fi
       ;;

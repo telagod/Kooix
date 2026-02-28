@@ -158,3 +158,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD2：`bootstrap_module_preflight_json_check.sh` 新增可选 schema 断言（`KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1` + `KX_MODULE_PREFLIGHT_MIN/MAX_SCHEMA_VERSION` + `KX_MODULE_PREFLIGHT_ALLOWED_PHASES`）。
   - ✅ DoD3：CI `Module-check summary` 已输出 `schema_version` 与 `summary.phase`（pass/warn/error/strict 全覆盖），用于快速定位契约漂移。
   - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert` + `KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-enabled.metrics --assert` + `./scripts/bootstrap_ci_sanity_smoke.sh`。
+
+- P8（推进中）preflight 契约观测贯通：
+  - ✅ DoD1：`bootstrap_v0_13.sh` 的 module preflight metrics 已补齐 `module_preflight_schema_version` 与 `module_preflight_phase`，并保持旧字段兼容。
+  - ✅ DoD2：`bootstrap_heavy_gate.sh` 与 `bootstrap-heavy.yml` summary 已消费并展示 preflight `schema_version/phase`。
+  - ✅ DoD3：`bootstrap_module_preflight_json_check.sh` 在 schema 断言模式下新增 metrics/json 一致性校验（`module_preflight_schema_version/phase` 对齐 JSON）。
+  - 验证命令（2026-02-28）：`bash -n scripts/bootstrap_module_preflight_json_check.sh scripts/bootstrap_ci_sanity.sh scripts/bootstrap_ci_sanity_smoke.sh scripts/bootstrap_v0_13.sh scripts/bootstrap_heavy_gate.sh` + `./scripts/check_json_contract.sh --assert` + `./scripts/bootstrap_ci_sanity_smoke.sh`。
