@@ -167,6 +167,6 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 
 - P9（推进中）schema migration window 回归门禁：
   - ✅ DoD1：主 `ci` workflow 已新增 migration-window smoke：`[1,2]` 通过、`[2,2]`（当前 producer=1）必失败。
-  - DoD2：`bootstrap-heavy` workflow 增加同款 migration-window smoke，保证主/重载门禁一致。
+  - ✅ DoD2：`bootstrap-heavy` workflow 已增加同款 migration-window smoke，保证主/重载门禁一致。
   - DoD3：补充 schema bump playbook（升级步骤 + 回滚策略 + consumer 迁移节奏）。
-  - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert` + `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert` + `if KX_CHECK_JSON_MIN_SCHEMA_VERSION=2 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert; then exit 1; fi`。
+  - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert` + `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert` + `if KX_CHECK_JSON_MIN_SCHEMA_VERSION=2 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert; then exit 1; fi` + bootstrap-heavy workflow step `Check JSON schema migration-window smoke`。
