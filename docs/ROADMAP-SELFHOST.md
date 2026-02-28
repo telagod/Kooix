@@ -119,6 +119,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD2：PR/run summary 展示模块错误计数与首条诊断。
   - ✅ DoD3：新增 `--strict-warnings`（可选）用于渐进收紧告警策略（CI 已额外跑 strict gate）。
   - ✅ DoD4：CI gate 扩展为 pass/warn/error 三类样例矩阵，并在 summary 分组展示结果。
+  - 补充（2026-02-28）：`check` 命令已补齐 `--strict-warnings` 与 `--json/--pretty` 输出；`check` 与 `check-modules` 的 warning gate 语义对齐（默认 warning 不失败，strict 才失败），并新增 `cli_check_tests` 回归覆盖 default/strict/json/pretty/invalid-option 场景。
 - P3（自举能力）继续扩面 `dist/kooixc1` 的真实负载编译：
   - ✅ DoD1：已从 `stage2_min` 扩到 `lexer/parser/typecheck/resolver` 子集（`dist/kooixc1` 可编译+链接+运行对应 smoke 目标）；并支持可选 `stage1/compiler` 模块 smoke（`KX_SMOKE_S1_COMPILER=1`）。
   - ✅ DoD2：资源可控链路已升级为“默认硬约束”模式：`bootstrap_v0_13.sh` 默认 `KX_SAFE_MODE=1`（强制 `CARGO_BUILD_JOBS=1`、默认优先复用 stage3/stage2、命令级 timeout、默认 `MemTotal*85%` 自动内存上限（可通过 `KX_SAFE_MAX_VMEM_KB` 覆盖或设 0 关闭）与 `KX_SAFE_MAX_PROCS` 限载）；`bootstrap_heavy_gate.sh` 默认同步启用 `KX_HEAVY_SAFE_MODE=1`（同样默认 `MemTotal*85%` 自动内存上限）并对 gate2/gate3 增加 timeout + max RSS 采样；两条链路均输出资源观测文件（`/tmp/kx-bootstrap-resource.log`、`/tmp/bootstrap-heavy-metrics.txt`）。
@@ -139,3 +140,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_REUSE_ONLY=1 KX_SMOKE_COMPILER_MAIN=1 ./scripts/bootstrap_v0_13.sh`（低资源复用模式下执行 `compiler_main` 二段闭环 smoke）。
   - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh`（严格限载预设回归通过，本地）。
   - CI 记录（2026-02-12）：`bootstrap-heavy` workflow_dispatch（run id `21934708384`）成功，`ci` push 校验（run id `21934821843`、`21934899933`）均成功。
+
+- P5（下一阶段）诊断契约统一与门禁编排：
+  - DoD1：统一 `check` / `check-modules` JSON 结构字段（补充 `summary`：errors/warnings/counts/phase），并保持向后兼容。
+  - DoD2：新增 `scripts/check_json_contract.sh`，对 `check` 与 `check-modules` 的 JSON shape 做静态断言（pass/warn/error 三矩阵）。
+  - DoD3：CI 增加 `check-json-contract` smoke，失败时在 step summary 输出首条字段差异。
+  - 验证命令（计划）：`cargo run -p kooixc -- check examples/valid.kooix --json` + `cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json` + `./scripts/check_json_contract.sh --assert`。

@@ -44,7 +44,7 @@ Kooix already has a runnable minimal compiler pipeline:
   - stop condition target validation (unknown/unreachable state warning).
   - non-termination warning when there is no `max_iterations` guard and no reachable terminal path.
   - SCC-based cycle liveness validation (cycle-only agents get warnings unless properly guarded).
-- CLI commands: `check`, `check-modules`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (`check-modules` supports `--json` / `--pretty`; `native-llvm` builds native binaries directly from LLVM IR files).
+- CLI commands: `check`, `check-modules`, `ast`, `hir`, `mir`, `llvm`, `run`, `native`, `native-llvm` (`check` and `check-modules` both support `--strict-warnings`; both also support structured diagnostics via `--json` / `--pretty`; `native-llvm` builds native binaries directly from LLVM IR files).
 - Native run enhancements: `--run`, `--stdin <file|->`, `-- <args...>`, `--timeout <ms>`.
 - Multi-file loading (include-style): top-level `import "path";` / `import "path" as Foo;`
   - The main compile/run pipeline still uses include-style compat semantics (recursive import expansion + concatenated source); `Foo::...` is now resolved directly in sema/lowering (no normalize prefix stripping required).
