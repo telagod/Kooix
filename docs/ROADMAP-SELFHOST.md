@@ -148,7 +148,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert`。
 
 - P6（下一阶段）模块主链路收敛与消费者迁移：
-  - DoD1：将 `check-modules` 的 `summary` 直接用于 CI summary 统计，移除重复 `jq` 计数逻辑。
-  - DoD2：bootstrap preflight 指标解析优先读取 `summary`（保留旧路径兜底，逐步迁移）。
+  - ✅ DoD1：`check-modules` 的 `summary` 已用于 CI `Module-check summary` 统计，并保留无 `summary` 场景的 fallback 计数逻辑。
+  - ✅ DoD2：bootstrap preflight 指标解析已优先读取 `summary.errors/warnings`，并保留旧字段回退路径。
   - DoD3：新增 JSON schema version 字段（如 `schema_version`），并在脚本中做版本兼容校验。
   - 验证命令（计划）：`./scripts/check_json_contract.sh --assert` + `./scripts/bootstrap_module_preflight_json_check.sh <metrics> --assert` + CI `Module-check summary` 结构对比。

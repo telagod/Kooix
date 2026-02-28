@@ -148,16 +148,43 @@ jobs:
           error_ok=$(jq -r '.ok' module-check-error.json)
           error_strict_ok=$(jq -r '.ok' module-check-error-strict.json)
 
-          pass_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-pass.json)
-          pass_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-pass.json)
+          count_errors() {
+            jq '
+              def diag_stream: (.modules[]?.diagnostics[]?), (.errors[]?);
+              if (.summary.errors | type) == "number"
+              then (.summary.errors | floor)
+              else ([diag_stream | select(.severity == "error")] | length)
+              end
+            ' "$1"
+          }
 
-          warn_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-warn.json)
-          warn_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-warn.json)
-          warn_first=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check-warn.json)
+          count_warnings() {
+            jq '
+              def diag_stream: (.modules[]?.diagnostics[]?), (.errors[]?);
+              if (.summary.warnings | type) == "number"
+              then (.summary.warnings | floor)
+              else ([diag_stream | select(.severity == "warning")] | length)
+              end
+            ' "$1"
+          }
 
-          error_errors=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "error")] | length' module-check-error.json)
-          error_warnings=$(jq '[.modules[]?.diagnostics[]? | select(.severity == "warning")] | length' module-check-error.json)
-          error_first=$(jq -r '([.modules[]?.diagnostics[]?][0].message // "none")' module-check-error.json)
+          first_diagnostic() {
+            jq -r '
+              def diag_stream: (.modules[]?.diagnostics[]?), (.errors[]?);
+              ([diag_stream][0].message // "none")
+            ' "$1"
+          }
+
+          pass_errors=$(count_errors module-check-pass.json)
+          pass_warnings=$(count_warnings module-check-pass.json)
+
+          warn_errors=$(count_errors module-check-warn.json)
+          warn_warnings=$(count_warnings module-check-warn.json)
+          warn_first=$(first_diagnostic module-check-warn.json)
+
+          error_errors=$(count_errors module-check-error.json)
+          error_warnings=$(count_warnings module-check-error.json)
+          error_first=$(first_diagnostic module-check-error.json)
 
           {
             echo "### Module Check Summary"

@@ -207,10 +207,20 @@ parse_module_preflight_json() {
 
   jq -r '
     def diag_stream: (.modules[]?.diagnostics[]?), (.errors[]?);
+    def summary_errors:
+      if (.summary.errors | type) == "number"
+      then (.summary.errors | floor)
+      else ([diag_stream | select(.severity == "error")] | length)
+      end;
+    def summary_warnings:
+      if (.summary.warnings | type) == "number"
+      then (.summary.warnings | floor)
+      else ([diag_stream | select(.severity == "warning")] | length)
+      end;
     [
       (if (.ok | type) == "boolean" then (if .ok then "true" else "false" end) else "unknown" end),
-      ([diag_stream | select(.severity == "error")] | length | tostring),
-      ([diag_stream | select(.severity == "warning")] | length | tostring),
+      (summary_errors | tostring),
+      (summary_warnings | tostring),
       ([diag_stream | "\(.severity): \(.message)"] | .[0] // "none")
     ] | @tsv
   ' "$json_file"
