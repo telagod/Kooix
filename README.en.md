@@ -271,6 +271,10 @@ grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # Additional shape check for module preflight JSON metrics (enabled/disabled modes)
 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# One-command local sanity (strict-local + module preflight enabled/disabled, sequential)
+CARGO_BUILD_JOBS=1 ./scripts/bootstrap_ci_sanity.sh
+# CI-equivalent lightweight smoke (mock heavy gate for fast sanity regression)
+./scripts/bootstrap_ci_sanity_smoke.sh
 
 # Extended loop: build compiler_main with dist/kooixc1, then use that compiler to build+run stage2_min
 ./dist/kooixc1 stage1/compiler_main.kooix /tmp/kx-stage3-compiler-main.ll /tmp/kx-stage3-compiler-main

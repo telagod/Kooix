@@ -109,6 +109,10 @@ jobs:
           EOF
           ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-disabled.metrics --assert
 
+      - name: Bootstrap CI sanity script smoke
+        run: |
+          ./scripts/bootstrap_ci_sanity_smoke.sh
+
       - name: Upload module-check artifact
         if: always()
         uses: actions/upload-artifact@v4
