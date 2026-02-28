@@ -136,6 +136,8 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --p
 
 # Treat warnings as failures (progressive gate hardening)
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
+# Contract check for check/check-modules JSON (pass/warn/error + load phase)
+./scripts/check_json_contract.sh --assert
 
 # CI stores module-check JSON as an artifact and summarizes errors/warnings in the job summary
 

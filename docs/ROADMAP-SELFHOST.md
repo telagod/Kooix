@@ -141,8 +141,14 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（2026-02-12）：`CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh`（严格限载预设回归通过，本地）。
   - CI 记录（2026-02-12）：`bootstrap-heavy` workflow_dispatch（run id `21934708384`）成功，`ci` push 校验（run id `21934821843`、`21934899933`）均成功。
 
-- P5（下一阶段）诊断契约统一与门禁编排：
-  - DoD1：统一 `check` / `check-modules` JSON 结构字段（补充 `summary`：errors/warnings/counts/phase），并保持向后兼容。
-  - DoD2：新增 `scripts/check_json_contract.sh`，对 `check` 与 `check-modules` 的 JSON shape 做静态断言（pass/warn/error 三矩阵）。
-  - DoD3：CI 增加 `check-json-contract` smoke，失败时在 step summary 输出首条字段差异。
-  - 验证命令（计划）：`cargo run -p kooixc -- check examples/valid.kooix --json` + `cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json` + `./scripts/check_json_contract.sh --assert`。
+- P5（已完成）诊断契约统一与门禁编排：
+  - ✅ DoD1：统一 `check` / `check-modules` JSON 结构字段（新增 `summary.phase/errors/warnings/counts.diagnostics`），并保持原有字段向后兼容。
+  - ✅ DoD2：新增 `scripts/check_json_contract.sh`，对 `check` 与 `check-modules` 的 JSON shape 做静态断言（pass/warn/error + load phase）。
+  - ✅ DoD3：CI 已接入 `check-json-contract` smoke（`./scripts/check_json_contract.sh --assert`）。
+  - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert`。
+
+- P6（下一阶段）模块主链路收敛与消费者迁移：
+  - DoD1：将 `check-modules` 的 `summary` 直接用于 CI summary 统计，移除重复 `jq` 计数逻辑。
+  - DoD2：bootstrap preflight 指标解析优先读取 `summary`（保留旧路径兜底，逐步迁移）。
+  - DoD3：新增 JSON schema version 字段（如 `schema_version`），并在脚本中做版本兼容校验。
+  - 验证命令（计划）：`./scripts/check_json_contract.sh --assert` + `./scripts/bootstrap_module_preflight_json_check.sh <metrics> --assert` + CI `Module-check summary` 结构对比。

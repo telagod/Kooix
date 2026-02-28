@@ -376,10 +376,44 @@ fn print_module_diagnostics(results: &[ModuleCheckResult]) {
     }
 }
 
+fn count_diagnostics(diagnostics: &[Diagnostic]) -> (usize, usize) {
+    diagnostics.iter().fold(
+        (0usize, 0usize),
+        |(errors, warnings), diagnostic| match diagnostic.severity {
+            Severity::Error => (errors + 1, warnings),
+            Severity::Warning => (errors, warnings + 1),
+        },
+    )
+}
+
+fn count_module_diagnostics(results: &[ModuleCheckResult]) -> (usize, usize) {
+    results
+        .iter()
+        .fold((0usize, 0usize), |(errors, warnings), result| {
+            let (module_errors, module_warnings) = count_diagnostics(&result.diagnostics);
+            (errors + module_errors, warnings + module_warnings)
+        })
+}
+
+fn push_summary_json(out: &mut String, phase: &str, errors: usize, warnings: usize) {
+    let diagnostics = errors + warnings;
+    out.push_str(",\"summary\":{\"phase\":\"");
+    out.push_str(&escape_json_string(phase));
+    out.push_str("\",\"errors\":");
+    out.push_str(&errors.to_string());
+    out.push_str(",\"warnings\":");
+    out.push_str(&warnings.to_string());
+    out.push_str(",\"counts\":{\"diagnostics\":");
+    out.push_str(&diagnostics.to_string());
+    out.push_str("}}");
+}
+
 fn print_check_diagnostics_json(diagnostics: &[Diagnostic], pretty: bool, ok: bool) {
+    let (errors, warnings) = count_diagnostics(diagnostics);
     let mut out = String::new();
     out.push_str("{\"ok\":");
     out.push_str(if ok { "true" } else { "false" });
+    push_summary_json(&mut out, "check", errors, warnings);
     out.push_str(",\"diagnostics\":[");
 
     for (index, diagnostic) in diagnostics.iter().enumerate() {
@@ -402,9 +436,11 @@ fn print_check_diagnostics_json(diagnostics: &[Diagnostic], pretty: bool, ok: bo
 }
 
 fn print_module_diagnostics_json(results: &[ModuleCheckResult], pretty: bool, ok: bool) {
+    let (errors, warnings) = count_module_diagnostics(results);
     let mut out = String::new();
     out.push_str("{\"ok\":");
     out.push_str(if ok { "true" } else { "false" });
+    push_summary_json(&mut out, "check-modules", errors, warnings);
     out.push_str(",\"modules\":[");
 
     for (module_index, result) in results.iter().enumerate() {
@@ -438,8 +474,11 @@ fn print_module_diagnostics_json(results: &[ModuleCheckResult], pretty: bool, ok
 }
 
 fn print_loader_diagnostics_json(errors: &[Diagnostic], pretty: bool) {
+    let (error_count, warning_count) = count_diagnostics(errors);
     let mut out = String::new();
-    out.push_str("{\"ok\":false,\"phase\":\"load\",\"errors\":[");
+    out.push_str("{\"ok\":false,\"phase\":\"load\"");
+    push_summary_json(&mut out, "load", error_count, warning_count);
+    out.push_str(",\"errors\":[");
 
     for (index, error) in errors.iter().enumerate() {
         if index > 0 {

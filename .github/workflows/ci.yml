@@ -83,6 +83,10 @@ jobs:
             exit 1
           fi
 
+      - name: Check JSON contract smoke
+        run: |
+          ./scripts/check_json_contract.sh --assert
+
       - name: Module-preflight metrics script smoke
         run: |
           set -euo pipefail

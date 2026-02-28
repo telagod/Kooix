@@ -111,6 +111,14 @@ fn check_modules_json_output_reports_ok_state() {
         "unexpected stdout: {stdout}"
     );
     assert!(
+        stdout.contains("\"summary\""),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"phase\":\"check-modules\""),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
         stdout.contains("\"modules\""),
         "unexpected stdout: {stdout}"
     );
@@ -144,6 +152,10 @@ fn check_modules_json_output_reports_errors() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("\"ok\":false"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"phase\":\"check-modules\""),
         "unexpected stdout: {stdout}"
     );
     assert!(
@@ -289,6 +301,10 @@ fn check_modules_json_warning_is_ok_without_strict() {
         "unexpected stdout: {stdout}"
     );
     assert!(
+        stdout.contains("\"phase\":\"check-modules\""),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
         stdout.contains("\"severity\":\"warning\""),
         "unexpected stdout: {stdout}"
     );
@@ -319,6 +335,10 @@ fn check_modules_json_warning_fails_with_strict() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("\"ok\":false"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"phase\":\"check-modules\""),
         "unexpected stdout: {stdout}"
     );
 
