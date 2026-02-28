@@ -15,6 +15,25 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
+is_pos_int() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( "$1" > 0 ))
+}
+
+MIN_SCHEMA_VERSION="${KX_CHECK_JSON_MIN_SCHEMA_VERSION:-1}"
+MAX_SCHEMA_VERSION="${KX_CHECK_JSON_MAX_SCHEMA_VERSION:-1}"
+if ! is_pos_int "$MIN_SCHEMA_VERSION"; then
+  echo "invalid KX_CHECK_JSON_MIN_SCHEMA_VERSION=$MIN_SCHEMA_VERSION" >&2
+  exit 2
+fi
+if ! is_pos_int "$MAX_SCHEMA_VERSION"; then
+  echo "invalid KX_CHECK_JSON_MAX_SCHEMA_VERSION=$MAX_SCHEMA_VERSION" >&2
+  exit 2
+fi
+if (( MIN_SCHEMA_VERSION > MAX_SCHEMA_VERSION )); then
+  echo "invalid schema version range: min=$MIN_SCHEMA_VERSION max=$MAX_SCHEMA_VERSION" >&2
+  exit 2
+fi
+
 TMP_DIR="$(mktemp -d /tmp/kx-check-json-contract-XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -70,8 +89,15 @@ run_json_case() {
 assert_check_contract() {
   local file="$1"
   local expected_ok="$2"
-  jq -e --argjson expected_ok "$expected_ok" '
+  jq -e \
+    --argjson expected_ok "$expected_ok" \
+    --argjson min_schema "$MIN_SCHEMA_VERSION" \
+    --argjson max_schema "$MAX_SCHEMA_VERSION" '
     (.ok == $expected_ok)
+    and (.schema_version | type == "number")
+    and (.schema_version == (.schema_version | floor))
+    and (.schema_version >= $min_schema)
+    and (.schema_version <= $max_schema)
     and (.summary | type == "object")
     and (.summary.phase == "check")
     and (.summary.errors | type == "number")
@@ -88,8 +114,15 @@ assert_check_contract() {
 assert_module_contract() {
   local file="$1"
   local expected_ok="$2"
-  jq -e --argjson expected_ok "$expected_ok" '
+  jq -e \
+    --argjson expected_ok "$expected_ok" \
+    --argjson min_schema "$MIN_SCHEMA_VERSION" \
+    --argjson max_schema "$MAX_SCHEMA_VERSION" '
     (.ok == $expected_ok)
+    and (.schema_version | type == "number")
+    and (.schema_version == (.schema_version | floor))
+    and (.schema_version >= $min_schema)
+    and (.schema_version <= $max_schema)
     and (.summary | type == "object")
     and (.summary.phase == "check-modules")
     and (.summary.errors | type == "number")
@@ -105,8 +138,14 @@ assert_module_contract() {
 
 assert_loader_contract() {
   local file="$1"
-  jq -e '
+  jq -e \
+    --argjson min_schema "$MIN_SCHEMA_VERSION" \
+    --argjson max_schema "$MAX_SCHEMA_VERSION" '
     (.ok == false)
+    and (.schema_version | type == "number")
+    and (.schema_version == (.schema_version | floor))
+    and (.schema_version >= $min_schema)
+    and (.schema_version <= $max_schema)
     and (.phase == "load")
     and (.summary | type == "object")
     and (.summary.phase == "load")

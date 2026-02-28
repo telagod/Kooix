@@ -150,5 +150,10 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - P6（下一阶段）模块主链路收敛与消费者迁移：
   - ✅ DoD1：`check-modules` 的 `summary` 已用于 CI `Module-check summary` 统计，并保留无 `summary` 场景的 fallback 计数逻辑。
   - ✅ DoD2：bootstrap preflight 指标解析已优先读取 `summary.errors/warnings`，并保留旧字段回退路径。
-  - DoD3：新增 JSON schema version 字段（如 `schema_version`），并在脚本中做版本兼容校验。
+  - ✅ DoD3：JSON 输出已新增 `schema_version` 字段；`check_json_contract.sh` 支持 `KX_CHECK_JSON_MIN_SCHEMA_VERSION` / `KX_CHECK_JSON_MAX_SCHEMA_VERSION` 版本兼容校验。
   - 验证命令（计划）：`./scripts/check_json_contract.sh --assert` + `./scripts/bootstrap_module_preflight_json_check.sh <metrics> --assert` + CI `Module-check summary` 结构对比。
+
+- P7（下一阶段）契约版本演进与消费迁移：
+  - DoD1：为 `schema_version` 建立变更策略（major/minor 兼容矩阵）并写入文档。
+  - DoD2：`bootstrap_module_preflight_json_check.sh` 增加对 `schema_version` 的可选断言，避免未知版本静默漂移。
+  - DoD3：在 CI summary 中输出 `schema_version` 与 `summary.phase`，便于问题定位与回滚判定。
