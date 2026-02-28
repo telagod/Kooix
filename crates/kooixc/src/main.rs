@@ -99,6 +99,18 @@ fn main() {
     }
 
     let file = &args[2];
+    let check_options = if command == "check" {
+        match parse_check_options(&args[3..]) {
+            Ok(options) => Some(options),
+            Err(message) => {
+                eprintln!("{message}");
+                print_usage();
+                process::exit(2);
+            }
+        }
+    } else {
+        None
+    };
 
     let entry_path = Path::new(file);
     if command == "check-modules" {
@@ -170,12 +182,23 @@ fn main() {
 
     match command {
         "check" => {
+            let options = check_options.expect("check options should be available");
             let diagnostics = check_source(&source);
-            if diagnostics.is_empty() {
+            let has_errors = diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error);
+            let has_warnings = diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Warning);
+
+            if !has_errors && !has_warnings {
                 println!("ok: semantic checks passed");
             } else {
                 print_diagnostics(&diagnostics, &source_map);
-                process::exit(1);
+                if has_errors || (options.strict_warnings && has_warnings) {
+                    process::exit(1);
+                }
+                println!("ok: semantic checks passed with warnings");
             }
         }
         "ast" => match parse_source(&source) {
@@ -516,7 +539,7 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
 
 fn print_usage() {
     eprintln!(
-        "usage: kooixc <check|ast|hir|mir|llvm|run|native> <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc check-modules <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc check <file.kooix> [--strict-warnings]\n       kooixc <ast|hir|mir|llvm|run> <file.kooix>\n       kooixc check-modules <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc native <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
     );
 }
 
@@ -545,6 +568,30 @@ struct CheckModulesOptions {
     json: bool,
     pretty: bool,
     strict_warnings: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CheckOptions {
+    strict_warnings: bool,
+}
+
+fn parse_check_options(args: &[String]) -> Result<CheckOptions, String> {
+    let mut strict_warnings = false;
+
+    for arg in args {
+        if arg == "--strict-warnings" {
+            strict_warnings = true;
+            continue;
+        }
+
+        if arg.starts_with("--") {
+            return Err(format!("unknown check option '{arg}'"));
+        }
+
+        return Err(format!("unexpected check argument '{arg}'"));
+    }
+
+    Ok(CheckOptions { strict_warnings })
 }
 
 fn parse_check_modules_options(args: &[String]) -> Result<CheckModulesOptions, String> {

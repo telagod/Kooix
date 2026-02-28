@@ -118,6 +118,8 @@ Kooix 已完成一条可运行的最小编译链路：
 
 ```bash
 cargo run -p kooixc -- check examples/valid.kooix
+# 将 warning 视为失败（check 默认 warning 不失败）
+cargo run -p kooixc -- check examples/valid.kooix --strict-warnings
 
 # 模块感知语义检查（按文件 + qualified import）
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix
