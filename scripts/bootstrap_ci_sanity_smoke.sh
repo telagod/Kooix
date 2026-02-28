@@ -17,7 +17,7 @@ metrics_file="${KX_HEAVY_METRICS_FILE:-/tmp/bootstrap-heavy-metrics.txt}"
 json_file="$out_dir/mock-module-preflight.json"
 
 if [[ "${KX_HEAVY_MODULE_PREFLIGHT:-1}" == "1" ]]; then
-  printf '{"ok":true,"modules":[]}\n' > "$json_file"
+  printf '{"schema_version":1,"ok":true,"summary":{"phase":"check-modules","errors":0,"warnings":0,"counts":{"diagnostics":0}},"modules":[]}\n' > "$json_file"
   cat > "$metrics_file" <<METRICS
 strict_local_mode=enabled
 compiler_main_smoke_enabled=enabled

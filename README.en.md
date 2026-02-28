@@ -138,6 +138,7 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --p
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
 # Contract check for check/check-modules JSON (pass/warn/error + load phase)
 ./scripts/check_json_contract.sh --assert
+# Versioning policy and compatibility matrix: docs/CHECK-JSON-CONTRACT.md
 
 # CI stores module-check JSON as an artifact and summarizes errors/warnings in the job summary
 
@@ -277,6 +278,8 @@ grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # Additional shape check for module preflight JSON metrics (enabled/disabled modes)
 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# Optional: also assert schema_version/summary.phase on module preflight JSON
+KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # One-command local sanity (strict-local + module preflight enabled/disabled, sequential)
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_ci_sanity.sh
 # CI-equivalent lightweight smoke (mock heavy gate for fast sanity regression)

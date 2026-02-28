@@ -154,6 +154,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 验证命令（计划）：`./scripts/check_json_contract.sh --assert` + `./scripts/bootstrap_module_preflight_json_check.sh <metrics> --assert` + CI `Module-check summary` 结构对比。
 
 - P7（下一阶段）契约版本演进与消费迁移：
-  - DoD1：为 `schema_version` 建立变更策略（major/minor 兼容矩阵）并写入文档。
-  - DoD2：`bootstrap_module_preflight_json_check.sh` 增加对 `schema_version` 的可选断言，避免未知版本静默漂移。
-  - DoD3：在 CI summary 中输出 `schema_version` 与 `summary.phase`，便于问题定位与回滚判定。
+  - ✅ DoD1：新增 `docs/CHECK-JSON-CONTRACT.md`，明确 `schema_version` 变更策略与兼容矩阵（严格模式 `[1,1]`、迁移窗口区间模式）。
+  - ✅ DoD2：`bootstrap_module_preflight_json_check.sh` 新增可选 schema 断言（`KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1` + `KX_MODULE_PREFLIGHT_MIN/MAX_SCHEMA_VERSION` + `KX_MODULE_PREFLIGHT_ALLOWED_PHASES`）。
+  - ✅ DoD3：CI `Module-check summary` 已输出 `schema_version` 与 `summary.phase`（pass/warn/error/strict 全覆盖），用于快速定位契约漂移。
+  - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert` + `KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-enabled.metrics --assert` + `./scripts/bootstrap_ci_sanity_smoke.sh`。

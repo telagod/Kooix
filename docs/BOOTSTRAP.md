@@ -67,7 +67,7 @@
   - 建议在本地/CI 限制并发以避免 `llc/clang` 并行把机器打满：`cargo test -p kooixc -j 1 -- --test-threads=1`
 - 可选重载门禁：已新增 `bootstrap-heavy` workflow（`.github/workflows/bootstrap-heavy.yml`），支持 `workflow_dispatch` 手动触发与 nightly `schedule`，默认调用 `scripts/bootstrap_heavy_gate.sh`（低资源配额）。`workflow_dispatch` 支持布尔输入：`run_determinism`（默认 true）/ `run_deep`（默认 false）/ `run_compiler_smoke`（默认 false）/ `run_compiler_main_smoke`（默认 false）/ `run_import_smoke`（默认 false）/ `run_selfhost_eq`（默认 false）/ `reuse_stage3`（默认 true）/ `reuse_stage2`（默认 true）/ `reuse_only`（默认 false）；nightly `schedule` 默认开启 `compiler_main` 二段闭环 smoke（`run_compiler_main_smoke=true`）。workflow 内部默认启用 `KX_HEAVY_SAFE_MODE=1` 与 timeout 配额（CI 显式 `KX_HEAVY_SAFE_MAX_VMEM_KB=0`，避免 runner 因自动内存上限导致误杀）。
 - `ci` workflow 已新增“冷启动护栏 smoke”：在空目录下强制开启 `KX_SAFE_COLD_START_GUARD=1` 与 `KX_HEAVY_COLD_START_GUARD=1`，校验 `bootstrap_v0_13.sh` / `bootstrap_heavy_gate.sh` 会 fail-fast（而不是误触发全量重建）。
-- `ci` workflow 同步增加 `bootstrap_module_preflight_json_check.sh` smoke：用 enabled/disabled 两类样例 metrics 回归 `module_preflight_json` 指标形态，避免 summary/artifact 字段回退。
+- `ci` workflow 同步增加 `bootstrap_module_preflight_json_check.sh` smoke：用 enabled/disabled 两类样例 metrics 回归 `module_preflight_json` 指标形态，且在 enabled 样例下启用 `KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1` 对 `schema_version/summary.phase` 做可选断言，避免契约静默漂移。
 - 本地新增 `scripts/bootstrap_ci_sanity.sh`：单命令串行执行 strict-local + module preflight enabled/disabled 校验（默认 `CARGO_BUILD_JOBS=1`、reuse-only），用于推送前快速自检。
 - 新增 `scripts/bootstrap_ci_sanity_smoke.sh`：mock heavy gate 的轻量 smoke，便于本地复现 CI 的 sanity 脚本回归。
 - 可选 deterministic 证据：`bootstrap-heavy` 同时执行 `compiler_main` 双次 emit，对输出 LLVM IR 做 `sha256` 与 `cmp` 一致性校验，并产出 `/tmp/bootstrap-heavy-determinism.sha256`。
@@ -195,6 +195,8 @@ grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # 额外校验 module preflight JSON 指标形态（enabled/disabled 两种模式）
 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# 可选：同时断言 module preflight JSON 的 schema_version/summary.phase
+KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # 一键本地 sanity（串行执行 strict-local + module preflight enabled/disabled）
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_ci_sanity.sh
 # CI 同款轻量 smoke（mock heavy gate，快速回归 sanity 脚本）

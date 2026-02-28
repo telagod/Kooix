@@ -4,12 +4,38 @@ set -euo pipefail
 METRICS_FILE="${1:-/tmp/bootstrap-heavy-metrics.txt}"
 ASSERT_MODE="${2:-}"
 SKIP_JSON_FILE_CHECK="${KX_MODULE_PREFLIGHT_SKIP_FILE_CHECK:-0}"
+SCHEMA_ASSERT="${KX_MODULE_PREFLIGHT_ASSERT_SCHEMA:-0}"
+MIN_SCHEMA_VERSION="${KX_MODULE_PREFLIGHT_MIN_SCHEMA_VERSION:-1}"
+MAX_SCHEMA_VERSION="${KX_MODULE_PREFLIGHT_MAX_SCHEMA_VERSION:-1}"
+ALLOWED_PHASES="${KX_MODULE_PREFLIGHT_ALLOWED_PHASES:-check-modules,load}"
 
 metric() {
   local key="$1"
   if [[ -f "$METRICS_FILE" ]]; then
     awk -F= -v k="$key" '$1==k {print $2}' "$METRICS_FILE" | tail -n 1
   fi
+}
+
+is_enabled() {
+  local value
+  value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ "$value" == "1" || "$value" == "true" || "$value" == "on" || "$value" == "yes" ]]
+}
+
+is_pos_int() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]] && (( "$1" > 0 ))
+}
+
+phase_allowed() {
+  local phase="$1"
+  local candidate
+  IFS=',' read -r -a phases <<< "$ALLOWED_PHASES"
+  for candidate in "${phases[@]}"; do
+    if [[ "$phase" == "$candidate" ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 if [[ ! -f "$METRICS_FILE" ]]; then
@@ -38,6 +64,27 @@ printf 'module_preflight_first_diagnostic=%s\n' "${module_first_diag:-missing}"
 if [[ "$ASSERT_MODE" == "--assert" ]]; then
   ok=1
 
+  if is_enabled "$SCHEMA_ASSERT"; then
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "assert fail: jq is required when KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=$SCHEMA_ASSERT" >&2
+      ok=0
+    fi
+
+    if ! is_pos_int "$MIN_SCHEMA_VERSION"; then
+      echo "assert fail: invalid KX_MODULE_PREFLIGHT_MIN_SCHEMA_VERSION=$MIN_SCHEMA_VERSION" >&2
+      ok=0
+    fi
+    if ! is_pos_int "$MAX_SCHEMA_VERSION"; then
+      echo "assert fail: invalid KX_MODULE_PREFLIGHT_MAX_SCHEMA_VERSION=$MAX_SCHEMA_VERSION" >&2
+      ok=0
+    fi
+    if is_pos_int "$MIN_SCHEMA_VERSION" && is_pos_int "$MAX_SCHEMA_VERSION" \
+      && (( MIN_SCHEMA_VERSION > MAX_SCHEMA_VERSION )); then
+      echo "assert fail: invalid schema version range min=$MIN_SCHEMA_VERSION max=$MAX_SCHEMA_VERSION" >&2
+      ok=0
+    fi
+  fi
+
   case "$module_mode" in
     enabled)
       if [[ -z "$module_json" || "$module_json" == "n/a" ]]; then
@@ -61,6 +108,33 @@ if [[ "$ASSERT_MODE" == "--assert" ]]; then
       if [[ "$module_warnings" != "n/a" && ! "$module_warnings" =~ ^[0-9]+$ ]]; then
         echo "assert fail: module_preflight_warnings is '$module_warnings' (expected integer or n/a)" >&2
         ok=0
+      fi
+
+      if is_enabled "$SCHEMA_ASSERT"; then
+        if [[ ! -s "$module_json" ]]; then
+          echo "assert fail: schema assertion requires a non-empty json file, got '$module_json'" >&2
+          ok=0
+        else
+          schema_version="$(jq -r '
+            if (.schema_version | type) == "number" and (.schema_version == (.schema_version | floor))
+            then (.schema_version | floor | tostring)
+            else "invalid"
+            end
+          ' "$module_json" 2>/dev/null || echo invalid)"
+          if [[ ! "$schema_version" =~ ^[0-9]+$ ]]; then
+            echo "assert fail: schema_version is '$schema_version' (expected positive integer)" >&2
+            ok=0
+          elif (( schema_version < MIN_SCHEMA_VERSION || schema_version > MAX_SCHEMA_VERSION )); then
+            echo "assert fail: schema_version=$schema_version is outside [$MIN_SCHEMA_VERSION,$MAX_SCHEMA_VERSION]" >&2
+            ok=0
+          fi
+
+          summary_phase="$(jq -r '.summary.phase // .phase // "missing"' "$module_json" 2>/dev/null || echo missing)"
+          if ! phase_allowed "$summary_phase"; then
+            echo "assert fail: summary.phase is '$summary_phase' (allowed: $ALLOWED_PHASES)" >&2
+            ok=0
+          fi
+        fi
       fi
       ;;
 

@@ -100,6 +100,7 @@ jobs:
           module_preflight_warnings=0
           module_preflight_first_diagnostic=none
           EOF
+          KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 \
           ./scripts/bootstrap_module_preflight_json_check.sh /tmp/module-preflight-enabled.metrics --assert
 
           cat > /tmp/module-preflight-disabled.metrics <<'EOF'
@@ -175,25 +176,48 @@ jobs:
             ' "$1"
           }
 
+          schema_version() {
+            jq -r '
+              if (.schema_version | type) == "number"
+              then (.schema_version | floor | tostring)
+              else "n/a"
+              end
+            ' "$1"
+          }
+
+          summary_phase() {
+            jq -r '.summary.phase // .phase // "n/a"' "$1"
+          }
+
           pass_errors=$(count_errors module-check-pass.json)
           pass_warnings=$(count_warnings module-check-pass.json)
+          pass_schema=$(schema_version module-check-pass.json)
+          pass_phase=$(summary_phase module-check-pass.json)
 
           warn_errors=$(count_errors module-check-warn.json)
           warn_warnings=$(count_warnings module-check-warn.json)
           warn_first=$(first_diagnostic module-check-warn.json)
+          warn_schema=$(schema_version module-check-warn.json)
+          warn_phase=$(summary_phase module-check-warn.json)
+          warn_strict_schema=$(schema_version module-check-warn-strict.json)
+          warn_strict_phase=$(summary_phase module-check-warn-strict.json)
 
           error_errors=$(count_errors module-check-error.json)
           error_warnings=$(count_warnings module-check-error.json)
           error_first=$(first_diagnostic module-check-error.json)
+          error_schema=$(schema_version module-check-error.json)
+          error_phase=$(summary_phase module-check-error.json)
+          error_strict_schema=$(schema_version module-check-error-strict.json)
+          error_strict_phase=$(summary_phase module-check-error-strict.json)
 
           {
             echo "### Module Check Summary"
             echo ""
-            echo "- pass-case ok: ${pass_ok} (errors=${pass_errors}, warnings=${pass_warnings})"
-            echo "- warn-case ok: ${warn_ok} (errors=${warn_errors}, warnings=${warn_warnings})"
-            echo "- warn-case strict ok: ${warn_strict_ok}"
-            echo "- error-case ok: ${error_ok} (errors=${error_errors}, warnings=${error_warnings})"
-            echo "- error-case strict ok: ${error_strict_ok}"
+            echo "- pass-case ok: ${pass_ok} (schema=${pass_schema}, phase=${pass_phase}, errors=${pass_errors}, warnings=${pass_warnings})"
+            echo "- warn-case ok: ${warn_ok} (schema=${warn_schema}, phase=${warn_phase}, errors=${warn_errors}, warnings=${warn_warnings})"
+            echo "- warn-case strict ok: ${warn_strict_ok} (schema=${warn_strict_schema}, phase=${warn_strict_phase})"
+            echo "- error-case ok: ${error_ok} (schema=${error_schema}, phase=${error_phase}, errors=${error_errors}, warnings=${error_warnings})"
+            echo "- error-case strict ok: ${error_strict_ok} (schema=${error_strict_schema}, phase=${error_strict_phase})"
             echo "- warn-case first diagnostic: ${warn_first}"
             echo "- error-case first diagnostic: ${error_first}"
           } >> "$GITHUB_STEP_SUMMARY"

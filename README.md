@@ -136,6 +136,7 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --p
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
 # 统一校验 check/check-modules JSON 契约（pass/warn/error + load phase）
 ./scripts/check_json_contract.sh --assert
+# 契约版本策略与兼容矩阵：docs/CHECK-JSON-CONTRACT.md
 
 # CI 会保存 module-check JSON artifact，并在 job summary 汇总 errors/warnings
 
@@ -275,6 +276,8 @@ grep -E "^(strict_local_mode|cold_start_guard|compiler_main_smoke_enabled|heavy_
 ./scripts/bootstrap_strict_local_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # 额外校验 module preflight JSON 指标形态（enabled/disabled 两种模式）
 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
+# 可选：同时断言 module preflight JSON 的 schema_version/summary.phase
+KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 ./scripts/bootstrap_module_preflight_json_check.sh /tmp/bootstrap-heavy-metrics.txt --assert
 # 一键本地 sanity（串行执行 strict-local + module preflight enabled/disabled）
 CARGO_BUILD_JOBS=1 ./scripts/bootstrap_ci_sanity.sh
 # CI 同款轻量 smoke（mock heavy gate，快速回归 sanity 脚本）

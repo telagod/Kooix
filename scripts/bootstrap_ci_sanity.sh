@@ -59,7 +59,12 @@ run_case() {
   "$HEAVY_GATE_BIN" "$OUT_DIR"
 
   ./scripts/bootstrap_strict_local_check.sh "$METRICS_FILE" --assert
-  ./scripts/bootstrap_module_preflight_json_check.sh "$METRICS_FILE" --assert
+  if [[ "$module_preflight" == "1" ]]; then
+    KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1 \
+      ./scripts/bootstrap_module_preflight_json_check.sh "$METRICS_FILE" --assert
+  else
+    ./scripts/bootstrap_module_preflight_json_check.sh "$METRICS_FILE" --assert
+  fi
 
   local actual_mode
   actual_mode="$(metric module_preflight_enabled)"
