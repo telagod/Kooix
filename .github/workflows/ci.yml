@@ -40,6 +40,7 @@ jobs:
           docs_sync_dir="/tmp/kx-doc-sync-gate"
           docs_sync_log="$docs_sync_dir/gate.log"
           docs_sync_meta="$docs_sync_dir/meta.txt"
+          docs_sync_result="$docs_sync_dir/result.env"
 
           rm -rf "$docs_sync_dir"
           mkdir -p "$docs_sync_dir"
@@ -61,16 +62,10 @@ jobs:
           fi
 
           {
-            echo "### Check JSON Contract Docs Sync"
-            echo ""
-            echo "- state: $docs_sync_state"
-            echo "- base: $KX_DOC_SYNC_BASE_SHA"
-            echo "- head: $KX_DOC_SYNC_HEAD_SHA"
-            echo "- log:"
-            echo '```text'
-            cat "$docs_sync_log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "docs_sync_state=$docs_sync_state"
+            echo "docs_sync_base=$KX_DOC_SYNC_BASE_SHA"
+            echo "docs_sync_head=$KX_DOC_SYNC_HEAD_SHA"
+          } > "$docs_sync_result"
 
           if [[ "$docs_sync_status" -ne 0 ]]; then
             cat "$docs_sync_log" >&2
@@ -84,6 +79,7 @@ jobs:
           name: docs-sync-gate-log
           path: |
             /tmp/kx-doc-sync-gate/meta.txt
+            /tmp/kx-doc-sync-gate/result.env
             /tmp/kx-doc-sync-gate/gate.log
           if-no-files-found: warn
 
@@ -271,6 +267,33 @@ jobs:
       - name: Module-check summary
         if: always()
         run: |
+          docs_sync_result_file=/tmp/kx-doc-sync-gate/result.env
+          docs_sync_log_file=/tmp/kx-doc-sync-gate/gate.log
+          docs_sync_state="n/a"
+          docs_sync_base="n/a"
+          docs_sync_head="n/a"
+          if [[ -f "$docs_sync_result_file" ]]; then
+            docs_sync_state="$(awk -F= '$1=="docs_sync_state" {print $2}' "$docs_sync_result_file" | tail -n 1)"
+            docs_sync_base="$(awk -F= '$1=="docs_sync_base" {print $2}' "$docs_sync_result_file" | tail -n 1)"
+            docs_sync_head="$(awk -F= '$1=="docs_sync_head" {print $2}' "$docs_sync_result_file" | tail -n 1)"
+          fi
+
+          {
+            echo "### Check JSON Contract Docs Sync"
+            echo ""
+            echo "- state: ${docs_sync_state}"
+            echo "- base: ${docs_sync_base}"
+            echo "- head: ${docs_sync_head}"
+            if [[ -s "$docs_sync_log_file" ]]; then
+              echo "- log:"
+              echo '```text'
+              cat "$docs_sync_log_file"
+              echo '```'
+            else
+              echo "- log: n/a"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ ! -f module-check-pass.json ]; then
             {
               echo "### Module Check Summary"

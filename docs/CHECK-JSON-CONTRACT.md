@@ -40,8 +40,8 @@
   - 触发列表来自 `scripts/check_json_contract_docs_sync.triggers`
   - 触发规则支持 `exact` / `prefix(以 / 结尾)` / `glob(* ? [])`
   - 可通过 `KX_CHECK_JSON_CONTRACT_DOCS_SYNC_TRIGGERS_FILE` 覆盖触发列表文件
-  - `ci` workflow 仅在 `pull_request` 事件启用该门禁，并将 gate 结果与日志写入 `GITHUB_STEP_SUMMARY`
-  - `ci` workflow 会上传 artifact `docs-sync-gate-log`（`meta.txt` + `gate.log`）用于失败排障
+  - `ci` workflow 仅在 `pull_request` 事件启用该门禁，结果会汇总到 `Module-check summary` 统一输出
+  - `ci` workflow 会上传 artifact `docs-sync-gate-log`（`meta.txt` + `result.env` + `gate.log`）用于失败排障
 
 ## Preflight Metrics Bridge
 
