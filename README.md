@@ -4,48 +4,49 @@
 
 [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
-Kooix 是一个 **AI-native、强类型** 语言原型（MVP）。
-目标是把 AI 系统里的能力约束、流程约束、可审计性尽量前移到编译期，而不是在运行时靠约定补救。
+Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标是把 AI 系统中的 capability 约束、workflow 约束和可审计信息尽可能前移到 compile-time。
 
----
+## 项目定位
 
-## 项目目标
+- Code as Spec：源码直接表达 intent/contract/policy。
+- Capability-first：通过 `cap/requires/effects` 显式建模外部能力边界。
+- Evidence-first：关键链路声明 `evidence`，为 trace/metrics 审计提供结构化入口。
+- Workflow/Agent first-class：`workflow` / `agent` 是语义对象，不是脚本拼接。
 
-- Code as Spec：代码本身表达 intent/contract/policy。
-- Capability-first：外部能力通过 `cap/requires/effects` 显式建模。
-- Evidence-first：关键链路声明 `evidence`，方便 trace/metrics 审计闭环。
-- Workflow/Agent 一等公民：`workflow` / `agent` 有语义检查，不是脚本拼接。
+## 当前开发状态（截至 2026-03-01）
 
-## 当前能力快照（截至 2026-03-01）
+| 维度 | 状态 | 依据 |
+| --- | --- | --- |
+| Compiler 主链路 | 可运行 | `Source -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic -> LLVM IR -> llc+clang` |
+| 语言子集 | 可用 | `cap/record/enum/fn/workflow/agent`、`match`、record projection、enum variant namespacing、显式 generic type args |
+| CLI 命令 | 可用 | `check`、`check-modules`、`ast/hir/mir/llvm`、`run`、`native`、`native-llvm` |
+| Module-aware gate | 已落地 | `check-modules --json --pretty --strict-warnings` 已进入 CI |
+| Bootstrap | 已落地 | `bootstrap_v0_13.sh` 产出 `dist/kooixc1`，`bootstrap_heavy_gate.sh` 提供重载门禁 |
+| JSON 契约治理 | 已闭环 | `schema_version + summary` 统一、strict/window、fixture matrix、drift triage smoke、PR docs-sync gate |
+| CI 可观测性 | 已统一 | Summary 字段统一为 `state/schema/phase/log`，并配套 failure artifacts |
 
-- 编译链路可运行：
-  `Source (.kooix) -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic Check -> LLVM IR text -> llc + clang native`
-- 语言子集可用：`cap/record/enum/fn/workflow/agent`，函数体子集、`match`、record 投影、enum variant namespacing、显式函数泛型 type args。
-- CLI 可用：`check`、`check-modules`、`ast/hir/mir/llvm`、`run`、`native`、`native-llvm`。
-- 模块检查可用：`check-modules --json --pretty --strict-warnings`，并已纳入 CI 门禁。
-- 自举链路可用：`bootstrap_v0_13.sh` 产出 `dist/kooixc1`；`bootstrap_heavy_gate.sh` 提供重载门禁。
-- JSON 契约治理已落地：
-  - 统一 `schema_version + summary.phase/errors/warnings/counts.diagnostics`
-  - strict/window 版本区间门禁
-  - fixture rollback matrix
-  - schema drift triage smoke
-  - PR docs-sync gate（契约触发文件变更必须同步 `docs/CHECK-JSON-CONTRACT.md`）
-- CI 可观测性已收敛：Summary 字段统一为 `state/schema/phase/log`（适用模块检查、triage、docs-sync），并有排障 artifact。
+## 目录速览
 
----
+- `crates/kooixc/`: 编译器实现
+- `examples/`: CLI / gate 覆盖用样例
+- `scripts/`: 契约门禁、自举、CI smoke 脚本
+- `docs/`: 契约策略、路线图、语法文档
+- `.github/workflows/`: 主 CI 与 heavy gate workflow
 
 ## 快速开始
 
 ### 环境要求
 
 - Rust toolchain（`cargo` / `rustc`）
-- 使用 `native` 时需要系统安装 `llc` 与 `clang`
+- `native` / `native-llvm` 需要系统安装 `llc` 与 `clang`
+- 契约脚本依赖 `jq`
 
 ### 常用命令
 
 ```bash
-# 基础语义检查
+# 语义检查（默认 warning 不 fail）
 cargo run -p kooixc -- check examples/valid.kooix
+cargo run -p kooixc -- check examples/valid.kooix --json --pretty
 cargo run -p kooixc -- check examples/valid.kooix --strict-warnings
 
 # 模块感知检查
@@ -59,105 +60,124 @@ cargo run -p kooixc -- hir examples/valid.kooix
 cargo run -p kooixc -- mir examples/valid.kooix
 cargo run -p kooixc -- llvm examples/codegen.kooix
 
-# 解释执行 / native
+# 运行 / native
 cargo run -p kooixc -- run examples/run.kooix
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run
 ```
 
-### 契约门禁本地回归
+### 10 分钟回归（推荐）
 
 ```bash
-# 主契约断言（check/check-modules/load）
+# 1) JSON 契约主断言
 ./scripts/check_json_contract.sh --assert
 
-# 回滚样本矩阵（v1/v2 + strict/window）
+# 2) schema rollback matrix（v1/v2 + strict/window）
 ./scripts/check_json_schema_fixture_matrix.sh --assert
 
-# 漂移 triage 冒烟（range-pass/range-fail/shape-pass）
+# 3) schema drift triage smoke（range-pass/range-fail/shape-pass）
 ./scripts/check_json_schema_drift_triage_smoke.sh
 
-# PR docs-sync 门禁（本地模拟）
-./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>
-```
-
-### 自举与重载门禁
-
-```bash
-# 产出 stage3 编译器
-./scripts/bootstrap_v0_13.sh
-
-# 一键重载门禁（heavy）
-CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
-
-# CI 同款轻量回归
+# 4) CI 同款 bootstrap 轻量链路
 ./scripts/bootstrap_ci_sanity_smoke.sh
 ```
 
----
+## JSON 契约与门禁策略
 
-## CI 门禁与取证
+统一契约核心字段：
 
-### Summary 字段约定
+- `schema_version`
+- `summary.phase`
+- `summary.errors`
+- `summary.warnings`
+- `summary.counts.diagnostics`
 
-CI Summary 统一采用：
+版本门禁策略：
+
+- strict（默认）：`[1,1]`
+- migration window：如 `[1,2]`
+- v2-only consumer（`[2,2]`）在当前 producer=1 时必须失败
+
+本地常用命令：
+
+```bash
+# strict
+./scripts/check_json_contract.sh --assert
+
+# migration window
+KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 \
+KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 \
+./scripts/check_json_contract.sh --assert
+
+# docs-sync gate 本地模拟（用于 PR 前验证）
+./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>
+```
+
+触发列表位于 `scripts/check_json_contract_docs_sync.triggers`，支持 `exact/prefix/glob`。
+
+## Bootstrap 与 Heavy Gate
+
+```bash
+# 产出 stage3 compiler（二进制会放到 dist/kooixc1）
+./scripts/bootstrap_v0_13.sh
+
+# heavy gate（低并发、safe mode）
+CARGO_BUILD_JOBS=1 KX_HEAVY_SAFE_MODE=1 ./scripts/bootstrap_heavy_gate.sh
+
+# 本地严格限载预设（reuse-only + compiler_main 二段 smoke）
+CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh
+```
+
+`bootstrap-heavy` workflow 默认上传 `bootstrap-heavy-artifacts`，并在 summary 中给出 gate 耗时、资源观测、preflight 与 triage 状态。
+
+## CI 门禁与排障取证
+
+主 workflow：`.github/workflows/ci.yml`
+
+- PR 事件执行 docs-sync gate。
+- 执行 contract smoke、migration-window smoke、fixture matrix、triage smoke。
+- 上传关键 artifacts：
+  - `module-check-json`
+  - `schema-drift-triage-logs`
+  - `docs-sync-gate-log`
+
+重载 workflow：`.github/workflows/bootstrap-heavy.yml`
+
+- 支持 `workflow_dispatch` + nightly `schedule`。
+- 执行 heavy gate + migration-window + fixture matrix + triage smoke。
+- 上传关键 artifacts：
+  - `bootstrap-heavy-artifacts`
+  - `bootstrap-heavy-schema-drift-triage-logs`
+
+Summary 字段约定（主 CI 与 heavy 一致）：
 
 - `state`
 - `schema`
 - `phase`
 - `log`
 
-说明：
+说明：`docs-sync` 与 `triage` 当前的 `schema/phase` 固定 `n/a`，优先保证 summary shape 统一。
 
-- `docs-sync` 与 `triage` 的 `schema/phase` 当前为 `n/a`（结构先统一，后续可扩展）。
-- `Module-check summary` 的 `strict` 子结果放入 `log` 字段。
+## 变更提交建议
 
-### 关键 artifact
+当改动涉及 JSON 契约字段、schema range、消费脚本或 CI 汇总逻辑时，至少同步更新：
 
-- `module-check-json`
-- `schema-drift-triage-logs`（`result.env` + `summary.txt` + `stdout.log` + `stderr.log`）
-- `docs-sync-gate-log`（`meta.txt` + `result.env` + `gate.log`）
-- `bootstrap-heavy-schema-drift-triage-logs`
-- `bootstrap-heavy-artifacts`
+- `docs/CHECK-JSON-CONTRACT.md`
+- `docs/ROADMAP-SELFHOST.md`
+- `README.md`
+- `README.en.md`
 
----
-
-## 关键脚本索引
-
-- `scripts/check_json_contract.sh`
-- `scripts/check_json_schema_fixture_matrix.sh`
-- `scripts/check_json_schema_drift_triage_smoke.sh`
-- `scripts/check_json_contract_docs_sync.sh`
-- `scripts/check_json_contract_docs_sync.triggers`
-- `scripts/bootstrap_v0_13.sh`
-- `scripts/bootstrap_heavy_gate.sh`
-- `scripts/bootstrap_ci_sanity.sh`
-- `scripts/bootstrap_ci_sanity_smoke.sh`
-
----
-
-## 文档索引
-
-- 架构与设计：`DESIGN.md`
-- 自举与重载：`BOOTSTRAP.md`
-- 契约策略与门禁：`docs/CHECK-JSON-CONTRACT.md`
-- 自举路线图：`docs/ROADMAP-SELFHOST.md`
-- 语法与示例：`docs/Grammar-Core-v0.ebnf`、`docs/Grammar-AI-v1.ebnf`、`docs/Grammar-Examples.md`
-
----
-
-## 贡献建议
-
-提交契约相关改动时，建议本地最小回归：
+建议在本地先跑：
 
 ```bash
 ./scripts/check_json_contract.sh --assert
 ./scripts/check_json_schema_fixture_matrix.sh --assert
 ./scripts/check_json_schema_drift_triage_smoke.sh
-./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>
 ```
 
-契约字段、版本区间或消费脚本有变更时，必须同步更新：
+## 文档地图
 
-- `docs/CHECK-JSON-CONTRACT.md`
-- `docs/ROADMAP-SELFHOST.md`
-- `README.md` / `README.en.md`
+- 架构设计：`DESIGN.md`
+- 自举与重载细节：`BOOTSTRAP.md`
+- JSON 契约策略：`docs/CHECK-JSON-CONTRACT.md`
+- 自举路线图：`docs/ROADMAP-SELFHOST.md`
+- 语法与示例：`docs/Grammar-Core-v0.ebnf`、`docs/Grammar-AI-v1.ebnf`、`docs/Grammar-Examples.md`
