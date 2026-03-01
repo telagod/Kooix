@@ -109,19 +109,57 @@ jobs:
       - name: Check JSON schema drift triage smoke
         run: |
           set -euo pipefail
-          triage_summary_file="$(mktemp /tmp/kx-schema-drift-triage-XXXXXX)"
+          triage_dir="/tmp/kx-schema-drift-triage"
+          triage_summary_file="$triage_dir/summary.txt"
+          triage_stdout_file="$triage_dir/stdout.log"
+          triage_stderr_file="$triage_dir/stderr.log"
+
+          rm -rf "$triage_dir"
+          mkdir -p "$triage_dir"
+
+          set +e
           KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT="$triage_summary_file" \
-          ./scripts/check_json_schema_drift_triage_smoke.sh
+          ./scripts/check_json_schema_drift_triage_smoke.sh >"$triage_stdout_file" 2>"$triage_stderr_file"
+          triage_status=$?
+          set -e
+
+          if [[ "$triage_status" -eq 0 ]]; then
+            smoke_state="pass"
+          else
+            smoke_state="fail"
+          fi
 
           {
             echo "### Schema Drift Triage Smoke"
             echo ""
-            echo "- smoke: pass"
-            echo "- captured triage lines:"
-            echo '```text'
-            cat "$triage_summary_file"
-            echo '```'
+            echo "- smoke: $smoke_state"
+            echo "- artifact dir: $triage_dir"
+            if [[ -s "$triage_summary_file" ]]; then
+              echo "- captured triage lines:"
+              echo '```text'
+              cat "$triage_summary_file"
+              echo '```'
+            else
+              echo "- captured triage lines: n/a"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$triage_status" -ne 0 ]]; then
+            echo "schema drift triage smoke failed (see artifact schema-drift-triage-logs)" >&2
+            tail -n 120 "$triage_stderr_file" >&2 || true
+            exit "$triage_status"
+          fi
+
+      - name: Upload schema drift triage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-drift-triage-logs
+          path: |
+            /tmp/kx-schema-drift-triage/summary.txt
+            /tmp/kx-schema-drift-triage/stdout.log
+            /tmp/kx-schema-drift-triage/stderr.log
+          if-no-files-found: warn
 
       - name: Module-preflight metrics script smoke
         run: |

@@ -145,6 +145,12 @@ stderr 格式：
 
 可选：设置 `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=<file>` 时，脚本会把每个 case 捕获到的首条 triage 行写入文件，供 CI `GITHUB_STEP_SUMMARY` 直接引用。
 
+CI 取证约定：
+
+- `ci` workflow 上传 artifact：`schema-drift-triage-logs`
+- `bootstrap-heavy` workflow 上传 artifact：`bootstrap-heavy-schema-drift-triage-logs`
+- artifact 包含 `summary.txt`、`stdout.log`、`stderr.log`，用于失败后离线定位。
+
 ## Shared jq Library
 
 共享断言库：`scripts/lib/check_json_contract.jq`
