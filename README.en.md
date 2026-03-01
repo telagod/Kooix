@@ -140,7 +140,7 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --s
 ./scripts/check_json_contract.sh --assert
 # Fixture-backed schema rollback matrix (v1/v2 + strict/window)
 ./scripts/check_json_schema_fixture_matrix.sh --assert
-# Schema drift triage smoke (fault injection + triage log assertions)
+# Schema drift triage smoke (range/shape fault injection + triage log assertions)
 ./scripts/check_json_schema_drift_triage_smoke.sh
 # Versioning policy and compatibility matrix: docs/CHECK-JSON-CONTRACT.md
 

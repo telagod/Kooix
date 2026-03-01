@@ -135,7 +135,12 @@ stderr 格式：
 
 - `./scripts/check_json_schema_drift_triage_smoke.sh`
 
-该脚本会在临时目录复制 fixtures、注入受控 drift（`v2-check.json -> schema_version=1`），并断言 fixture matrix 失败日志包含 `[schema-drift]` 关键字段。
+该脚本会在临时目录复制 fixtures，并覆盖两类受控 drift 注入：
+
+- range drift：`v2-check.json -> schema_version=1`，断言 `expected=range-fail`。
+- shape drift：`v1-check.json` 删除 `summary`，断言 `expected=shape-pass`。
+
+两类用例都要求 fixture matrix 失败日志包含 `[schema-drift]` 关键字段，避免 triage 输出回退。
 
 ## Shared jq Library
 

@@ -203,7 +203,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 ## 下一阶段（P12）triage 回归自动化
 
 - ✅ DoD1：`check_json_schema_fixture_matrix.sh` 支持 `KX_CHECK_JSON_SCHEMA_FIXTURE_DIR` 覆盖 fixture 路径，便于故障注入与本地复现。
-- ✅ DoD2：新增 `scripts/check_json_schema_drift_triage_smoke.sh`，自动注入受控 schema drift 并断言 stderr 包含 triage 关键字段。
+- ✅ DoD2：新增 `scripts/check_json_schema_drift_triage_smoke.sh`，覆盖 `range-fail` 与 `shape-pass` 双路径受控注入，并断言 stderr 包含 triage 关键字段。
 - ✅ DoD3：主 `ci` 与 `bootstrap-heavy` workflow 已接入 triage smoke，防止失败定位信息回退。
 - 验证命令（2026-03-01）：
   - `./scripts/check_json_schema_fixture_matrix.sh --assert`
