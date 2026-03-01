@@ -224,6 +224,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD9：PR docs-sync gate 无论 pass/fail 都会写入 `GITHUB_STEP_SUMMARY`（状态 + base/head + gate 日志），失败信息可直接在 Summary 查看。
 - ✅ DoD10：PR docs-sync gate 上传 `docs-sync-gate-log` artifact（`meta.txt` + `result.env` + `gate.log`），便于离线排障。
 - ✅ DoD11：docs-sync gate 结果并入 `Module-check summary` 统一展示，并补充 `result.env` 作为结构化状态文件。
+- ✅ DoD12：`bootstrap-heavy` triage smoke 改为 `result.env` 结构化输出，并在 `Bootstrap-heavy summary` 统一展示（artifact 同步包含 `result.env`）。
 - 验证命令（2026-03-01）：
   - `./scripts/check_json_schema_drift_triage_smoke.sh`
   - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`

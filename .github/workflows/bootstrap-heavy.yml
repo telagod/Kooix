@@ -148,6 +148,7 @@ jobs:
           triage_summary_file="$triage_dir/summary.txt"
           triage_stdout_file="$triage_dir/stdout.log"
           triage_stderr_file="$triage_dir/stderr.log"
+          triage_result_file="$triage_dir/result.env"
 
           rm -rf "$triage_dir"
           mkdir -p "$triage_dir"
@@ -165,19 +166,8 @@ jobs:
           fi
 
           {
-            echo "### Schema Drift Triage Smoke"
-            echo ""
-            echo "- smoke: $smoke_state"
-            echo "- artifact dir: $triage_dir"
-            if [[ -s "$triage_summary_file" ]]; then
-              echo "- captured triage lines:"
-              echo '```text'
-              cat "$triage_summary_file"
-              echo '```'
-            else
-              echo "- captured triage lines: n/a"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "triage_smoke_state=$smoke_state"
+          } > "$triage_result_file"
 
           if [[ "$triage_status" -ne 0 ]]; then
             echo "schema drift triage smoke failed (see artifact bootstrap-heavy-schema-drift-triage-logs)" >&2
@@ -191,6 +181,7 @@ jobs:
         with:
           name: bootstrap-heavy-schema-drift-triage-logs
           path: |
+            /tmp/kx-schema-drift-triage/result.env
             /tmp/kx-schema-drift-triage/summary.txt
             /tmp/kx-schema-drift-triage/stdout.log
             /tmp/kx-schema-drift-triage/stderr.log
@@ -274,6 +265,9 @@ jobs:
           module_preflight_first_diag="n/a"
           module_preflight_schema="n/a"
           module_preflight_phase="n/a"
+          triage_smoke_state="n/a"
+          triage_summary_file="/tmp/kx-schema-drift-triage/summary.txt"
+          triage_result_file="/tmp/kx-schema-drift-triage/result.env"
           heavy_timeout="n/a"
           heavy_timeout_smoke="n/a"
           heavy_vmem="n/a"
@@ -450,6 +444,10 @@ jobs:
             module_preflight_phase="n/a"
           fi
 
+          if [ -f "$triage_result_file" ]; then
+            triage_smoke_state="$(awk -F= '$1=="triage_smoke_state" {print $2}' "$triage_result_file" | tail -n 1)"
+          fi
+
           if [ -z "$first_failure" ]; then
             first_failure="none"
           fi
@@ -488,6 +486,15 @@ jobs:
             echo "- module preflight diagnostics: ok=${module_preflight_ok}, errors=${module_preflight_errors}, warnings=${module_preflight_warnings}"
             echo "- module preflight contract: schema=${module_preflight_schema}, phase=${module_preflight_phase}"
             echo "- module preflight first diagnostic: ${module_preflight_first_diag}"
+            echo "- schema drift triage smoke: ${triage_smoke_state}"
+            if [ -s "$triage_summary_file" ]; then
+              echo "- schema drift triage lines:"
+              echo '```text'
+              cat "$triage_summary_file"
+              echo '```'
+            else
+              echo "- schema drift triage lines: n/a"
+            fi
             echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
             echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"
             echo "- gate1 (S1_CORE smokes): ${gate1}s"
