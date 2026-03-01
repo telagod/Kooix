@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+JQ_LIB_DIR="$ROOT/scripts/lib"
 
 ASSERT_MODE="${1:-}"
 if [[ -n "$ASSERT_MODE" && "$ASSERT_MODE" != "--assert" ]]; then
@@ -27,41 +28,33 @@ require_file() {
 
 assert_common_shape() {
   local file="$1"
-  jq -e '
-    (.schema_version | type == "number")
-    and (.schema_version == (.schema_version | floor))
-    and (.schema_version > 0)
-    and (.summary | type == "object")
-    and (.summary.phase | type == "string")
-    and (.summary.errors | type == "number")
-    and (.summary.warnings | type == "number")
-    and (.summary.counts | type == "object")
-    and (.summary.counts.diagnostics | type == "number")
+  jq -e -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    summary_base and schema_version_is_pos_int
   ' "$file" >/dev/null
 }
 
 assert_check_shape() {
   local file="$1"
-  jq -e '
-    (.summary.phase == "check")
-    and (.diagnostics | type == "array")
+  jq -e -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    fixture_check_shape
   ' "$file" >/dev/null
 }
 
 assert_module_shape() {
   local file="$1"
-  jq -e '
-    (.summary.phase == "check-modules")
-    and (.modules | type == "array")
+  jq -e -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    fixture_modules_shape
   ' "$file" >/dev/null
 }
 
 assert_load_shape() {
   local file="$1"
-  jq -e '
-    (.phase == "load")
-    and (.summary.phase == "load")
-    and (.errors | type == "array")
+  jq -e -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    fixture_load_shape
   ' "$file" >/dev/null
 }
 
@@ -73,8 +66,12 @@ expect_schema_range() {
   local expected="$5"
 
   set +e
-  jq -e --argjson min "$min_schema" --argjson max "$max_schema" '
-    (.schema_version >= $min) and (.schema_version <= $max)
+  jq -e \
+    --argjson min "$min_schema" \
+    --argjson max "$max_schema" \
+    -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    schema_in_range($min; $max)
   ' "$file" >/dev/null
   local status=$?
   set -e

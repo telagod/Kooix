@@ -114,3 +114,12 @@
 - 收敛多个脚本中的 jq 断言片段，减少重复维护。
 - 强化 fixture matrix 的语义级断言（不仅看版本号，还看 summary/payload 对齐）。
 - 在 CI 失败输出中直接给出 drift triage 信息（fixture、期望区间、实际版本与 phase）。
+
+## Shared jq Library
+
+共享断言库：`scripts/lib/check_json_contract.jq`
+
+当前消费者：
+
+- `scripts/check_json_contract.sh`
+- `scripts/check_json_schema_fixture_matrix.sh`

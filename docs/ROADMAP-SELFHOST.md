@@ -191,10 +191,10 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 
 ## 下一阶段（P11）契约演进自动化
 
-- DoD1：将 schema 断言逻辑从“脚本重复实现”收敛到单一 jq 库片段（`scripts/lib/check_json_contract.jq`），供 `check_json_contract.sh` 与 fixture matrix 脚本复用。
+- ✅ DoD1：已将 schema 断言逻辑收敛到单一 jq 库片段（`scripts/lib/check_json_contract.jq`），并接入 `check_json_contract.sh` 与 fixture matrix 脚本复用。
 - DoD2：为 fixture matrix 增加“语义完整性”断言（`summary.counts.diagnostics == errors+warnings`、phase 与 payload 类型匹配），降低只看 `schema_version` 的漏检风险。
 - DoD3：新增 `schema drift triage` 输出（失败时打印 fixture 名称、期望区间、实际 `schema_version/phase`），让 CI 失败可直接定位。
-- 验证命令（计划）：
+- 验证命令（2026-03-01）：
   - `./scripts/check_json_contract.sh --assert`
   - `./scripts/check_json_schema_fixture_matrix.sh --assert`
-  - `cargo test -p kooixc --test cli_check_tests --test cli_module_check_tests -j 2 -- --test-threads=1`
+  - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`

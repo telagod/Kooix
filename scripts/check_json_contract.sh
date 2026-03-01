@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+JQ_LIB_DIR="$ROOT/scripts/lib"
 
 ASSERT_MODE="${1:-}"
 if [[ -n "$ASSERT_MODE" && "$ASSERT_MODE" != "--assert" ]]; then
@@ -92,22 +93,10 @@ assert_check_contract() {
   jq -e \
     --argjson expected_ok "$expected_ok" \
     --argjson min_schema "$MIN_SCHEMA_VERSION" \
-    --argjson max_schema "$MAX_SCHEMA_VERSION" '
-    (.ok == $expected_ok)
-    and (.schema_version | type == "number")
-    and (.schema_version == (.schema_version | floor))
-    and (.schema_version >= $min_schema)
-    and (.schema_version <= $max_schema)
-    and (.summary | type == "object")
-    and (.summary.phase == "check")
-    and (.summary.errors | type == "number")
-    and (.summary.warnings | type == "number")
-    and (.summary.counts | type == "object")
-    and (.summary.counts.diagnostics | type == "number")
-    and (.diagnostics | type == "array")
-    and (([.diagnostics[]? | select(.severity == "error")] | length) == .summary.errors)
-    and (([.diagnostics[]? | select(.severity == "warning")] | length) == .summary.warnings)
-    and (.summary.counts.diagnostics == (.summary.errors + .summary.warnings))
+    --argjson max_schema "$MAX_SCHEMA_VERSION" \
+    -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    check_contract($expected_ok; $min_schema; $max_schema)
   ' "$file" >/dev/null
 }
 
@@ -117,22 +106,10 @@ assert_module_contract() {
   jq -e \
     --argjson expected_ok "$expected_ok" \
     --argjson min_schema "$MIN_SCHEMA_VERSION" \
-    --argjson max_schema "$MAX_SCHEMA_VERSION" '
-    (.ok == $expected_ok)
-    and (.schema_version | type == "number")
-    and (.schema_version == (.schema_version | floor))
-    and (.schema_version >= $min_schema)
-    and (.schema_version <= $max_schema)
-    and (.summary | type == "object")
-    and (.summary.phase == "check-modules")
-    and (.summary.errors | type == "number")
-    and (.summary.warnings | type == "number")
-    and (.summary.counts | type == "object")
-    and (.summary.counts.diagnostics | type == "number")
-    and (.modules | type == "array")
-    and (([.modules[]?.diagnostics[]? | select(.severity == "error")] | length) == .summary.errors)
-    and (([.modules[]?.diagnostics[]? | select(.severity == "warning")] | length) == .summary.warnings)
-    and (.summary.counts.diagnostics == (.summary.errors + .summary.warnings))
+    --argjson max_schema "$MAX_SCHEMA_VERSION" \
+    -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    modules_contract($expected_ok; $min_schema; $max_schema)
   ' "$file" >/dev/null
 }
 
@@ -140,23 +117,10 @@ assert_loader_contract() {
   local file="$1"
   jq -e \
     --argjson min_schema "$MIN_SCHEMA_VERSION" \
-    --argjson max_schema "$MAX_SCHEMA_VERSION" '
-    (.ok == false)
-    and (.schema_version | type == "number")
-    and (.schema_version == (.schema_version | floor))
-    and (.schema_version >= $min_schema)
-    and (.schema_version <= $max_schema)
-    and (.phase == "load")
-    and (.summary | type == "object")
-    and (.summary.phase == "load")
-    and (.summary.errors | type == "number")
-    and (.summary.warnings | type == "number")
-    and (.summary.counts | type == "object")
-    and (.summary.counts.diagnostics | type == "number")
-    and (.errors | type == "array")
-    and (([.errors[]? | select(.severity == "error")] | length) == .summary.errors)
-    and (([.errors[]? | select(.severity == "warning")] | length) == .summary.warnings)
-    and (.summary.counts.diagnostics == (.summary.errors + .summary.warnings))
+    --argjson max_schema "$MAX_SCHEMA_VERSION" \
+    -L "$JQ_LIB_DIR" '
+    include "check_json_contract";
+    load_contract($min_schema; $max_schema)
   ' "$file" >/dev/null
 }
 
