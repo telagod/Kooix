@@ -140,9 +140,13 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --s
 ./scripts/check_json_schema_fixture_matrix.sh --assert
 # schema drift triage 冒烟（range/shape 双故障注入 + triage 日志断言）
 ./scripts/check_json_schema_drift_triage_smoke.sh
+# PR 文档同步门禁（契约触发文件变更时要求同步 docs/CHECK-JSON-CONTRACT.md）
+./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>
 # 契约版本策略与兼容矩阵：docs/CHECK-JSON-CONTRACT.md
 
-# CI 会保存 module-check JSON artifact，并在 job summary 汇总 errors/warnings
+# CI summary 统一使用 state/schema/phase/log 字段，并上传 triage/docs-sync 排障 artifact
+# - schema-drift-triage-logs
+# - docs-sync-gate-log
 
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix

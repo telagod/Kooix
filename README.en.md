@@ -142,9 +142,13 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --s
 ./scripts/check_json_schema_fixture_matrix.sh --assert
 # Schema drift triage smoke (range/shape fault injection + triage log assertions)
 ./scripts/check_json_schema_drift_triage_smoke.sh
+# PR docs-sync gate (requires docs/CHECK-JSON-CONTRACT.md update when contract trigger files change)
+./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>
 # Versioning policy and compatibility matrix: docs/CHECK-JSON-CONTRACT.md
 
-# CI stores module-check JSON as an artifact and summarizes errors/warnings in the job summary
+# CI summaries use unified state/schema/phase/log fields and upload triage/docs-sync debugging artifacts
+# - schema-drift-triage-logs
+# - docs-sync-gate-log
 
 cargo run -p kooixc -- ast examples/valid.kooix
 cargo run -p kooixc -- hir examples/valid.kooix
