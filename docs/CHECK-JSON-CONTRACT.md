@@ -55,6 +55,7 @@
 对应脚本化矩阵检查：
 
 - `./scripts/check_json_schema_fixture_matrix.sh --assert`
+- `KX_CHECK_JSON_SCHEMA_FIXTURE_DIR=<dir> ./scripts/check_json_schema_fixture_matrix.sh --assert`（用于临时样本注入/回归）
 
 该检查覆盖三类输出（`check` / `check-modules` / `load`）在三个区间下的行为：
 
@@ -129,6 +130,12 @@ stderr 格式：
 ```
 
 该信息可直接用于 CI 定位：先看 `fixture` 和 `label` 锁定样本与断言类型，再按 `actual_schema/actual_phase` 判断是版本漂移还是 payload 语义偏移。
+
+自动回归脚本：
+
+- `./scripts/check_json_schema_drift_triage_smoke.sh`
+
+该脚本会在临时目录复制 fixtures、注入受控 drift（`v2-check.json -> schema_version=1`），并断言 fixture matrix 失败日志包含 `[schema-drift]` 关键字段。
 
 ## Shared jq Library
 

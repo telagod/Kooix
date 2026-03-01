@@ -140,6 +140,11 @@ jobs:
         run: |
           ./scripts/check_json_schema_fixture_matrix.sh --assert
 
+      - name: Check JSON schema drift triage smoke
+        if: success()
+        run: |
+          ./scripts/check_json_schema_drift_triage_smoke.sh
+
       - name: Upload bootstrap-heavy artifacts
         if: always()
         uses: actions/upload-artifact@v4

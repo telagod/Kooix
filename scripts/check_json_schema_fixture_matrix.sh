@@ -16,7 +16,8 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
-FIXTURE_DIR="$ROOT/scripts/fixtures/check-json-schema"
+# Optional override for smoke/fault-injection tests.
+FIXTURE_DIR="${KX_CHECK_JSON_SCHEMA_FIXTURE_DIR:-$ROOT/scripts/fixtures/check-json-schema}"
 
 require_file() {
   local file="$1"

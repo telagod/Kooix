@@ -199,3 +199,14 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - `./scripts/check_json_schema_fixture_matrix.sh --assert`
   - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`
   - `check_json_schema_fixture_matrix.sh` 在 shape/range 断言失败时 stderr 包含 `[schema-drift] fixture=... expected_range=[min,max] actual_schema=... actual_phase=...`
+
+## 下一阶段（P12）triage 回归自动化
+
+- ✅ DoD1：`check_json_schema_fixture_matrix.sh` 支持 `KX_CHECK_JSON_SCHEMA_FIXTURE_DIR` 覆盖 fixture 路径，便于故障注入与本地复现。
+- ✅ DoD2：新增 `scripts/check_json_schema_drift_triage_smoke.sh`，自动注入受控 schema drift 并断言 stderr 包含 triage 关键字段。
+- ✅ DoD3：主 `ci` 与 `bootstrap-heavy` workflow 已接入 triage smoke，防止失败定位信息回退。
+- 验证命令（2026-03-01）：
+  - `./scripts/check_json_schema_fixture_matrix.sh --assert`
+  - `./scripts/check_json_schema_drift_triage_smoke.sh`
+  - `./scripts/check_json_contract.sh --assert`
+  - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`
