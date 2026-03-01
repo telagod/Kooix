@@ -24,6 +24,31 @@ load_triggers() {
   fi
 }
 
+is_glob_pattern() {
+  local pattern="$1"
+  [[ "$pattern" == *"*"* || "$pattern" == *"?"* || "$pattern" == *"["* ]]
+}
+
+matches_trigger() {
+  local file="$1"
+  local trigger="$2"
+
+  # Prefix mode: trailing "/" means match any file under that directory.
+  if [[ "$trigger" == */ ]]; then
+    [[ "$file" == "$trigger"* ]]
+    return
+  fi
+
+  # Glob mode: supports shell wildcards like "foo/*.sh".
+  if is_glob_pattern "$trigger"; then
+    [[ "$file" == $trigger ]]
+    return
+  fi
+
+  # Exact mode.
+  [[ "$file" == "$trigger" ]]
+}
+
 ensure_commit() {
   local sha="$1"
   if [[ -z "$sha" ]]; then
@@ -77,9 +102,9 @@ for file in "${changed_files[@]}"; do
     docs_changed=1
   fi
   for trigger in "${TRIGGERS[@]}"; do
-    if [[ "$file" == "$trigger" ]]; then
+    if matches_trigger "$file" "$trigger"; then
       contract_triggered=1
-      trigger_hits+=("$file")
+      trigger_hits+=("$file (trigger=$trigger)")
       break
     fi
   done

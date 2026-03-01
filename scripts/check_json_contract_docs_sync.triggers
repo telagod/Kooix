@@ -1,4 +1,8 @@
-# Paths that require docs/CHECK-JSON-CONTRACT.md sync when changed.
+# Triggers that require docs/CHECK-JSON-CONTRACT.md sync when changed.
+# Syntax:
+# - exact:  path/to/file
+# - prefix: path/to/dir/
+# - glob:   path/to/*.ext
 scripts/check_json_contract.sh
 scripts/check_json_schema_fixture_matrix.sh
 scripts/check_json_schema_drift_triage_smoke.sh

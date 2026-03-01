@@ -38,6 +38,7 @@
 - `scripts/check_json_contract_docs_sync.sh`（PR gate）：
   - 当契约触发文件变更时，要求同步更新 `docs/CHECK-JSON-CONTRACT.md`
   - 触发列表来自 `scripts/check_json_contract_docs_sync.triggers`
+  - 触发规则支持 `exact` / `prefix(以 / 结尾)` / `glob(* ? [])`
   - 可通过 `KX_CHECK_JSON_CONTRACT_DOCS_SYNC_TRIGGERS_FILE` 覆盖触发列表文件
   - `ci` workflow 仅在 `pull_request` 事件启用该门禁
 
