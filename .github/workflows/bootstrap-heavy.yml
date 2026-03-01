@@ -135,6 +135,11 @@ jobs:
             exit 1
           fi
 
+      - name: Check JSON schema fixture rollback matrix
+        if: success()
+        run: |
+          ./scripts/check_json_schema_fixture_matrix.sh --assert
+
       - name: Upload bootstrap-heavy artifacts
         if: always()
         uses: actions/upload-artifact@v4

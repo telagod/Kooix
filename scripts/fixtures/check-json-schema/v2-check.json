@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "ok": true,
+  "summary": {
+    "phase": "check",
+    "errors": 0,
+    "warnings": 0,
+    "counts": {
+      "diagnostics": 0
+    }
+  },
+  "diagnostics": [],
+  "contract": {
+    "producer": "fixture-v2"
+  }
+}

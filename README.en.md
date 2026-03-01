@@ -138,6 +138,8 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --p
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
 # Contract check for check/check-modules JSON (pass/warn/error + load phase)
 ./scripts/check_json_contract.sh --assert
+# Fixture-backed schema rollback matrix (v1/v2 + strict/window)
+./scripts/check_json_schema_fixture_matrix.sh --assert
 # Versioning policy and compatibility matrix: docs/CHECK-JSON-CONTRACT.md
 
 # CI stores module-check JSON as an artifact and summarizes errors/warnings in the job summary

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "phase": "load",
+  "summary": {
+    "phase": "load",
+    "errors": 1,
+    "warnings": 0,
+    "counts": {
+      "diagnostics": 1
+    }
+  },
+  "errors": [
+    {
+      "severity": "error",
+      "message": "fixture: missing import"
+    }
+  ]
+}

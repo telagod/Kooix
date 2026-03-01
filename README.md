@@ -136,6 +136,8 @@ cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --p
 cargo run -p kooixc -- check-modules examples/import_alias_main.kooix --json --strict-warnings
 # 统一校验 check/check-modules JSON 契约（pass/warn/error + load phase）
 ./scripts/check_json_contract.sh --assert
+# 固化的 schema 回滚样本矩阵（v1/v2 + strict/window）
+./scripts/check_json_schema_fixture_matrix.sh --assert
 # 契约版本策略与兼容矩阵：docs/CHECK-JSON-CONTRACT.md
 
 # CI 会保存 module-check JSON artifact，并在 job summary 汇总 errors/warnings

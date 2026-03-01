@@ -102,6 +102,10 @@ jobs:
             exit 1
           fi
 
+      - name: Check JSON schema fixture rollback matrix
+        run: |
+          ./scripts/check_json_schema_fixture_matrix.sh --assert
+
       - name: Module-preflight metrics script smoke
         run: |
           set -euo pipefail

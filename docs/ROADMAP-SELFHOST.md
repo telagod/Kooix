@@ -170,3 +170,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - ✅ DoD2：`bootstrap-heavy` workflow 已增加同款 migration-window smoke，保证主/重载门禁一致。
   - ✅ DoD3：已在 `docs/CHECK-JSON-CONTRACT.md` 增补 schema bump playbook（升级步骤 + 回滚策略 + consumer 迁移节奏）。
   - 验证命令（2026-02-28）：`./scripts/check_json_contract.sh --assert` + `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert` + `if KX_CHECK_JSON_MIN_SCHEMA_VERSION=2 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert; then exit 1; fi` + bootstrap-heavy workflow step `Check JSON schema migration-window smoke` + 文档核对 `docs/CHECK-JSON-CONTRACT.md` 的 `Schema Bump Playbook`。
+
+- P10（已完成）schema 回滚样本固化与脚本化校验：
+  - ✅ DoD1：新增仓库内 fixtures：`scripts/fixtures/check-json-schema/v1-*.json` 与 `v2-*.json`。
+  - ✅ DoD2：新增 `scripts/check_json_schema_fixture_matrix.sh`，覆盖 `check/check-modules/load` 在 `[1,1]` / `[1,2]` / `[2,2]` 下的 pass/fail 矩阵。
+  - ✅ DoD3：主 `ci` 与 `bootstrap-heavy` workflow 已接入 fixture rollback matrix smoke。
+  - 验证命令（2026-02-28）：`./scripts/check_json_schema_fixture_matrix.sh --assert` + `./scripts/check_json_contract.sh --assert` + `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`。

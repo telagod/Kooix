@@ -45,6 +45,23 @@
 
 这样 `bootstrap_heavy_gate.sh` 和 CI summary 可以在不重新解析 artifact 的情况下直接观测版本漂移。
 
+## Rollback Fixtures
+
+仓库内置了可复用 schema 回滚样本：
+
+- `scripts/fixtures/check-json-schema/v1-*.json`
+- `scripts/fixtures/check-json-schema/v2-*.json`
+
+对应脚本化矩阵检查：
+
+- `./scripts/check_json_schema_fixture_matrix.sh --assert`
+
+该检查覆盖三类输出（`check` / `check-modules` / `load`）在三个区间下的行为：
+
+- 严格 `v1`：`[1,1]`（v1 pass, v2 fail）
+- 迁移窗口：`[1,2]`（v1 pass, v2 pass）
+- 严格 `v2`：`[2,2]`（v1 fail, v2 pass）
+
 ## Evolution Rules
 
 - 新增可选字段：保持 `schema_version` 不变。

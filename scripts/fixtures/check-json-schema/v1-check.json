@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "summary": {
+    "phase": "check",
+    "errors": 0,
+    "warnings": 0,
+    "counts": {
+      "diagnostics": 0
+    }
+  },
+  "diagnostics": []
+}
