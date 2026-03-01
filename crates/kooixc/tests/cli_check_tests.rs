@@ -267,6 +267,84 @@ fn check_include_style_import_without_namespace_still_works() {
 }
 
 #[test]
+fn ast_namespace_imports_isolate_duplicate_symbols() {
+    let dir = make_temp_dir("ast-namespace-duplicate");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_b = dir.join("lib_b.kooix");
+
+    fs::write(&lib_a, "fn dup() -> Int { 1 };\n").expect("write lib_a");
+    fs::write(&lib_b, "fn dup() -> Int { 2 };\n").expect("write lib_b");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nimport \"lib_b\" as B;\nfn main() -> Int { A::dup() + B::dup() };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("ast")
+        .arg(&main)
+        .output()
+        .expect("run ast");
+
+    assert!(
+        output.status.success(),
+        "ast should pass for namespace-isolated duplicate symbols, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("A__dup"),
+        "ast projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("B__dup"),
+        "ast projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn hir_namespace_imports_isolate_duplicate_symbols() {
+    let dir = make_temp_dir("hir-namespace-duplicate");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_b = dir.join("lib_b.kooix");
+
+    fs::write(&lib_a, "fn dup() -> Int { 1 };\n").expect("write lib_a");
+    fs::write(&lib_b, "fn dup() -> Int { 2 };\n").expect("write lib_b");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nimport \"lib_b\" as B;\nfn main() -> Int { A::dup() + B::dup() };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("hir")
+        .arg(&main)
+        .output()
+        .expect("run hir");
+
+    assert!(
+        output.status.success(),
+        "hir should pass for namespace-isolated duplicate symbols, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("A__dup"),
+        "hir projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("B__dup"),
+        "hir projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn check_pretty_without_json_fails() {
     let dir = make_temp_dir("pretty-no-json");
     let main = dir.join("main.kooix");

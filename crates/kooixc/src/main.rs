@@ -1,7 +1,9 @@
+use std::fs as stdfs;
 use std::io::Read;
 use std::path::Path;
 use std::{env, fs, process};
 
+use kooixc::ast::Program;
 use kooixc::error::{Diagnostic, Severity};
 use kooixc::loader::{load_source_map, load_source_map_with_module_graph, ModuleGraph, SourceMap};
 use kooixc::native::NativeError;
@@ -271,7 +273,25 @@ fn main() {
             }
         }
         "ast" => match parse_source(&source) {
-            Ok(program) => {
+            Ok(mut program) => {
+                if should_use_module_aware_ast_hir_projection(entry_path) {
+                    match build_module_aware_entry_projection(entry_path) {
+                        Ok((projected, projection_diagnostics)) => {
+                            if projection_diagnostics
+                                .iter()
+                                .any(|diagnostic| diagnostic.severity == Severity::Error)
+                            {
+                                print_diagnostics(&projection_diagnostics, &source_map);
+                                process::exit(1);
+                            }
+                            program = projected;
+                        }
+                        Err(errors) => {
+                            print_diagnostics(&errors, &source_map);
+                            process::exit(1);
+                        }
+                    }
+                }
                 println!("{program:#?}");
             }
             Err(errors) => {
@@ -280,7 +300,25 @@ fn main() {
             }
         },
         "hir" => match lower_source(&source) {
-            Ok(program) => {
+            Ok(mut program) => {
+                if should_use_module_aware_ast_hir_projection(entry_path) {
+                    match build_module_aware_entry_projection(entry_path) {
+                        Ok((projected, projection_diagnostics)) => {
+                            if projection_diagnostics
+                                .iter()
+                                .any(|diagnostic| diagnostic.severity == Severity::Error)
+                            {
+                                print_diagnostics(&projection_diagnostics, &source_map);
+                                process::exit(1);
+                            }
+                            program = kooixc::hir::lower_program(&projected);
+                        }
+                        Err(errors) => {
+                            print_diagnostics(&errors, &source_map);
+                            process::exit(1);
+                        }
+                    }
+                }
                 println!("{program:#?}");
             }
             Err(errors) => {
@@ -414,6 +452,42 @@ fn flatten_module_diagnostics(results: &[ModuleCheckResult]) -> Vec<Diagnostic> 
         diagnostics.extend(result.diagnostics.clone());
     }
     diagnostics
+}
+
+fn should_use_module_aware_ast_hir_projection(entry_path: &Path) -> bool {
+    match load_source_map_with_module_graph(entry_path) {
+        Ok((_map, graph)) => should_use_module_aware_check_for_check_command(&graph),
+        Err(_) => false,
+    }
+}
+
+fn build_module_aware_entry_projection(
+    entry_path: &Path,
+) -> Result<(Program, Vec<Diagnostic>), Vec<Diagnostic>> {
+    let (graph, modules) = kooixc::loader::load_module_programs(entry_path)?;
+    let exports = kooixc::module_check::build_export_index(&modules);
+
+    let entry_canonical = canonicalize_lossy(entry_path);
+    let Some(entry_module) = modules
+        .iter()
+        .find(|module| canonicalize_lossy(&module.path) == entry_canonical)
+    else {
+        return Err(vec![Diagnostic::error(
+            format!(
+                "failed to locate entry module '{}' in module graph",
+                entry_path.display()
+            ),
+            kooixc::error::Span::new(0, 0),
+        )]);
+    };
+
+    let (program, diagnostics) =
+        kooixc::module_check::prepare_program_for_module_check(entry_module, &graph, &exports);
+    Ok((program, diagnostics))
+}
+
+fn canonicalize_lossy(path: &Path) -> std::path::PathBuf {
+    stdfs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {
