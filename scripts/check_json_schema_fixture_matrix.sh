@@ -26,36 +26,75 @@ require_file() {
   fi
 }
 
+emit_schema_drift() {
+  local label="$1"
+  local file="$2"
+  local expected="$3"
+  local min_schema="${4:-n/a}"
+  local max_schema="${5:-n/a}"
+  local schema_version
+  local phase
+  local fixture
+
+  fixture="$(basename "$file")"
+  schema_version="$(jq -r '
+    if (.schema_version | type) == "number" and (.schema_version == (.schema_version | floor))
+    then (.schema_version | floor | tostring)
+    else "n/a"
+    end
+  ' "$file" 2>/dev/null || echo "n/a")"
+  phase="$(jq -r '.summary.phase // .phase // "n/a"' "$file" 2>/dev/null || echo "n/a")"
+
+  echo "[schema-drift] fixture=$fixture label=$label expected=$expected expected_range=[$min_schema,$max_schema] actual_schema=$schema_version actual_phase=$phase file=$file" >&2
+}
+
+run_shape_assert() {
+  local label="$1"
+  local file="$2"
+  local filter="$3"
+
+  set +e
+  jq -e -L "$JQ_LIB_DIR" "$filter" "$file" >/dev/null
+  local status=$?
+  set -e
+
+  if (( status != 0 )); then
+    echo "[$label] shape assertion failed: $file" >&2
+    emit_schema_drift "$label" "$file" "shape-pass"
+    exit 1
+  fi
+}
+
 assert_common_shape() {
   local file="$1"
-  jq -e -L "$JQ_LIB_DIR" '
+  run_shape_assert "common-shape" "$file" '
     include "check_json_contract";
     summary_base and schema_version_is_pos_int
-  ' "$file" >/dev/null
+  '
 }
 
 assert_check_shape() {
   local file="$1"
-  jq -e -L "$JQ_LIB_DIR" '
+  run_shape_assert "check-shape" "$file" '
     include "check_json_contract";
     fixture_check_shape
-  ' "$file" >/dev/null
+  '
 }
 
 assert_module_shape() {
   local file="$1"
-  jq -e -L "$JQ_LIB_DIR" '
+  run_shape_assert "modules-shape" "$file" '
     include "check_json_contract";
     fixture_modules_shape
-  ' "$file" >/dev/null
+  '
 }
 
 assert_load_shape() {
   local file="$1"
-  jq -e -L "$JQ_LIB_DIR" '
+  run_shape_assert "load-shape" "$file" '
     include "check_json_contract";
     fixture_load_shape
-  ' "$file" >/dev/null
+  '
 }
 
 expect_schema_range() {
@@ -78,10 +117,12 @@ expect_schema_range() {
 
   if [[ "$expected" == "pass" && "$status" != "0" ]]; then
     echo "[$label] expected pass but failed (range=[$min_schema,$max_schema], file=$file)" >&2
+    emit_schema_drift "$label" "$file" "range-pass" "$min_schema" "$max_schema"
     exit 1
   fi
   if [[ "$expected" == "fail" && "$status" == "0" ]]; then
     echo "[$label] expected fail but passed (range=[$min_schema,$max_schema], file=$file)" >&2
+    emit_schema_drift "$label" "$file" "range-fail" "$min_schema" "$max_schema"
     exit 1
   fi
 }

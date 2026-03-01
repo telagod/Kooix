@@ -113,7 +113,22 @@
 
 - ✅ 收敛多个脚本中的 jq 断言片段，减少重复维护。
 - ✅ 强化 fixture matrix 的语义级断言（不仅看版本号，还看 summary/payload 对齐）。
-- 在 CI 失败输出中直接给出 drift triage 信息（fixture、期望区间、实际版本与 phase）。
+- ✅ 在 CI 失败输出中直接给出 drift triage 信息（fixture、期望区间、实际版本与 phase）。
+
+## Schema Drift Triage
+
+`./scripts/check_json_schema_fixture_matrix.sh --assert` 在以下失败场景会额外输出一行 triage 信息：
+
+- shape 断言失败（`common/check/modules/load`）
+- schema range 断言失败（`expected pass` 实际 fail，或 `expected fail` 实际 pass）
+
+stderr 格式：
+
+```text
+[schema-drift] fixture=<name>.json label=<assert-label> expected=<shape-pass|range-pass|range-fail> expected_range=[min,max] actual_schema=<n/a|int> actual_phase=<n/a|phase> file=<abs-path>
+```
+
+该信息可直接用于 CI 定位：先看 `fixture` 和 `label` 锁定样本与断言类型，再按 `actual_schema/actual_phase` 判断是版本漂移还是 payload 语义偏移。
 
 ## Shared jq Library
 
