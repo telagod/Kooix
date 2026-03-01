@@ -222,6 +222,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD7：docs-sync gate 的契约触发集合外置到 `scripts/check_json_contract_docs_sync.triggers`，避免脚本硬编码漂移。
 - ✅ DoD8：docs-sync trigger 支持 `exact/prefix/glob` 三种匹配模式，降低触发规则维护成本。
 - ✅ DoD9：PR docs-sync gate 无论 pass/fail 都会写入 `GITHUB_STEP_SUMMARY`（状态 + base/head + gate 日志），失败信息可直接在 Summary 查看。
+- ✅ DoD10：PR docs-sync gate 上传 `docs-sync-gate-log` artifact（`meta.txt` + `gate.log`），便于离线排障。
 - 验证命令（2026-03-01）：
   - `./scripts/check_json_schema_drift_triage_smoke.sh`
   - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`

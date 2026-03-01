@@ -37,7 +37,17 @@ jobs:
           KX_DOC_SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          docs_sync_log="$(mktemp /tmp/kx-doc-sync-XXXXXX.log)"
+          docs_sync_dir="/tmp/kx-doc-sync-gate"
+          docs_sync_log="$docs_sync_dir/gate.log"
+          docs_sync_meta="$docs_sync_dir/meta.txt"
+
+          rm -rf "$docs_sync_dir"
+          mkdir -p "$docs_sync_dir"
+
+          {
+            echo "base_sha=$KX_DOC_SYNC_BASE_SHA"
+            echo "head_sha=$KX_DOC_SYNC_HEAD_SHA"
+          } > "$docs_sync_meta"
 
           set +e
           ./scripts/check_json_contract_docs_sync.sh "$KX_DOC_SYNC_BASE_SHA" "$KX_DOC_SYNC_HEAD_SHA" >"$docs_sync_log" 2>&1
@@ -66,6 +76,16 @@ jobs:
             cat "$docs_sync_log" >&2
             exit "$docs_sync_status"
           fi
+
+      - name: Upload docs-sync gate artifact (PR)
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-sync-gate-log
+          path: |
+            /tmp/kx-doc-sync-gate/meta.txt
+            /tmp/kx-doc-sync-gate/gate.log
+          if-no-files-found: warn
 
       - name: Bootstrap cold-start guard smoke
         run: |
