@@ -109,10 +109,10 @@
 
 ## Next Stage Focus
 
-下一阶段聚焦“契约断言逻辑去重 + 失败可定位性”：
+下一阶段聚焦“失败可定位性”，前置两项已完成：
 
-- 收敛多个脚本中的 jq 断言片段，减少重复维护。
-- 强化 fixture matrix 的语义级断言（不仅看版本号，还看 summary/payload 对齐）。
+- ✅ 收敛多个脚本中的 jq 断言片段，减少重复维护。
+- ✅ 强化 fixture matrix 的语义级断言（不仅看版本号，还看 summary/payload 对齐）。
 - 在 CI 失败输出中直接给出 drift triage 信息（fixture、期望区间、实际版本与 phase）。
 
 ## Shared jq Library
