@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install LLVM tools (llc) + clang
         run: |
@@ -27,6 +29,14 @@ jobs:
 
       - name: Format
         run: cargo fmt --all --check
+
+      - name: Check JSON contract docs sync (PR)
+        if: github.event_name == 'pull_request'
+        env:
+          KX_DOC_SYNC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          KX_DOC_SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          ./scripts/check_json_contract_docs_sync.sh "$KX_DOC_SYNC_BASE_SHA" "$KX_DOC_SYNC_HEAD_SHA"
 
       - name: Bootstrap cold-start guard smoke
         run: |

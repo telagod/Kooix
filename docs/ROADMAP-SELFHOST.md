@@ -218,7 +218,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD3：`bootstrap-heavy` workflow 同步接入同款 summary 输出，保持主/重载门禁一致。
 - ✅ DoD4：triage smoke 覆盖 `range-pass/range-fail/shape-pass`，并覆盖 `check/modules/load` 三类输出。
 - ✅ DoD5：`ci` 与 `bootstrap-heavy` 均上传 triage smoke 证据 artifact（`summary/stdout/stderr`），失败后可直接下载排障。
+- ✅ DoD6：新增 PR docs-sync gate（`check_json_contract_docs_sync.sh`），契约触发文件变更时强制同步 `docs/CHECK-JSON-CONTRACT.md`。
 - 验证命令（2026-03-01）：
   - `./scripts/check_json_schema_drift_triage_smoke.sh`
   - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`
   - `./scripts/check_json_schema_fixture_matrix.sh --assert`
+  - `./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>`

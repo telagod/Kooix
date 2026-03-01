@@ -35,6 +35,9 @@
   - `KX_MODULE_PREFLIGHT_ASSERT_SCHEMA=1` 开启 schema 断言
   - `KX_MODULE_PREFLIGHT_MIN_SCHEMA_VERSION` / `KX_MODULE_PREFLIGHT_MAX_SCHEMA_VERSION`（默认 `1/1`）
   - `KX_MODULE_PREFLIGHT_ALLOWED_PHASES`（默认 `check-modules,load`）
+- `scripts/check_json_contract_docs_sync.sh`（PR gate）：
+  - 当契约触发文件变更时，要求同步更新 `docs/CHECK-JSON-CONTRACT.md`
+  - `ci` workflow 仅在 `pull_request` 事件启用该门禁
 
 ## Preflight Metrics Bridge
 
