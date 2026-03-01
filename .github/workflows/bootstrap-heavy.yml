@@ -486,14 +486,16 @@ jobs:
             echo "- module preflight diagnostics: ok=${module_preflight_ok}, errors=${module_preflight_errors}, warnings=${module_preflight_warnings}"
             echo "- module preflight contract: schema=${module_preflight_schema}, phase=${module_preflight_phase}"
             echo "- module preflight first diagnostic: ${module_preflight_first_diag}"
-            echo "- schema drift triage smoke: ${triage_smoke_state}"
+            echo "- schema drift triage state: ${triage_smoke_state}"
+            echo "- schema drift triage schema: n/a"
+            echo "- schema drift triage phase: n/a"
             if [ -s "$triage_summary_file" ]; then
-              echo "- schema drift triage lines:"
+              echo "- schema drift triage log:"
               echo '```text'
               cat "$triage_summary_file"
               echo '```'
             else
-              echo "- schema drift triage lines: n/a"
+              echo "- schema drift triage log: n/a"
             fi
             echo "- timeout (compile/smoke): ${heavy_timeout}s / ${heavy_timeout_smoke}s"
             echo "- safety caps (vmem/procs): ${heavy_vmem} KB / ${heavy_procs}"

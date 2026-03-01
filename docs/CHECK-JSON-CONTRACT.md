@@ -157,7 +157,8 @@ CI 取证约定：
 - `ci` workflow 上传 artifact：`schema-drift-triage-logs`
 - `bootstrap-heavy` workflow 上传 artifact：`bootstrap-heavy-schema-drift-triage-logs`
 - artifact 包含 `result.env`、`summary.txt`、`stdout.log`、`stderr.log`，用于失败后离线定位。
-- `bootstrap-heavy` workflow 会在 `Bootstrap-heavy summary` 中统一展示 triage smoke 状态与 triage lines。
+- `ci` 的 `Module-check summary` 与 `bootstrap-heavy` 的 `Bootstrap-heavy summary` 都按 `state/schema/phase/log` 字段展示 triage 结果（`schema/phase` 当前为 `n/a`）。
+- `bootstrap-heavy` workflow 会在 `Bootstrap-heavy summary` 中统一展示 triage smoke 状态与日志。
 
 ## Shared jq Library
 
