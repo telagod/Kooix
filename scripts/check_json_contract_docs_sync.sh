@@ -8,14 +8,21 @@ BASE_SHA="${1:-}"
 HEAD_SHA="${2:-HEAD}"
 
 DOC_FILE="docs/CHECK-JSON-CONTRACT.md"
+TRIGGERS_FILE="${KX_CHECK_JSON_CONTRACT_DOCS_SYNC_TRIGGERS_FILE:-$ROOT/scripts/check_json_contract_docs_sync.triggers}"
 
-TRIGGERS=(
-  "scripts/check_json_contract.sh"
-  "scripts/check_json_schema_fixture_matrix.sh"
-  "scripts/check_json_schema_drift_triage_smoke.sh"
-  "scripts/lib/check_json_contract.jq"
-  "crates/kooixc/src/main.rs"
-)
+load_triggers() {
+  local trigger_file="$1"
+  if [[ ! -f "$trigger_file" ]]; then
+    echo "missing trigger file: $trigger_file" >&2
+    exit 2
+  fi
+
+  mapfile -t TRIGGERS < <(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$trigger_file" | sed '/^$/d')
+  if ((${#TRIGGERS[@]} == 0)); then
+    echo "no triggers found in: $trigger_file" >&2
+    exit 2
+  fi
+}
 
 ensure_commit() {
   local sha="$1"
@@ -53,6 +60,7 @@ resolve_range() {
 }
 
 diff_range="$(resolve_range)"
+load_triggers "$TRIGGERS_FILE"
 mapfile -t changed_files < <(git diff --name-only "$diff_range" | sed '/^$/d')
 
 if ((${#changed_files[@]} == 0)); then
