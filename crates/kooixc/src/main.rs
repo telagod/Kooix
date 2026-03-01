@@ -3,7 +3,7 @@ use std::path::Path;
 use std::{env, fs, process};
 
 use kooixc::error::{Diagnostic, Severity};
-use kooixc::loader::{load_source_map, SourceMap};
+use kooixc::loader::{load_source_map, load_source_map_with_module_graph, ModuleGraph, SourceMap};
 use kooixc::native::NativeError;
 use kooixc::{
     check_entry_modules, check_source, compile_and_run_native_source_with_args_stdin_and_timeout,
@@ -171,6 +171,67 @@ fn main() {
         return;
     }
 
+    if command == "check" {
+        let options = check_options
+            .clone()
+            .expect("check options should be available");
+
+        let graph = match load_source_map_with_module_graph(entry_path) {
+            Ok((_source_map, graph)) => graph,
+            Err(errors) => {
+                if options.json {
+                    print_loader_diagnostics_json(&errors, options.pretty);
+                } else {
+                    for error in errors {
+                        eprintln!("error: {}", error.message);
+                    }
+                }
+                process::exit(2);
+            }
+        };
+
+        if should_use_module_aware_check_for_check_command(&graph) {
+            match check_entry_modules(entry_path) {
+                Ok(results) => {
+                    let diagnostics = flatten_module_diagnostics(&results);
+                    let has_errors = diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Error);
+                    let has_warnings = diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.severity == Severity::Warning);
+                    let should_fail = has_errors || (options.strict_warnings && has_warnings);
+
+                    if options.json {
+                        print_check_diagnostics_json(&diagnostics, options.pretty, !should_fail);
+                        if should_fail {
+                            process::exit(1);
+                        }
+                    } else if !has_errors && !has_warnings {
+                        println!("ok: semantic checks passed");
+                    } else {
+                        print_module_diagnostics(&results);
+                        if should_fail {
+                            process::exit(1);
+                        }
+                        println!("ok: semantic checks passed with warnings");
+                    }
+                    return;
+                }
+                Err(errors) => {
+                    if options.json {
+                        print_loader_diagnostics_json(&errors, options.pretty);
+                    } else {
+                        for error in errors {
+                            eprintln!("error: {}", error.message);
+                        }
+                    }
+                    process::exit(2);
+                }
+            }
+        }
+    }
+
     let source_map = match load_source_map(entry_path) {
         Ok(map) => map,
         Err(errors) => {
@@ -331,6 +392,28 @@ fn main() {
             process::exit(2);
         }
     }
+}
+
+fn should_use_module_aware_check_for_check_command(graph: &ModuleGraph) -> bool {
+    let mut has_namespace_import = false;
+    for module in &graph.modules {
+        for import in &module.imports {
+            if import.ns.is_some() {
+                has_namespace_import = true;
+            } else {
+                return false;
+            }
+        }
+    }
+    has_namespace_import
+}
+
+fn flatten_module_diagnostics(results: &[ModuleCheckResult]) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for result in results {
+        diagnostics.extend(result.diagnostics.clone());
+    }
+    diagnostics
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {

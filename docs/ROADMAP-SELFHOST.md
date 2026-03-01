@@ -232,3 +232,15 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`
   - `./scripts/check_json_schema_fixture_matrix.sh --assert`
   - `./scripts/check_json_contract_docs_sync.sh <base_sha> <head_sha>`
+
+## 下一阶段（P14）module-aware 主链路收敛（进行中）
+
+- ✅ DoD1：`check` 命令在“全 namespace import”场景自动切换到 module-aware 语义检查，避免 include-style 合并导致的跨模块同名符号冲突。
+  - 例：`import "lib_a" as A; import "lib_b" as B;` 且两侧都定义 `dup` 时，`check` 不再误报 `duplicate function declaration`。
+- ✅ DoD2：保持 include-style 兼容：存在非 namespace import（`import "x";`）时，`check` 继续走原有合并源码路径，避免破坏 Stage1 现有链路。
+- ✅ DoD3：新增 `cli_check_tests` 回归用例覆盖：
+  - namespace 去冲突正例（`check --json`）
+  - include-style 兼容正例（`check`）
+- 验证命令（2026-03-01）：
+  - `cargo test -p kooixc --test cli_check_tests -- --test-threads=1`
+  - `./scripts/check_json_contract.sh --assert`

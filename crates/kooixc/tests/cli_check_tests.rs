@@ -194,6 +194,79 @@ fn check_json_warning_fails_with_strict() {
 }
 
 #[test]
+fn check_namespace_imports_isolate_duplicate_symbols_in_json_mode() {
+    let dir = make_temp_dir("namespace-duplicate-json");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_b = dir.join("lib_b.kooix");
+
+    fs::write(&lib_a, "fn dup() -> Int { 1 };\n").expect("write lib_a");
+    fs::write(&lib_b, "fn dup() -> Int { 2 };\n").expect("write lib_b");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nimport \"lib_b\" as B;\nfn main() -> Int { A::dup() + B::dup() };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .arg("--json")
+        .output()
+        .expect("run check --json");
+
+    assert!(
+        output.status.success(),
+        "check should pass with namespace-isolated duplicate symbols, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("\"ok\":true"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"phase\":\"check\""),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn check_include_style_import_without_namespace_still_works() {
+    let dir = make_temp_dir("include-style-import");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\";\nfn main() -> Int { helper() + 1 };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("check")
+        .arg(&main)
+        .output()
+        .expect("run check");
+
+    assert!(
+        output.status.success(),
+        "include-style import should remain compatible, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("ok: semantic checks passed"),
+        "unexpected stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn check_pretty_without_json_fails() {
     let dir = make_temp_dir("pretty-no-json");
     let main = dir.join("main.kooix");
