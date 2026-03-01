@@ -137,10 +137,11 @@ stderr 格式：
 
 该脚本会在临时目录复制 fixtures，并覆盖两类受控 drift 注入：
 
-- range drift：`v2-check.json -> schema_version=1`，断言 `expected=range-fail`。
+- range drift：覆盖 `check/modules/load`，断言 `expected=range-fail`。
+- range drift（逆向）：`v1-check.json -> schema_version=99`，断言 `expected=range-pass`。
 - shape drift：`v1-check.json` 删除 `summary`，断言 `expected=shape-pass`。
 
-两类用例都要求 fixture matrix 失败日志包含 `[schema-drift]` 关键字段，避免 triage 输出回退。
+上述用例都要求 fixture matrix 失败日志包含 `[schema-drift]` 关键字段，避免 triage 输出回退。
 
 可选：设置 `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=<file>` 时，脚本会把每个 case 捕获到的首条 triage 行写入文件，供 CI `GITHUB_STEP_SUMMARY` 直接引用。
 

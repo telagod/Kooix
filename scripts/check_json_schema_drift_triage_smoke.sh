@@ -75,13 +75,28 @@ run_expect_fail_case() {
   fi
 }
 
-# Case 1: range drift (expect range-fail triage).
-range_fixture_dir="$tmp_dir/range-fixtures"
-copy_fixtures "$range_fixture_dir"
-tmp_json="$tmp_dir/v2-check.range.tmp.json"
-jq '.schema_version = 1' "$range_fixture_dir/v2-check.json" >"$tmp_json"
-mv "$tmp_json" "$range_fixture_dir/v2-check.json"
-run_expect_fail_case "range-drift" "$range_fixture_dir" \
+set_schema_version() {
+  local fixture_dir="$1"
+  local fixture_file="$2"
+  local version="$3"
+  local tmp_json="$tmp_dir/${fixture_file}.schema.tmp.json"
+  jq --argjson version "$version" '.schema_version = $version' "$fixture_dir/$fixture_file" >"$tmp_json"
+  mv "$tmp_json" "$fixture_dir/$fixture_file"
+}
+
+drop_summary() {
+  local fixture_dir="$1"
+  local fixture_file="$2"
+  local tmp_json="$tmp_dir/${fixture_file}.shape.tmp.json"
+  jq 'del(.summary)' "$fixture_dir/$fixture_file" >"$tmp_json"
+  mv "$tmp_json" "$fixture_dir/$fixture_file"
+}
+
+# Case 1: range-fail on check.
+range_fail_check_dir="$tmp_dir/range-fail-check-fixtures"
+copy_fixtures "$range_fail_check_dir"
+set_schema_version "$range_fail_check_dir" "v2-check.json" 1
+run_expect_fail_case "range-fail-check" "$range_fail_check_dir" \
   "\\[schema-drift\\]" \
   "fixture=v2-check\\.json" \
   "label=check-strict-v1-v2" \
@@ -90,13 +105,50 @@ run_expect_fail_case "range-drift" "$range_fixture_dir" \
   "actual_schema=1" \
   "actual_phase=check"
 
-# Case 2: shape drift (expect shape-pass triage).
-shape_fixture_dir="$tmp_dir/shape-fixtures"
-copy_fixtures "$shape_fixture_dir"
-tmp_json="$tmp_dir/v1-check.shape.tmp.json"
-jq 'del(.summary)' "$shape_fixture_dir/v1-check.json" >"$tmp_json"
-mv "$tmp_json" "$shape_fixture_dir/v1-check.json"
-run_expect_fail_case "shape-drift" "$shape_fixture_dir" \
+# Case 2: range-pass on check.
+range_pass_check_dir="$tmp_dir/range-pass-check-fixtures"
+copy_fixtures "$range_pass_check_dir"
+set_schema_version "$range_pass_check_dir" "v1-check.json" 99
+run_expect_fail_case "range-pass-check" "$range_pass_check_dir" \
+  "\\[schema-drift\\]" \
+  "fixture=v1-check\\.json" \
+  "label=check-strict-v1-v1" \
+  "expected=range-pass" \
+  "expected_range=\\[1,1\\]" \
+  "actual_schema=99" \
+  "actual_phase=check"
+
+# Case 3: range-fail on modules.
+range_fail_modules_dir="$tmp_dir/range-fail-modules-fixtures"
+copy_fixtures "$range_fail_modules_dir"
+set_schema_version "$range_fail_modules_dir" "v2-modules.json" 1
+run_expect_fail_case "range-fail-modules" "$range_fail_modules_dir" \
+  "\\[schema-drift\\]" \
+  "fixture=v2-modules\\.json" \
+  "label=modules-strict-v1-v2" \
+  "expected=range-fail" \
+  "expected_range=\\[1,1\\]" \
+  "actual_schema=1" \
+  "actual_phase=check-modules"
+
+# Case 4: range-fail on load.
+range_fail_load_dir="$tmp_dir/range-fail-load-fixtures"
+copy_fixtures "$range_fail_load_dir"
+set_schema_version "$range_fail_load_dir" "v2-load.json" 1
+run_expect_fail_case "range-fail-load" "$range_fail_load_dir" \
+  "\\[schema-drift\\]" \
+  "fixture=v2-load\\.json" \
+  "label=load-strict-v1-v2" \
+  "expected=range-fail" \
+  "expected_range=\\[1,1\\]" \
+  "actual_schema=1" \
+  "actual_phase=load"
+
+# Case 5: shape-pass on check.
+shape_pass_check_dir="$tmp_dir/shape-pass-check-fixtures"
+copy_fixtures "$shape_pass_check_dir"
+drop_summary "$shape_pass_check_dir" "v1-check.json"
+run_expect_fail_case "shape-pass-check" "$shape_pass_check_dir" \
   "\\[schema-drift\\]" \
   "fixture=v1-check\\.json" \
   "label=common-shape" \
@@ -105,4 +157,4 @@ run_expect_fail_case "shape-drift" "$shape_fixture_dir" \
   "actual_schema=1" \
   "actual_phase=n/a"
 
-echo "ok: check-json-schema-drift-triage smoke passed (range+shape)"
+echo "ok: check-json-schema-drift-triage smoke passed (range-pass/range-fail/shape-pass + check/modules/load)"

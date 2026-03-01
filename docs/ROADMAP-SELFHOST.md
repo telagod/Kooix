@@ -216,6 +216,7 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD1：`check_json_schema_drift_triage_smoke.sh` 支持 `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT` 导出每个 case 的 triage 行。
 - ✅ DoD2：主 `ci` workflow 在 triage smoke 通过后，自动把 triage 行写入 `GITHUB_STEP_SUMMARY`。
 - ✅ DoD3：`bootstrap-heavy` workflow 同步接入同款 summary 输出，保持主/重载门禁一致。
+- ✅ DoD4：triage smoke 覆盖 `range-pass/range-fail/shape-pass`，并覆盖 `check/modules/load` 三类输出。
 - 验证命令（2026-03-01）：
   - `./scripts/check_json_schema_drift_triage_smoke.sh`
   - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`
