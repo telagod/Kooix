@@ -36,7 +36,36 @@ jobs:
           KX_DOC_SYNC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           KX_DOC_SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          ./scripts/check_json_contract_docs_sync.sh "$KX_DOC_SYNC_BASE_SHA" "$KX_DOC_SYNC_HEAD_SHA"
+          set -euo pipefail
+          docs_sync_log="$(mktemp /tmp/kx-doc-sync-XXXXXX.log)"
+
+          set +e
+          ./scripts/check_json_contract_docs_sync.sh "$KX_DOC_SYNC_BASE_SHA" "$KX_DOC_SYNC_HEAD_SHA" >"$docs_sync_log" 2>&1
+          docs_sync_status=$?
+          set -e
+
+          if [[ "$docs_sync_status" -eq 0 ]]; then
+            docs_sync_state="pass"
+          else
+            docs_sync_state="fail"
+          fi
+
+          {
+            echo "### Check JSON Contract Docs Sync"
+            echo ""
+            echo "- state: $docs_sync_state"
+            echo "- base: $KX_DOC_SYNC_BASE_SHA"
+            echo "- head: $KX_DOC_SYNC_HEAD_SHA"
+            echo "- log:"
+            echo '```text'
+            cat "$docs_sync_log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$docs_sync_status" -ne 0 ]]; then
+            cat "$docs_sync_log" >&2
+            exit "$docs_sync_status"
+          fi
 
       - name: Bootstrap cold-start guard smoke
         run: |
