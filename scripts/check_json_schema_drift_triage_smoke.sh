@@ -17,6 +17,11 @@ tmp_dir="$(mktemp -d /tmp/kx-check-json-schema-drift-triage-XXXXXX)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 src_dir="$ROOT/scripts/fixtures/check-json-schema"
+summary_out="${KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT:-}"
+
+if [[ -n "$summary_out" ]]; then
+  : >"$summary_out"
+fi
 
 copy_fixtures() {
   local dst="$1"
@@ -59,6 +64,15 @@ run_expect_fail_case() {
     require_stderr_pattern "$stderr_file" "$1"
     shift
   done
+
+  if [[ -n "$summary_out" ]]; then
+    local triage_line
+    triage_line="$(rg -m 1 "^\\[schema-drift\\]" "$stderr_file" || true)"
+    if [[ -z "$triage_line" ]]; then
+      triage_line="[schema-drift] missing"
+    fi
+    printf 'case=%s %s\n' "$case_name" "$triage_line" >>"$summary_out"
+  fi
 }
 
 # Case 1: range drift (expect range-fail triage).

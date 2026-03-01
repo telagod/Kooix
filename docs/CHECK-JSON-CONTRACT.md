@@ -142,6 +142,8 @@ stderr 格式：
 
 两类用例都要求 fixture matrix 失败日志包含 `[schema-drift]` 关键字段，避免 triage 输出回退。
 
+可选：设置 `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=<file>` 时，脚本会把每个 case 捕获到的首条 triage 行写入文件，供 CI `GITHUB_STEP_SUMMARY` 直接引用。
+
 ## Shared jq Library
 
 共享断言库：`scripts/lib/check_json_contract.jq`

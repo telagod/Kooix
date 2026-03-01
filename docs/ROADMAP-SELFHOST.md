@@ -210,3 +210,13 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - `./scripts/check_json_schema_drift_triage_smoke.sh`
   - `./scripts/check_json_contract.sh --assert`
   - `KX_CHECK_JSON_MIN_SCHEMA_VERSION=1 KX_CHECK_JSON_MAX_SCHEMA_VERSION=2 ./scripts/check_json_contract.sh --assert`
+
+## 下一阶段（P13）triage 可观测收敛
+
+- ✅ DoD1：`check_json_schema_drift_triage_smoke.sh` 支持 `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT` 导出每个 case 的 triage 行。
+- ✅ DoD2：主 `ci` workflow 在 triage smoke 通过后，自动把 triage 行写入 `GITHUB_STEP_SUMMARY`。
+- ✅ DoD3：`bootstrap-heavy` workflow 同步接入同款 summary 输出，保持主/重载门禁一致。
+- 验证命令（2026-03-01）：
+  - `./scripts/check_json_schema_drift_triage_smoke.sh`
+  - `KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT=/tmp/kx-schema-drift-triage.summary ./scripts/check_json_schema_drift_triage_smoke.sh`
+  - `./scripts/check_json_schema_fixture_matrix.sh --assert`

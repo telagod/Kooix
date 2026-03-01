@@ -143,7 +143,20 @@ jobs:
       - name: Check JSON schema drift triage smoke
         if: success()
         run: |
+          set -euo pipefail
+          triage_summary_file="$(mktemp /tmp/kx-schema-drift-triage-XXXXXX)"
+          KX_CHECK_JSON_TRIAGE_SMOKE_SUMMARY_OUT="$triage_summary_file" \
           ./scripts/check_json_schema_drift_triage_smoke.sh
+
+          {
+            echo "### Schema Drift Triage Smoke"
+            echo ""
+            echo "- smoke: pass"
+            echo "- captured triage lines:"
+            echo '```text'
+            cat "$triage_summary_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bootstrap-heavy artifacts
         if: always()
