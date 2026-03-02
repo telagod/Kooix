@@ -302,3 +302,101 @@ fn native_include_style_import_still_works() {
     let _ = fs::remove_file(&out_bin);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn native_namespace_imports_execute_with_imported_enum_local_paths() {
+    if !native_toolchain_available() {
+        return;
+    }
+
+    let dir = make_temp_dir("native-namespace-enum-local-paths");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+    let out_bin = dir.join("out-native");
+
+    fs::write(
+        &lib,
+        "enum Option<T> { Some(T); None; };\nfn mk(x: Int) -> Option<Int> { Option::Some(x) };\nfn read() -> Int {\n  match mk(9) {\n    Option::Some(v) => v;\n    Option::None => 0;\n  }\n};\n",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\nfn main() -> Int { if Lib::read() == 9 { 0 } else { 1 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("native")
+        .arg(&main)
+        .arg(&out_bin)
+        .arg("--run")
+        .output()
+        .expect("native --run command");
+
+    assert!(
+        output.status.success(),
+        "native enum local path rewrite run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok: native binary generated at"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("run exit code: 0"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_file(&out_bin);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn native_namespace_imports_execute_with_imported_record_local_types() {
+    if !native_toolchain_available() {
+        return;
+    }
+
+    let dir = make_temp_dir("native-namespace-record-local-types");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+    let out_bin = dir.join("out-native");
+
+    fs::write(
+        &lib,
+        "record Box { value: Int; };\nfn mk(v: Int) -> Box { Box { value: v; } };\nfn calc() -> Int {\n  let b: Box = mk(40);\n  b.value + 2\n};\n",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\nfn main() -> Int { if Lib::calc() == 42 { 0 } else { 1 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("native")
+        .arg(&main)
+        .arg(&out_bin)
+        .arg("--run")
+        .output()
+        .expect("native --run command");
+
+    assert!(
+        output.status.success(),
+        "native record local type rewrite run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok: native binary generated at"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("run exit code: 0"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_file(&out_bin);
+    let _ = fs::remove_dir_all(&dir);
+}
