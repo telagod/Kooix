@@ -400,3 +400,84 @@ fn native_namespace_imports_execute_with_imported_record_local_types() {
     let _ = fs::remove_file(&out_bin);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn run_namespace_imports_execute_with_imported_generic_function_type_args() {
+    let dir = make_temp_dir("namespace-generic-inference");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+
+    fs::write(
+        &lib,
+        "fn id<T>(x: T) -> T { x };\nfn calc() -> Int { id<Int>(40) + 2 };\n",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\nfn main() -> Int { if Lib::id<Int>(1) == 1 { Lib::calc() } else { 0 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("run")
+        .arg(&main)
+        .output()
+        .expect("run command");
+
+    assert!(
+        output.status.success(),
+        "run generic imported function with type args should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok: run result: 42"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn native_namespace_imports_reports_generic_type_args_not_supported_yet() {
+    if !native_toolchain_available() {
+        return;
+    }
+
+    let dir = make_temp_dir("native-namespace-generic-inference");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+    let out_bin = dir.join("out-native");
+
+    fs::write(
+        &lib,
+        "fn id<T>(x: T) -> T { x };\nfn calc() -> Int { id<Int>(40) + 2 };\n",
+    )
+    .expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\" as Lib;\nfn main() -> Int { if Lib::id<Int>(1) == 1 { if Lib::calc() == 42 { 0 } else { 1 } } else { 1 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("native")
+        .arg(&main)
+        .arg(&out_bin)
+        .arg("--run")
+        .output()
+        .expect("native --run command");
+
+    assert!(
+        !output.status.success(),
+        "native generic imported function should fail until generic type args lowering is supported"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("uses generic type arguments, which native lowering does not support yet"),
+        "unexpected stderr: {stderr}"
+    );
+
+    let _ = fs::remove_file(&out_bin);
+    let _ = fs::remove_dir_all(&dir);
+}

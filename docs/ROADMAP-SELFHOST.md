@@ -260,6 +260,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD12：补齐 `native --run` 在 imported body 本地符号改写场景的边界回归：
   - 新增 `cli_run_tests` 覆盖导入模块内 enum 本地路径重写执行（`Option::Some/None`）。
   - 新增 `cli_run_tests` 覆盖导入模块内 record 本地类型重写执行（`Box` 本地类型标注与构造）。
+- ✅ DoD13：补齐 namespace import 下“导入泛型函数”执行边界回归：
+  - 新增 `cli_run_tests` 覆盖 `run` 对 imported generic function 显式 type args 调用（`Lib::id<Int>(...)`）可执行。
+  - 新增 `cli_run_tests` 覆盖 `native --run` 在显式 type args 场景下的当前限制（`native lowering does not support generic type arguments yet`）并固化诊断。
 - 验证命令（2026-03-02）：
   - `cargo test -p kooixc --test cli_run_tests -- --test-threads=1`
   - `cargo test -p kooixc --test cli_check_tests -- --test-threads=1`
