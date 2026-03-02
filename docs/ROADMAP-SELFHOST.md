@@ -254,6 +254,9 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD10：补齐 `run` 在 module execution projection 下的传递导入依赖回流与边界回归：
   - 修复 imported function body 改写后新发现依赖未入队问题（`Core::base` 这类传递 alias 调用会缺符号）。
   - 新增 `cli_run_tests` 覆盖传递 namespace 调用、导入模块内 enum 本地路径重写、导入模块内 record 本地类型重写。
+- ✅ DoD11：补齐 `native --run` CLI 回归覆盖，确保 `run/native` 在 namespace import 主链路下行为一致：
+  - 新增 `cli_run_tests` 覆盖 `native --run` 的传递 namespace 调用（`A -> Core`）执行成功。
+  - 新增 `cli_run_tests` 覆盖 `native --run` 的 include-style import 兼容执行。
 - 验证命令（2026-03-02）：
   - `cargo test -p kooixc --test cli_run_tests -- --test-threads=1`
   - `cargo test -p kooixc --test cli_check_tests -- --test-threads=1`

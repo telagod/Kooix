@@ -13,6 +13,11 @@ fn make_temp_dir(suffix: &str) -> PathBuf {
     dir
 }
 
+fn native_toolchain_available() -> bool {
+    Command::new("llc").arg("--version").output().is_ok()
+        && Command::new("clang").arg("--version").output().is_ok()
+}
+
 #[test]
 fn run_namespace_imports_execute_with_duplicate_local_symbols() {
     let dir = make_temp_dir("namespace-duplicate");
@@ -199,5 +204,101 @@ fn run_namespace_imports_execute_with_imported_record_local_types() {
         "unexpected stdout: {stdout}"
     );
 
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn native_namespace_imports_execute_with_transitive_alias_calls() {
+    if !native_toolchain_available() {
+        return;
+    }
+
+    let dir = make_temp_dir("native-namespace-transitive-call");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_core = dir.join("lib_core.kooix");
+    let out_bin = dir.join("out-native");
+
+    fs::write(&lib_core, "fn base() -> Int { 40 };\n").expect("write lib_core");
+    fs::write(
+        &lib_a,
+        "import \"lib_core\" as Core;\nfn calc() -> Int { Core::base() + 2 };\n",
+    )
+    .expect("write lib_a");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nfn main() -> Int { if A::calc() == 42 { 0 } else { 1 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("native")
+        .arg(&main)
+        .arg(&out_bin)
+        .arg("--run")
+        .output()
+        .expect("native --run command");
+
+    assert!(
+        output.status.success(),
+        "native transitive namespace run should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok: native binary generated at"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("run exit code: 0"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_file(&out_bin);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn native_include_style_import_still_works() {
+    if !native_toolchain_available() {
+        return;
+    }
+
+    let dir = make_temp_dir("native-include-style");
+    let main = dir.join("main.kooix");
+    let lib = dir.join("lib.kooix");
+    let out_bin = dir.join("out-native");
+
+    fs::write(&lib, "fn helper() -> Int { 41 };\n").expect("write lib");
+    fs::write(
+        &main,
+        "import \"lib\";\nfn main() -> Int { if helper() + 1 == 42 { 0 } else { 1 } };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("native")
+        .arg(&main)
+        .arg(&out_bin)
+        .arg("--run")
+        .output()
+        .expect("native --run command");
+
+    assert!(
+        output.status.success(),
+        "native include-style run should remain compatible, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("ok: native binary generated at"),
+        "unexpected stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("run exit code: 0"),
+        "unexpected stdout: {stdout}"
+    );
+
+    let _ = fs::remove_file(&out_bin);
     let _ = fs::remove_dir_all(&dir);
 }
