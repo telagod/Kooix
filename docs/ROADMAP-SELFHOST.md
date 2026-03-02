@@ -246,7 +246,13 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
 - ✅ DoD5：新增 `cli_check_tests` 回归用例覆盖 namespace duplicate 场景下 `ast`/`hir` 均可执行成功。
 - ✅ DoD6：`mir` / `llvm` 在“全 namespace import”场景切到同款 module-aware entry projection，再执行 sema+lowering/codegen，避免 include-style duplicate symbol 先触发导致中间表示/IR 无法观测。
 - ✅ DoD7：新增 `cli_check_tests` 回归覆盖 namespace duplicate 场景下 `mir` / `llvm` 均可执行成功，并可在输出中观察到 `A__dup` / `B__dup` 符号。
+- ✅ DoD8：新增 `module execution projection`（导入函数保留函数体 + 本地符号重写 + 模块局部符号自动入队），并接入 `run` / `native` 在“全 namespace import”场景下的执行链路。
+  - 目标：从“可检查/可观测”推进到“可执行”，修复 namespace import 下跨模块同名函数导致 `run/native` 被 include-style duplicate symbol 阻塞的问题。
+- ✅ DoD9：新增 `cli_run_tests` 回归覆盖：
+  - namespace duplicate + imported-local helper 调用场景（验证函数体执行与本地调用重写）
+  - include-style import 兼容场景
 - 验证命令（2026-03-01）：
+  - `cargo test -p kooixc --test cli_run_tests -- --test-threads=1`
   - `cargo test -p kooixc --test cli_check_tests -- --test-threads=1`
   - `./scripts/check_json_contract.sh --assert`
   - `cargo run -p kooixc -- ast examples/import_alias_main.kooix`

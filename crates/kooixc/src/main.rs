@@ -10,7 +10,7 @@ use kooixc::native::NativeError;
 use kooixc::{
     check_entry_modules, check_source, compile_and_run_native_source_with_args_stdin_and_timeout,
     compile_native_source, emit_llvm_ir_source, lower_source, lower_to_mir_source, parse_source,
-    run_source, ModuleCheckResult,
+    run_source, ModuleCheckResult, RunResult,
 };
 
 const JSON_DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
@@ -394,18 +394,53 @@ fn main() {
                 }
             }
         }
-        "run" => match run_source(&source) {
-            Ok(result) => {
-                if !result.diagnostics.is_empty() {
-                    print_diagnostics(&result.diagnostics, &source_map);
+        "run" => {
+            if should_use_module_aware_entry_projection(entry_path) {
+                match build_module_aware_entry_execution_projection(entry_path) {
+                    Ok((program, projection_diagnostics)) => {
+                        if projection_diagnostics
+                            .iter()
+                            .any(|diagnostic| diagnostic.severity == Severity::Error)
+                        {
+                            print_diagnostics(&projection_diagnostics, &source_map);
+                            process::exit(1);
+                        }
+                        match run_program(&program) {
+                            Ok(result) => {
+                                if !projection_diagnostics.is_empty() {
+                                    print_diagnostics(&projection_diagnostics, &source_map);
+                                }
+                                if !result.diagnostics.is_empty() {
+                                    print_diagnostics(&result.diagnostics, &source_map);
+                                }
+                                println!("ok: run result: {}", result.value);
+                            }
+                            Err(errors) => {
+                                print_diagnostics(&errors, &source_map);
+                                process::exit(1);
+                            }
+                        }
+                    }
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
                 }
-                println!("ok: run result: {}", result.value);
+            } else {
+                match run_source(&source) {
+                    Ok(result) => {
+                        if !result.diagnostics.is_empty() {
+                            print_diagnostics(&result.diagnostics, &source_map);
+                        }
+                        println!("ok: run result: {}", result.value);
+                    }
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
             }
-            Err(errors) => {
-                print_diagnostics(&errors, &source_map);
-                process::exit(1);
-            }
-        },
+        }
         "native" => {
             let options = match parse_native_options(&args[3..]) {
                 Ok(options) => options,
@@ -417,6 +452,89 @@ fn main() {
             };
 
             let output_path = Path::new(&options.output);
+            if should_use_module_aware_entry_projection(entry_path) {
+                match build_module_aware_entry_execution_projection(entry_path) {
+                    Ok((program, projection_diagnostics)) => {
+                        if projection_diagnostics
+                            .iter()
+                            .any(|diagnostic| diagnostic.severity == Severity::Error)
+                        {
+                            print_diagnostics(&projection_diagnostics, &source_map);
+                            process::exit(1);
+                        }
+
+                        if options.run_after_build {
+                            let stdin_data = match &options.stdin_path {
+                                Some(path) if path == "-" => {
+                                    let mut buffer = Vec::new();
+                                    if let Err(error) = std::io::stdin().read_to_end(&mut buffer) {
+                                        eprintln!("failed to read stdin stream: {error}");
+                                        process::exit(2);
+                                    }
+                                    Some(buffer)
+                                }
+                                Some(path) => match fs::read(path) {
+                                    Ok(data) => Some(data),
+                                    Err(error) => {
+                                        eprintln!("failed to read stdin file {path}: {error}");
+                                        process::exit(2);
+                                    }
+                                },
+                                None => None,
+                            };
+
+                            match compile_and_run_native_program_with_args_stdin_and_timeout(
+                                &program,
+                                output_path,
+                                &options.run_args,
+                                stdin_data.as_deref(),
+                                options.timeout_ms,
+                            ) {
+                                Ok(run_output) => {
+                                    if !projection_diagnostics.is_empty() {
+                                        print_diagnostics(&projection_diagnostics, &source_map);
+                                    }
+                                    println!("ok: native binary generated at {}", options.output);
+                                    if !run_output.stdout.is_empty() {
+                                        print!("{}", run_output.stdout);
+                                    }
+                                    if !run_output.stderr.is_empty() {
+                                        eprint!("{}", run_output.stderr);
+                                    }
+                                    let exit_code = run_output.status_code.unwrap_or(1);
+                                    println!("run exit code: {exit_code}");
+                                    if exit_code != 0 {
+                                        process::exit(exit_code);
+                                    }
+                                }
+                                Err(error) => {
+                                    report_native_error(error, &source_map);
+                                    process::exit(1);
+                                }
+                            }
+                        } else {
+                            match compile_native_program(&program, output_path) {
+                                Ok(_) => {
+                                    if !projection_diagnostics.is_empty() {
+                                        print_diagnostics(&projection_diagnostics, &source_map);
+                                    }
+                                    println!("ok: native binary generated at {}", options.output);
+                                }
+                                Err(error) => {
+                                    report_native_error(error, &source_map);
+                                    process::exit(1);
+                                }
+                            }
+                        }
+                    }
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
+                return;
+            }
+
             if options.run_after_build {
                 let stdin_data = match &options.stdin_path {
                     Some(path) if path == "-" => {
@@ -536,6 +654,31 @@ fn build_module_aware_entry_projection(
     Ok((program, diagnostics))
 }
 
+fn build_module_aware_entry_execution_projection(
+    entry_path: &Path,
+) -> Result<(Program, Vec<Diagnostic>), Vec<Diagnostic>> {
+    let (graph, modules) = kooixc::loader::load_module_programs(entry_path)?;
+    let exports = kooixc::module_check::build_export_index(&modules);
+
+    let entry_canonical = canonicalize_lossy(entry_path);
+    let Some(entry_module) = modules
+        .iter()
+        .find(|module| canonicalize_lossy(&module.path) == entry_canonical)
+    else {
+        return Err(vec![Diagnostic::error(
+            format!(
+                "failed to locate entry module '{}' in module graph",
+                entry_path.display()
+            ),
+            kooixc::error::Span::new(0, 0),
+        )]);
+    };
+
+    let (program, diagnostics) =
+        kooixc::module_check::prepare_program_for_module_execution(entry_module, &graph, &exports);
+    Ok((program, diagnostics))
+}
+
 fn canonicalize_lossy(path: &Path) -> std::path::PathBuf {
     stdfs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
@@ -562,6 +705,43 @@ fn lower_to_mir_program(program: &Program) -> Result<kooixc::mir::MirProgram, Ve
 fn emit_llvm_ir_program(program: &Program) -> Result<String, Vec<Diagnostic>> {
     let mir_program = lower_to_mir_program(program)?;
     Ok(kooixc::llvm::emit_program(&mir_program))
+}
+
+fn run_program(program: &Program) -> Result<RunResult, Vec<Diagnostic>> {
+    let diagnostics = kooixc::sema::check_program(program);
+    if diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        return Err(diagnostics);
+    }
+    let value = kooixc::interp::run_program(program).map_err(|error| vec![error])?;
+    Ok(RunResult { value, diagnostics })
+}
+
+fn compile_native_program(
+    program: &Program,
+    output_path: &Path,
+) -> Result<(), kooixc::native::NativeError> {
+    let llvm_ir =
+        emit_llvm_ir_program(program).map_err(kooixc::native::NativeError::Diagnostics)?;
+    kooixc::native::compile_llvm_ir_to_executable(&llvm_ir, output_path)
+}
+
+fn compile_and_run_native_program_with_args_stdin_and_timeout(
+    program: &Program,
+    output_path: &Path,
+    args: &[String],
+    stdin_data: Option<&[u8]>,
+    timeout_ms: Option<u64>,
+) -> Result<kooixc::native::RunOutput, kooixc::native::NativeError> {
+    compile_native_program(program, output_path)?;
+    kooixc::native::run_executable_with_args_and_stdin_and_timeout(
+        output_path,
+        args,
+        stdin_data,
+        timeout_ms,
+    )
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {

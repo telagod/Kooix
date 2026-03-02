@@ -61,6 +61,23 @@ pub fn prepare_program_for_module_check(
     graph: &ModuleGraph,
     exports: &ExportIndex,
 ) -> (Program, Vec<Diagnostic>) {
+    prepare_program_for_module_projection(module, graph, exports, false)
+}
+
+pub fn prepare_program_for_module_execution(
+    module: &LoadedModule,
+    graph: &ModuleGraph,
+    exports: &ExportIndex,
+) -> (Program, Vec<Diagnostic>) {
+    prepare_program_for_module_projection(module, graph, exports, true)
+}
+
+fn prepare_program_for_module_projection(
+    module: &LoadedModule,
+    graph: &ModuleGraph,
+    exports: &ExportIndex,
+    include_import_bodies: bool,
+) -> (Program, Vec<Diagnostic>) {
     let module_path = canonicalize_lossy(&module.path);
     let mut diagnostics = Vec::new();
 
@@ -126,7 +143,25 @@ pub fn prepare_program_for_module_check(
         };
 
         let alias = internal_namespace(&internal).to_string();
-        let mut stub = stub_function(template, &internal);
+        if include_import_bodies {
+            enqueue_module_local_symbols(
+                &alias,
+                &imported_module,
+                exports,
+                &mut needed_functions,
+                &mut needed_records,
+                &mut needed_enums,
+                &mut fn_queue,
+                &mut record_queue,
+                &mut enum_queue,
+            );
+        }
+
+        let mut stub = if include_import_bodies {
+            executable_imported_function(template, &internal)
+        } else {
+            stub_function(template, &internal)
+        };
         rewrite_function_signature_for_imported_module(
             &mut stub,
             &alias,
@@ -137,6 +172,19 @@ pub fn prepare_program_for_module_check(
             &mut record_queue,
             &mut enum_queue,
         );
+        if include_import_bodies {
+            rewrite_function_body_for_local_module_symbols(
+                &mut stub,
+                &alias,
+                &imported_module,
+                exports,
+                graph,
+                &mut needed_functions,
+                &mut needed_records,
+                &mut needed_enums,
+                &mut diagnostics,
+            );
+        }
         program.items.push(Item::Function(stub));
     }
 
@@ -227,6 +275,52 @@ pub fn prepare_program_for_module_check(
     }
 
     (program, diagnostics)
+}
+
+fn enqueue_module_local_symbols(
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    needed_functions: &mut HashMap<String, (String, PathBuf)>,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    fn_queue: &mut Vec<String>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
+) {
+    if let Some(functions) = exports.functions.get(imported_module) {
+        for name in functions.keys() {
+            let internal = format!("{alias}__{name}");
+            if needed_functions
+                .insert(internal.clone(), (name.clone(), imported_module.clone()))
+                .is_none()
+            {
+                fn_queue.push(internal);
+            }
+        }
+    }
+    if let Some(records) = exports.records.get(imported_module) {
+        for name in records.keys() {
+            let internal = format!("{alias}__{name}");
+            if needed_records
+                .insert(internal.clone(), (name.clone(), imported_module.clone()))
+                .is_none()
+            {
+                record_queue.push(internal);
+            }
+        }
+    }
+    if let Some(enums) = exports.enums.get(imported_module) {
+        for name in enums.keys() {
+            let internal = format!("{alias}__{name}");
+            if needed_enums
+                .insert(internal.clone(), (name.clone(), imported_module.clone()))
+                .is_none()
+            {
+                enum_queue.push(internal);
+            }
+        }
+    }
 }
 
 fn inserted_key(kind: &str, internal: &str) -> String {
@@ -956,6 +1050,375 @@ fn rewrite_type_ref_for_imported_module(
             enum_queue.push(internal);
         }
     }
+}
+
+fn rewrite_function_body_for_local_module_symbols(
+    function: &mut FunctionDecl,
+    alias: &str,
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+    graph: &ModuleGraph,
+    needed_functions: &mut HashMap<String, (String, PathBuf)>,
+    needed_records: &mut HashMap<String, (String, PathBuf)>,
+    needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let local_functions = exports
+        .functions
+        .get(imported_module)
+        .map(|items| items.keys().cloned().collect::<HashSet<_>>())
+        .unwrap_or_default();
+    let local_records = exports
+        .records
+        .get(imported_module)
+        .map(|items| items.keys().cloned().collect::<HashSet<_>>())
+        .unwrap_or_default();
+    let local_enums = exports
+        .enums
+        .get(imported_module)
+        .map(|items| items.keys().cloned().collect::<HashSet<_>>())
+        .unwrap_or_default();
+
+    let variant_enum_map = build_local_variant_enum_map(imported_module, exports);
+
+    if let Some(body) = &mut function.body {
+        rewrite_local_block_symbols(
+            body,
+            alias,
+            &local_functions,
+            &local_records,
+            &local_enums,
+            &variant_enum_map,
+        );
+    }
+
+    let alias_map = module_alias_map(imported_module, graph);
+    normalize_function_body(
+        function,
+        &alias_map,
+        exports,
+        needed_functions,
+        needed_records,
+        needed_enums,
+        diagnostics,
+    );
+}
+
+fn build_local_variant_enum_map(
+    imported_module: &PathBuf,
+    exports: &ExportIndex,
+) -> HashMap<String, Option<String>> {
+    let mut variant_to_enum: HashMap<String, Option<String>> = HashMap::new();
+    let Some(enums) = exports.enums.get(imported_module) else {
+        return variant_to_enum;
+    };
+
+    for (enum_name, enum_decl) in enums {
+        for variant in &enum_decl.variants {
+            variant_to_enum
+                .entry(variant.name.clone())
+                .and_modify(|slot| *slot = None)
+                .or_insert_with(|| Some(enum_name.clone()));
+        }
+    }
+    variant_to_enum
+}
+
+fn rewrite_local_block_symbols(
+    block: &mut Block,
+    alias: &str,
+    local_functions: &HashSet<String>,
+    local_records: &HashSet<String>,
+    local_enums: &HashSet<String>,
+    variant_enum_map: &HashMap<String, Option<String>>,
+) {
+    for statement in &mut block.statements {
+        match statement {
+            Statement::Let(let_stmt) => {
+                if let Some(ty) = &mut let_stmt.ty {
+                    rewrite_local_type_ref(ty, alias, local_records, local_enums);
+                }
+                rewrite_local_expr_symbols(
+                    &mut let_stmt.value,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+            Statement::Assign(assign_stmt) => {
+                rewrite_local_expr_symbols(
+                    &mut assign_stmt.value,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+            Statement::Return(ret) => {
+                if let Some(expr) = &mut ret.value {
+                    rewrite_local_expr_symbols(
+                        expr,
+                        alias,
+                        local_functions,
+                        local_records,
+                        local_enums,
+                        variant_enum_map,
+                    );
+                }
+            }
+            Statement::Expr(expr) => {
+                rewrite_local_expr_symbols(
+                    expr,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+        }
+    }
+
+    if let Some(tail) = &mut block.tail {
+        rewrite_local_expr_symbols(
+            tail,
+            alias,
+            local_functions,
+            local_records,
+            local_enums,
+            variant_enum_map,
+        );
+    }
+}
+
+fn rewrite_local_expr_symbols(
+    expr: &mut Expr,
+    alias: &str,
+    local_functions: &HashSet<String>,
+    local_records: &HashSet<String>,
+    local_enums: &HashSet<String>,
+    variant_enum_map: &HashMap<String, Option<String>>,
+) {
+    match expr {
+        Expr::Path(path) => rewrite_local_variant_path(path, alias, local_enums, variant_enum_map),
+        Expr::String(_) | Expr::Number(_) | Expr::Bool(_) => {}
+        Expr::RecordLit { ty, fields } => {
+            rewrite_local_type_ref(ty, alias, local_records, local_enums);
+            for field in fields {
+                rewrite_local_expr_symbols(
+                    &mut field.value,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+        }
+        Expr::Call {
+            target,
+            type_args,
+            args,
+        } => {
+            rewrite_local_call_target(
+                target,
+                alias,
+                local_functions,
+                local_enums,
+                variant_enum_map,
+            );
+            for type_arg in type_args {
+                if let TypeArg::Type(ty) = type_arg {
+                    rewrite_local_type_ref(ty, alias, local_records, local_enums);
+                }
+            }
+            for arg in args {
+                rewrite_local_expr_symbols(
+                    arg,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+        }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            rewrite_local_expr_symbols(
+                cond,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+            rewrite_local_block_symbols(
+                then_block,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+            if let Some(block) = else_block {
+                rewrite_local_block_symbols(
+                    block,
+                    alias,
+                    local_functions,
+                    local_records,
+                    local_enums,
+                    variant_enum_map,
+                );
+            }
+        }
+        Expr::While { cond, body } => {
+            rewrite_local_expr_symbols(
+                cond,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+            rewrite_local_block_symbols(
+                body,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+        }
+        Expr::Match { value, arms } => {
+            rewrite_local_expr_symbols(
+                value,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+            for arm in arms {
+                if let MatchPattern::Variant { path, .. } = &mut arm.pattern {
+                    rewrite_local_variant_path(path, alias, local_enums, variant_enum_map);
+                }
+                match &mut arm.body {
+                    MatchArmBody::Expr(body_expr) => rewrite_local_expr_symbols(
+                        body_expr,
+                        alias,
+                        local_functions,
+                        local_records,
+                        local_enums,
+                        variant_enum_map,
+                    ),
+                    MatchArmBody::Block(block) => rewrite_local_block_symbols(
+                        block,
+                        alias,
+                        local_functions,
+                        local_records,
+                        local_enums,
+                        variant_enum_map,
+                    ),
+                }
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            rewrite_local_expr_symbols(
+                left,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+            rewrite_local_expr_symbols(
+                right,
+                alias,
+                local_functions,
+                local_records,
+                local_enums,
+                variant_enum_map,
+            );
+        }
+    }
+}
+
+fn rewrite_local_call_target(
+    target: &mut Vec<String>,
+    alias: &str,
+    local_functions: &HashSet<String>,
+    local_enums: &HashSet<String>,
+    variant_enum_map: &HashMap<String, Option<String>>,
+) {
+    match target.as_slice() {
+        [name] if local_functions.contains(name) => {
+            *target = vec![format!("{alias}__{name}")];
+        }
+        [variant] => {
+            let Some(Some(enum_name)) = variant_enum_map.get(variant) else {
+                return;
+            };
+            *target = vec![format!("{alias}__{enum_name}"), variant.clone()];
+        }
+        [enum_name, _variant] if local_enums.contains(enum_name) => {
+            target[0] = format!("{alias}__{enum_name}");
+        }
+        _ => {}
+    }
+}
+
+fn rewrite_local_variant_path(
+    path: &mut Vec<String>,
+    alias: &str,
+    local_enums: &HashSet<String>,
+    variant_enum_map: &HashMap<String, Option<String>>,
+) {
+    match path.as_slice() {
+        [variant] => {
+            let Some(Some(enum_name)) = variant_enum_map.get(variant) else {
+                return;
+            };
+            *path = vec![format!("{alias}__{enum_name}"), variant.clone()];
+        }
+        [enum_name, _variant] if local_enums.contains(enum_name) => {
+            path[0] = format!("{alias}__{enum_name}");
+        }
+        _ => {}
+    }
+}
+
+fn rewrite_local_type_ref(
+    ty: &mut TypeRef,
+    alias: &str,
+    local_records: &HashSet<String>,
+    local_enums: &HashSet<String>,
+) {
+    for arg in &mut ty.args {
+        if let TypeArg::Type(inner) = arg {
+            rewrite_local_type_ref(inner, alias, local_records, local_enums);
+        }
+    }
+
+    if ty.name.contains("::") {
+        return;
+    }
+    if local_records.contains(&ty.name) || local_enums.contains(&ty.name) {
+        ty.name = format!("{alias}__{}", ty.name);
+    }
+}
+
+fn executable_imported_function(template: &FunctionDecl, new_name: &str) -> FunctionDecl {
+    let mut function = template.clone();
+    function.name = new_name.to_string();
+    function.span = Span::new(0, 0);
+    function
 }
 
 fn stub_function(template: &FunctionDecl, new_name: &str) -> FunctionDecl {
