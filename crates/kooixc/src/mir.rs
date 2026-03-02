@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{BinaryOp, Block, Expr, Statement, TypeArg, TypeRef};
 use crate::error::Diagnostic;
@@ -146,14 +146,16 @@ struct FunctionSignature {
 }
 
 pub fn lower_hir(program: &HirProgram) -> Result<MirProgram, Vec<Diagnostic>> {
-    let signatures = build_signatures(program);
-    let records = build_native_records(program);
+    let specialized_program = specialize_generic_functions(program)?;
+
+    let signatures = build_signatures(&specialized_program);
+    let records = build_native_records(&specialized_program);
     let record_map: HashMap<String, MirRecord> = records
         .iter()
         .cloned()
         .map(|record| (record.name.clone(), record))
         .collect();
-    let enums = build_native_enums(program);
+    let enums = build_native_enums(&specialized_program);
     let enum_map: HashMap<String, MirEnum> = enums
         .iter()
         .cloned()
@@ -162,7 +164,7 @@ pub fn lower_hir(program: &HirProgram) -> Result<MirProgram, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     let mut functions = Vec::new();
 
-    for function in &program.functions {
+    for function in &specialized_program.functions {
         match lower_function(function, &signatures, &record_map, &enum_map) {
             Ok(mir_function) => functions.push(mir_function),
             Err(mut errors) => diagnostics.append(&mut errors),
@@ -177,6 +179,613 @@ pub fn lower_hir(program: &HirProgram) -> Result<MirProgram, Vec<Diagnostic>> {
         })
     } else {
         Err(diagnostics)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GenericInstantiation {
+    callee: String,
+    args: Vec<TypeRef>,
+}
+
+fn specialize_generic_functions(program: &HirProgram) -> Result<HirProgram, Vec<Diagnostic>> {
+    let generic_templates: HashMap<String, HirFunction> = program
+        .functions
+        .iter()
+        .filter(|function| !function.generics.is_empty())
+        .map(|function| (function.name.clone(), function.clone()))
+        .collect();
+    if generic_templates.is_empty() {
+        return Ok(program.clone());
+    }
+
+    let enum_variant_index = build_enum_variant_index(program);
+    let mut used_function_names: HashSet<String> = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect();
+
+    let mut instance_name_by_key: HashMap<String, String> = HashMap::new();
+    let mut queue: VecDeque<GenericInstantiation> = VecDeque::new();
+    let mut instantiated: HashSet<String> = HashSet::new();
+    let mut diagnostics = Vec::new();
+
+    let mut out = program.clone();
+    out.functions = program
+        .functions
+        .iter()
+        .filter(|function| function.generics.is_empty())
+        .cloned()
+        .collect();
+
+    for function in &mut out.functions {
+        rewrite_function_calls_for_specialization(
+            function,
+            &generic_templates,
+            &enum_variant_index,
+            &mut queue,
+            &mut instance_name_by_key,
+            &mut used_function_names,
+            &mut diagnostics,
+        );
+    }
+
+    while let Some(instantiation) = queue.pop_front() {
+        let key = generic_instantiation_key(&instantiation.callee, &instantiation.args);
+        if !instantiated.insert(key.clone()) {
+            continue;
+        }
+
+        let Some(template) = generic_templates.get(&instantiation.callee) else {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "native lowering: missing generic function template '{}'",
+                    instantiation.callee
+                ),
+                crate::error::Span::new(0, 0),
+            ));
+            continue;
+        };
+
+        if instantiation.args.len() != template.generics.len() {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "native lowering: generic function '{}' expects {} type argument(s) but got {}",
+                    template.name,
+                    template.generics.len(),
+                    instantiation.args.len()
+                ),
+                template.span,
+            ));
+            continue;
+        }
+
+        let Some(instance_name) = instance_name_by_key.get(&key).cloned() else {
+            diagnostics.push(Diagnostic::error(
+                format!(
+                    "native lowering: missing generated instance name for generic function '{}'",
+                    instantiation.callee
+                ),
+                template.span,
+            ));
+            continue;
+        };
+
+        let mut instance = template.clone();
+        instance.name = instance_name;
+        let generic_names = template
+            .generics
+            .iter()
+            .map(|param| param.name.clone())
+            .collect::<Vec<_>>();
+        let subst = build_subst(&generic_names, &instantiation.args);
+        instance.generics.clear();
+        apply_subst_to_hir_function(&mut instance, &subst);
+
+        rewrite_function_calls_for_specialization(
+            &mut instance,
+            &generic_templates,
+            &enum_variant_index,
+            &mut queue,
+            &mut instance_name_by_key,
+            &mut used_function_names,
+            &mut diagnostics,
+        );
+
+        out.functions.push(instance);
+    }
+
+    if diagnostics.is_empty() {
+        Ok(out)
+    } else {
+        Err(diagnostics)
+    }
+}
+
+fn build_enum_variant_index(program: &HirProgram) -> HashMap<String, HashSet<String>> {
+    let mut out: HashMap<String, HashSet<String>> = HashMap::new();
+    for enum_decl in &program.enums {
+        let variants = enum_decl
+            .variants
+            .iter()
+            .map(|variant| variant.name.clone())
+            .collect::<HashSet<_>>();
+        out.insert(enum_decl.name.clone(), variants);
+    }
+    out
+}
+
+fn generic_instantiation_key(callee: &str, args: &[TypeRef]) -> String {
+    let args = args
+        .iter()
+        .map(|ty| ty.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("{callee}<{args}>")
+}
+
+fn next_generic_instance_name(
+    callee: &str,
+    used_function_names: &mut HashSet<String>,
+) -> String {
+    let mut index = 0usize;
+    loop {
+        let candidate = format!("{callee}__inst_{index}");
+        if used_function_names.insert(candidate.clone()) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn call_target_function_slot<'a>(
+    target: &'a [String],
+    enum_variant_index: &HashMap<String, HashSet<String>>,
+) -> Option<(usize, &'a str)> {
+    match target {
+        [name] => Some((0, name.as_str())),
+        [head, name] => {
+            let looks_like_enum_variant = enum_variant_index
+                .get(head.as_str())
+                .map(|variants| variants.contains(name))
+                .unwrap_or(false);
+            if looks_like_enum_variant {
+                None
+            } else {
+                Some((1, name.as_str()))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn rewrite_function_calls_for_specialization(
+    function: &mut HirFunction,
+    generic_templates: &HashMap<String, HirFunction>,
+    enum_variant_index: &HashMap<String, HashSet<String>>,
+    queue: &mut VecDeque<GenericInstantiation>,
+    instance_name_by_key: &mut HashMap<String, String>,
+    used_function_names: &mut HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let function_name = function.name.clone();
+    let function_span = function.span;
+    let Some(body) = &mut function.body else {
+        return;
+    };
+    rewrite_block_calls_for_specialization(
+        body,
+        &function_name,
+        function_span,
+        generic_templates,
+        enum_variant_index,
+        queue,
+        instance_name_by_key,
+        used_function_names,
+        diagnostics,
+    );
+}
+
+fn rewrite_block_calls_for_specialization(
+    block: &mut Block,
+    function_name: &str,
+    function_span: crate::error::Span,
+    generic_templates: &HashMap<String, HirFunction>,
+    enum_variant_index: &HashMap<String, HashSet<String>>,
+    queue: &mut VecDeque<GenericInstantiation>,
+    instance_name_by_key: &mut HashMap<String, String>,
+    used_function_names: &mut HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for statement in &mut block.statements {
+        match statement {
+            Statement::Let(stmt) => rewrite_expr_calls_for_specialization(
+                &mut stmt.value,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            ),
+            Statement::Assign(stmt) => rewrite_expr_calls_for_specialization(
+                &mut stmt.value,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            ),
+            Statement::Return(stmt) => {
+                if let Some(value) = &mut stmt.value {
+                    rewrite_expr_calls_for_specialization(
+                        value,
+                        function_name,
+                        function_span,
+                        generic_templates,
+                        enum_variant_index,
+                        queue,
+                        instance_name_by_key,
+                        used_function_names,
+                        diagnostics,
+                    );
+                }
+            }
+            Statement::Expr(expr) => rewrite_expr_calls_for_specialization(
+                expr,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            ),
+        }
+    }
+    if let Some(tail) = &mut block.tail {
+        rewrite_expr_calls_for_specialization(
+            tail,
+            function_name,
+            function_span,
+            generic_templates,
+            enum_variant_index,
+            queue,
+            instance_name_by_key,
+            used_function_names,
+            diagnostics,
+        );
+    }
+}
+
+fn rewrite_expr_calls_for_specialization(
+    expr: &mut Expr,
+    function_name: &str,
+    function_span: crate::error::Span,
+    generic_templates: &HashMap<String, HirFunction>,
+    enum_variant_index: &HashMap<String, HashSet<String>>,
+    queue: &mut VecDeque<GenericInstantiation>,
+    instance_name_by_key: &mut HashMap<String, String>,
+    used_function_names: &mut HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    match expr {
+        Expr::Path(_) | Expr::String(_) | Expr::Number(_) | Expr::Bool(_) => {}
+        Expr::RecordLit { fields, .. } => {
+            for field in fields {
+                rewrite_expr_calls_for_specialization(
+                    &mut field.value,
+                    function_name,
+                    function_span,
+                    generic_templates,
+                    enum_variant_index,
+                    queue,
+                    instance_name_by_key,
+                    used_function_names,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::Call {
+            target,
+            type_args,
+            args,
+        } => {
+            for arg in args {
+                rewrite_expr_calls_for_specialization(
+                    arg,
+                    function_name,
+                    function_span,
+                    generic_templates,
+                    enum_variant_index,
+                    queue,
+                    instance_name_by_key,
+                    used_function_names,
+                    diagnostics,
+                );
+            }
+
+            let Some((slot, callee_name_ref)) = call_target_function_slot(target, enum_variant_index)
+            else {
+                return;
+            };
+            let callee_name = callee_name_ref.to_string();
+            let Some(template) = generic_templates.get(&callee_name) else {
+                return;
+            };
+
+            if type_args.len() != template.generics.len() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function '{}' call '{}' uses {} generic type argument(s), expected {}",
+                        function_name,
+                        target.join("."),
+                        type_args.len(),
+                        template.generics.len()
+                    ),
+                    function_span,
+                ));
+                return;
+            }
+
+            let mut concrete_args = Vec::new();
+            for type_arg in type_args.iter() {
+                match type_arg {
+                    TypeArg::Type(ty) => concrete_args.push(ty.clone()),
+                    TypeArg::String(_) | TypeArg::Number(_) => {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "function '{}' call '{}' uses non-type generic argument, which native lowering does not support",
+                                function_name,
+                                target.join(".")
+                            ),
+                            function_span,
+                        ));
+                        return;
+                    }
+                }
+            }
+
+            let key = generic_instantiation_key(&callee_name, &concrete_args);
+            let instance_name = if let Some(name) = instance_name_by_key.get(&key).cloned() {
+                name
+            } else {
+                let name = next_generic_instance_name(&callee_name, used_function_names);
+                instance_name_by_key.insert(key, name.clone());
+                name
+            };
+            target[slot] = instance_name;
+            type_args.clear();
+            queue.push_back(GenericInstantiation {
+                callee: callee_name,
+                args: concrete_args,
+            });
+        }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            rewrite_expr_calls_for_specialization(
+                cond,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+            rewrite_block_calls_for_specialization(
+                then_block,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+            if let Some(block) = else_block {
+                rewrite_block_calls_for_specialization(
+                    block,
+                    function_name,
+                    function_span,
+                    generic_templates,
+                    enum_variant_index,
+                    queue,
+                    instance_name_by_key,
+                    used_function_names,
+                    diagnostics,
+                );
+            }
+        }
+        Expr::While { cond, body } => {
+            rewrite_expr_calls_for_specialization(
+                cond,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+            rewrite_block_calls_for_specialization(
+                body,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+        }
+        Expr::Match { value, arms } => {
+            rewrite_expr_calls_for_specialization(
+                value,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+            for arm in arms {
+                match &mut arm.body {
+                    crate::ast::MatchArmBody::Expr(body_expr) => {
+                        rewrite_expr_calls_for_specialization(
+                            body_expr,
+                            function_name,
+                            function_span,
+                            generic_templates,
+                            enum_variant_index,
+                            queue,
+                            instance_name_by_key,
+                            used_function_names,
+                            diagnostics,
+                        );
+                    }
+                    crate::ast::MatchArmBody::Block(block) => {
+                        rewrite_block_calls_for_specialization(
+                            block,
+                            function_name,
+                            function_span,
+                            generic_templates,
+                            enum_variant_index,
+                            queue,
+                            instance_name_by_key,
+                            used_function_names,
+                            diagnostics,
+                        );
+                    }
+                }
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            rewrite_expr_calls_for_specialization(
+                left,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+            rewrite_expr_calls_for_specialization(
+                right,
+                function_name,
+                function_span,
+                generic_templates,
+                enum_variant_index,
+                queue,
+                instance_name_by_key,
+                used_function_names,
+                diagnostics,
+            );
+        }
+    }
+}
+
+fn apply_subst_to_hir_function(function: &mut HirFunction, subst: &HashMap<String, TypeRef>) {
+    for param in &mut function.params {
+        param.ty = apply_subst(&param.ty, subst);
+    }
+    function.return_type = apply_subst(&function.return_type, subst);
+    for required in &mut function.requires {
+        *required = apply_subst(required, subst);
+    }
+    if let Some(body) = &mut function.body {
+        apply_subst_to_block(body, subst);
+    }
+}
+
+fn apply_subst_to_block(block: &mut Block, subst: &HashMap<String, TypeRef>) {
+    for statement in &mut block.statements {
+        match statement {
+            Statement::Let(stmt) => {
+                if let Some(ty) = &mut stmt.ty {
+                    *ty = apply_subst(ty, subst);
+                }
+                apply_subst_to_expr(&mut stmt.value, subst);
+            }
+            Statement::Assign(stmt) => apply_subst_to_expr(&mut stmt.value, subst),
+            Statement::Return(stmt) => {
+                if let Some(value) = &mut stmt.value {
+                    apply_subst_to_expr(value, subst);
+                }
+            }
+            Statement::Expr(expr) => apply_subst_to_expr(expr, subst),
+        }
+    }
+    if let Some(tail) = &mut block.tail {
+        apply_subst_to_expr(tail, subst);
+    }
+}
+
+fn apply_subst_to_expr(expr: &mut Expr, subst: &HashMap<String, TypeRef>) {
+    match expr {
+        Expr::Path(_) | Expr::String(_) | Expr::Number(_) | Expr::Bool(_) => {}
+        Expr::RecordLit { ty, fields } => {
+            *ty = apply_subst(ty, subst);
+            for field in fields {
+                apply_subst_to_expr(&mut field.value, subst);
+            }
+        }
+        Expr::Call { type_args, args, .. } => {
+            for type_arg in type_args {
+                if let TypeArg::Type(ty) = type_arg {
+                    *ty = apply_subst(ty, subst);
+                }
+            }
+            for arg in args {
+                apply_subst_to_expr(arg, subst);
+            }
+        }
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            apply_subst_to_expr(cond, subst);
+            apply_subst_to_block(then_block, subst);
+            if let Some(block) = else_block {
+                apply_subst_to_block(block, subst);
+            }
+        }
+        Expr::While { cond, body } => {
+            apply_subst_to_expr(cond, subst);
+            apply_subst_to_block(body, subst);
+        }
+        Expr::Match { value, arms } => {
+            apply_subst_to_expr(value, subst);
+            for arm in arms {
+                match &mut arm.body {
+                    crate::ast::MatchArmBody::Expr(body_expr) => apply_subst_to_expr(body_expr, subst),
+                    crate::ast::MatchArmBody::Block(block) => apply_subst_to_block(block, subst),
+                }
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            apply_subst_to_expr(left, subst);
+            apply_subst_to_expr(right, subst);
+        }
     }
 }
 

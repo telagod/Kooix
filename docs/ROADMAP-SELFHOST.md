@@ -262,10 +262,10 @@ Kooix 目前处于“声明级 DSL + 语义检查”为主的 MVP 阶段，已�
   - 新增 `cli_run_tests` 覆盖导入模块内 record 本地类型重写执行（`Box` 本地类型标注与构造）。
 - ✅ DoD13：补齐 namespace import 下“导入泛型函数”执行边界回归：
   - 新增 `cli_run_tests` 覆盖 `run` 对 imported generic function 显式 type args 调用（`Lib::id<Int>(...)`）可执行。
-  - 新增 `cli_run_tests` 覆盖 `native --run` 在显式 type args 场景下的当前限制（`native lowering does not support generic type arguments yet`）并固化诊断。
-- ✅ DoD14：改进 `native` 泛型限制报错可操作性：
-  - `report_native_error` 在命中 native generics lowering 限制诊断时追加 hint，指引使用 `kooixc run <file.kooix>` 执行。
-  - `cli_run_tests` 已断言该 hint 存在，防止回退为“仅底层报错”。
+  - 新增 `cli_run_tests` 覆盖 `native --run` 对 imported generic function 显式 type args 调用可执行（`Lib::id<Int>(...)`）。
+- ✅ DoD14：在 `mir/native` 链路落地“显式 type args 最小单态化”：
+  - 在 `lower_hir` 前新增 generic specialization 预处理：按调用点收集 `fn<T>` 实例，生成无泛型实例函数（`<name>__inst_<n>`）并重写调用目标。
+  - 仅对“调用点显式 type args”收敛，不扩展隐式推断规则；保持现有语义边界可控。
 - 验证命令（2026-03-02）：
   - `cargo test -p kooixc --test cli_run_tests -- --test-threads=1`
   - `cargo test -p kooixc --test cli_check_tests -- --test-threads=1`

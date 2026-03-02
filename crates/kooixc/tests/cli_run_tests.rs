@@ -439,7 +439,7 @@ fn run_namespace_imports_execute_with_imported_generic_function_type_args() {
 }
 
 #[test]
-fn native_namespace_imports_reports_generic_type_args_not_supported_yet() {
+fn native_namespace_imports_execute_with_imported_generic_function_type_args() {
     if !native_toolchain_available() {
         return;
     }
@@ -469,17 +469,18 @@ fn native_namespace_imports_reports_generic_type_args_not_supported_yet() {
         .expect("native --run command");
 
     assert!(
-        !output.status.success(),
-        "native generic imported function should fail until generic type args lowering is supported"
+        output.status.success(),
+        "native generic imported function with type args should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("uses generic type arguments, which native lowering does not support yet"),
-        "unexpected stderr: {stderr}"
+        stdout.contains("ok: native binary generated at"),
+        "unexpected stdout: {stdout}"
     );
     assert!(
-        stderr.contains("hint: native backend does not support generic lowering yet"),
-        "unexpected stderr: {stderr}"
+        stdout.contains("run exit code: 0"),
+        "unexpected stdout: {stdout}"
     );
 
     let _ = fs::remove_file(&out_bin);
