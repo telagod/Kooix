@@ -345,6 +345,84 @@ fn hir_namespace_imports_isolate_duplicate_symbols() {
 }
 
 #[test]
+fn mir_namespace_imports_isolate_duplicate_symbols() {
+    let dir = make_temp_dir("mir-namespace-duplicate");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_b = dir.join("lib_b.kooix");
+
+    fs::write(&lib_a, "fn dup() -> Int { 1 };\n").expect("write lib_a");
+    fs::write(&lib_b, "fn dup() -> Int { 2 };\n").expect("write lib_b");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nimport \"lib_b\" as B;\nfn main() -> Int { A::dup() + B::dup() };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("mir")
+        .arg(&main)
+        .output()
+        .expect("run mir");
+
+    assert!(
+        output.status.success(),
+        "mir should pass for namespace-isolated duplicate symbols, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("name: \"A__dup\""),
+        "mir projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("name: \"B__dup\""),
+        "mir projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn llvm_namespace_imports_isolate_duplicate_symbols() {
+    let dir = make_temp_dir("llvm-namespace-duplicate");
+    let main = dir.join("main.kooix");
+    let lib_a = dir.join("lib_a.kooix");
+    let lib_b = dir.join("lib_b.kooix");
+
+    fs::write(&lib_a, "fn dup() -> Int { 1 };\n").expect("write lib_a");
+    fs::write(&lib_b, "fn dup() -> Int { 2 };\n").expect("write lib_b");
+    fs::write(
+        &main,
+        "import \"lib_a\" as A;\nimport \"lib_b\" as B;\nfn main() -> Int { A::dup() + B::dup() };\n",
+    )
+    .expect("write main");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("llvm")
+        .arg(&main)
+        .output()
+        .expect("run llvm");
+
+    assert!(
+        output.status.success(),
+        "llvm should pass for namespace-isolated duplicate symbols, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("@A__dup"),
+        "llvm projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("@B__dup"),
+        "llvm projection should contain namespaced stub symbols, stdout: {stdout}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn check_pretty_without_json_fails() {
     let dir = make_temp_dir("pretty-no-json");
     let main = dir.join("main.kooix");

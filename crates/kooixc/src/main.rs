@@ -274,7 +274,7 @@ fn main() {
         }
         "ast" => match parse_source(&source) {
             Ok(mut program) => {
-                if should_use_module_aware_ast_hir_projection(entry_path) {
+                if should_use_module_aware_entry_projection(entry_path) {
                     match build_module_aware_entry_projection(entry_path) {
                         Ok((projected, projection_diagnostics)) => {
                             if projection_diagnostics
@@ -301,7 +301,7 @@ fn main() {
         },
         "hir" => match lower_source(&source) {
             Ok(mut program) => {
-                if should_use_module_aware_ast_hir_projection(entry_path) {
+                if should_use_module_aware_entry_projection(entry_path) {
                     match build_module_aware_entry_projection(entry_path) {
                         Ok((projected, projection_diagnostics)) => {
                             if projection_diagnostics
@@ -326,24 +326,74 @@ fn main() {
                 process::exit(1);
             }
         },
-        "mir" => match lower_to_mir_source(&source) {
-            Ok(program) => {
-                println!("{program:#?}");
+        "mir" => {
+            if should_use_module_aware_entry_projection(entry_path) {
+                match build_module_aware_entry_projection(entry_path) {
+                    Ok((projected, projection_diagnostics)) => {
+                        if projection_diagnostics
+                            .iter()
+                            .any(|diagnostic| diagnostic.severity == Severity::Error)
+                        {
+                            print_diagnostics(&projection_diagnostics, &source_map);
+                            process::exit(1);
+                        }
+                        match lower_to_mir_program(&projected) {
+                            Ok(program) => println!("{program:#?}"),
+                            Err(errors) => {
+                                print_diagnostics(&errors, &source_map);
+                                process::exit(1);
+                            }
+                        }
+                    }
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
+            } else {
+                match lower_to_mir_source(&source) {
+                    Ok(program) => println!("{program:#?}"),
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
             }
-            Err(errors) => {
-                print_diagnostics(&errors, &source_map);
-                process::exit(1);
+        }
+        "llvm" => {
+            if should_use_module_aware_entry_projection(entry_path) {
+                match build_module_aware_entry_projection(entry_path) {
+                    Ok((projected, projection_diagnostics)) => {
+                        if projection_diagnostics
+                            .iter()
+                            .any(|diagnostic| diagnostic.severity == Severity::Error)
+                        {
+                            print_diagnostics(&projection_diagnostics, &source_map);
+                            process::exit(1);
+                        }
+                        match emit_llvm_ir_program(&projected) {
+                            Ok(ir) => println!("{ir}"),
+                            Err(errors) => {
+                                print_diagnostics(&errors, &source_map);
+                                process::exit(1);
+                            }
+                        }
+                    }
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
+            } else {
+                match emit_llvm_ir_source(&source) {
+                    Ok(ir) => println!("{ir}"),
+                    Err(errors) => {
+                        print_diagnostics(&errors, &source_map);
+                        process::exit(1);
+                    }
+                }
             }
-        },
-        "llvm" => match emit_llvm_ir_source(&source) {
-            Ok(ir) => {
-                println!("{ir}");
-            }
-            Err(errors) => {
-                print_diagnostics(&errors, &source_map);
-                process::exit(1);
-            }
-        },
+        }
         "run" => match run_source(&source) {
             Ok(result) => {
                 if !result.diagnostics.is_empty() {
@@ -454,7 +504,7 @@ fn flatten_module_diagnostics(results: &[ModuleCheckResult]) -> Vec<Diagnostic> 
     diagnostics
 }
 
-fn should_use_module_aware_ast_hir_projection(entry_path: &Path) -> bool {
+fn should_use_module_aware_entry_projection(entry_path: &Path) -> bool {
     match load_source_map_with_module_graph(entry_path) {
         Ok((_map, graph)) => should_use_module_aware_check_for_check_command(&graph),
         Err(_) => false,
@@ -488,6 +538,30 @@ fn build_module_aware_entry_projection(
 
 fn canonicalize_lossy(path: &Path) -> std::path::PathBuf {
     stdfs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn lower_to_mir_program(program: &Program) -> Result<kooixc::mir::MirProgram, Vec<Diagnostic>> {
+    let mut diagnostics = kooixc::sema::check_program(program);
+    if diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        return Err(diagnostics);
+    }
+
+    let hir_program = kooixc::hir::lower_program(program);
+    match kooixc::mir::lower_hir(&hir_program) {
+        Ok(mir_program) => Ok(mir_program),
+        Err(mut lowering_errors) => {
+            diagnostics.append(&mut lowering_errors);
+            Err(diagnostics)
+        }
+    }
+}
+
+fn emit_llvm_ir_program(program: &Program) -> Result<String, Vec<Diagnostic>> {
+    let mir_program = lower_to_mir_program(program)?;
+    Ok(kooixc::llvm::emit_program(&mir_program))
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {
