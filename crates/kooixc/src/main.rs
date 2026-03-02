@@ -1036,11 +1036,30 @@ fn report_native_error(error: NativeError, source_map: &SourceMap) {
     match error {
         NativeError::Diagnostics(diagnostics) => {
             print_diagnostics(&diagnostics, source_map);
+            if diagnostics_contain_native_generic_limitation(&diagnostics) {
+                eprintln!(
+                    "hint: native backend does not support generic lowering yet; try `kooixc run <file.kooix>` for execution."
+                );
+            }
         }
         other => {
             eprintln!("native build failed: {other}");
         }
     }
+}
+
+fn diagnostics_contain_native_generic_limitation(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .message
+            .contains("native lowering does not support generics yet")
+            || diagnostic
+                .message
+                .contains("native lowering does not support generic type arguments yet")
+            || diagnostic
+                .message
+                .contains("uses generic type arguments, which native lowering does not support yet")
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -477,6 +477,10 @@ fn native_namespace_imports_reports_generic_type_args_not_supported_yet() {
         stderr.contains("uses generic type arguments, which native lowering does not support yet"),
         "unexpected stderr: {stderr}"
     );
+    assert!(
+        stderr.contains("hint: native backend does not support generic lowering yet"),
+        "unexpected stderr: {stderr}"
+    );
 
     let _ = fs::remove_file(&out_bin);
     let _ = fs::remove_dir_all(&dir);
