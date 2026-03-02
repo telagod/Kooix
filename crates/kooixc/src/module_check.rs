@@ -182,6 +182,9 @@ fn prepare_program_for_module_projection(
                 &mut needed_functions,
                 &mut needed_records,
                 &mut needed_enums,
+                &mut fn_queue,
+                &mut record_queue,
+                &mut enum_queue,
                 &mut diagnostics,
             );
         }
@@ -1061,6 +1064,9 @@ fn rewrite_function_body_for_local_module_symbols(
     needed_functions: &mut HashMap<String, (String, PathBuf)>,
     needed_records: &mut HashMap<String, (String, PathBuf)>,
     needed_enums: &mut HashMap<String, (String, PathBuf)>,
+    fn_queue: &mut Vec<String>,
+    record_queue: &mut Vec<String>,
+    enum_queue: &mut Vec<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let local_functions = exports
@@ -1093,6 +1099,9 @@ fn rewrite_function_body_for_local_module_symbols(
     }
 
     let alias_map = module_alias_map(imported_module, graph);
+    let fn_before: HashSet<String> = needed_functions.keys().cloned().collect();
+    let records_before: HashSet<String> = needed_records.keys().cloned().collect();
+    let enums_before: HashSet<String> = needed_enums.keys().cloned().collect();
     normalize_function_body(
         function,
         &alias_map,
@@ -1102,6 +1111,21 @@ fn rewrite_function_body_for_local_module_symbols(
         needed_enums,
         diagnostics,
     );
+    for name in needed_functions.keys() {
+        if !fn_before.contains(name) {
+            fn_queue.push(name.clone());
+        }
+    }
+    for name in needed_records.keys() {
+        if !records_before.contains(name) {
+            record_queue.push(name.clone());
+        }
+    }
+    for name in needed_enums.keys() {
+        if !enums_before.contains(name) {
+            enum_queue.push(name.clone());
+        }
+    }
 }
 
 fn build_local_variant_enum_map(
