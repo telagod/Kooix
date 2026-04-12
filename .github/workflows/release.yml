@@ -43,6 +43,9 @@ jobs:
       - name: Check JSON contract smoke
         run: ./scripts/check_json_contract.sh --assert
 
+      - name: Verify cargo package metadata
+        run: cargo package -p kooixc --allow-dirty --no-verify
+
   build:
     needs: verify
     runs-on: ${{ matrix.os }}

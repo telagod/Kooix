@@ -325,10 +325,7 @@ fn generic_instantiation_key(callee: &str, args: &[TypeRef]) -> String {
     format!("{callee}<{args}>")
 }
 
-fn next_generic_instance_name(
-    callee: &str,
-    used_function_names: &mut HashSet<String>,
-) -> String {
+fn next_generic_instance_name(callee: &str, used_function_names: &mut HashSet<String>) -> String {
     let mut index = 0usize;
     loop {
         let candidate = format!("{callee}__inst_{index}");
@@ -512,7 +509,8 @@ fn rewrite_expr_calls_for_specialization(
                 );
             }
 
-            let Some((slot, callee_name_ref)) = call_target_function_slot(target, enum_variant_index)
+            let Some((slot, callee_name_ref)) =
+                call_target_function_slot(target, enum_variant_index)
             else {
                 return;
             };
@@ -748,7 +746,9 @@ fn apply_subst_to_expr(expr: &mut Expr, subst: &HashMap<String, TypeRef>) {
                 apply_subst_to_expr(&mut field.value, subst);
             }
         }
-        Expr::Call { type_args, args, .. } => {
+        Expr::Call {
+            type_args, args, ..
+        } => {
             for type_arg in type_args {
                 if let TypeArg::Type(ty) = type_arg {
                     *ty = apply_subst(ty, subst);
@@ -777,7 +777,9 @@ fn apply_subst_to_expr(expr: &mut Expr, subst: &HashMap<String, TypeRef>) {
             apply_subst_to_expr(value, subst);
             for arm in arms {
                 match &mut arm.body {
-                    crate::ast::MatchArmBody::Expr(body_expr) => apply_subst_to_expr(body_expr, subst),
+                    crate::ast::MatchArmBody::Expr(body_expr) => {
+                        apply_subst_to_expr(body_expr, subst)
+                    }
                     crate::ast::MatchArmBody::Block(block) => apply_subst_to_block(block, subst),
                 }
             }
