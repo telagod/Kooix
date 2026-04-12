@@ -14,15 +14,34 @@ use kooixc::{
 };
 
 const JSON_DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
+const CLI_NAME: &str = env!("CARGO_PKG_NAME");
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
+    if args.len() < 2 {
         print_usage();
         process::exit(2);
     }
 
     let command = args[1].as_str();
+    match command {
+        "-h" | "--help" | "help" => {
+            print_usage();
+            return;
+        }
+        "-V" | "--version" | "version" => {
+            print_version();
+            return;
+        }
+        _ => {}
+    }
+
+    if args.len() < 3 {
+        print_usage();
+        process::exit(2);
+    }
+
     if command == "native-llvm" {
         let ll_path = Path::new(&args[2]);
         let options = match parse_native_options(&args[3..]) {
@@ -1026,9 +1045,13 @@ fn byte_to_line_col(source: &str, byte_index: usize) -> (usize, usize) {
     (line, col)
 }
 
+fn print_version() {
+    println!("{CLI_NAME} {CLI_VERSION}");
+}
+
 fn print_usage() {
     eprintln!(
-        "usage: kooixc check <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc <ast|hir|mir|llvm|run> <file.kooix>\n       kooixc check-modules <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc native <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]"
+        "usage: kooixc check <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc <ast|hir|mir|llvm|run> <file.kooix>\n       kooixc check-modules <file.kooix> [--json] [--pretty] [--strict-warnings]\n       kooixc native <file.kooix> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc native-llvm <file.ll> [output] [--run] [--stdin <file|-] [--timeout <ms>] [-- <args...>]\n       kooixc <help|version>"
     );
 }
 

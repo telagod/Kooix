@@ -78,6 +78,10 @@ cargo run -p kooixc -- llvm examples/codegen.kooix
 # 运行 / native
 cargo run -p kooixc -- run examples/run.kooix
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run
+
+# 帮助 / 版本
+cargo run -p kooixc -- --help
+cargo run -p kooixc -- --version
 ```
 
 ### 10 分钟回归（推荐）

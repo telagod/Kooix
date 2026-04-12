@@ -78,6 +78,10 @@ cargo run -p kooixc -- llvm examples/codegen.kooix
 # Run / native
 cargo run -p kooixc -- run examples/run.kooix
 cargo run -p kooixc -- native examples/codegen.kooix /tmp/kooixc-demo --run
+
+# Help / version
+cargo run -p kooixc -- --help
+cargo run -p kooixc -- --version
 ```
 
 ### 10-Minute Regression Baseline

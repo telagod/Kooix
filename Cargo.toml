@@ -7,3 +7,5 @@ edition = "2021"
 license = "MIT"
 version = "0.1.0"
 authors = ["Kooix contributors"]
+repository = "https://github.com/telagod/Kooix"
+homepage = "https://github.com/telagod/Kooix"

@@ -14,6 +14,40 @@ fn make_temp_dir(suffix: &str) -> PathBuf {
 }
 
 #[test]
+fn help_flag_prints_usage_and_exits_successfully() {
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("--help")
+        .output()
+        .expect("run --help");
+
+    assert!(output.status.success(), "help should succeed");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("usage: kooixc check"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("kooixc <help|version>"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
+fn version_flag_prints_package_version_and_exits_successfully() {
+    let output = Command::new(env!("CARGO_BIN_EXE_kooixc"))
+        .arg("--version")
+        .output()
+        .expect("run --version");
+
+    assert!(output.status.success(), "version should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout.trim(),
+        format!("kooixc {}", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn check_warning_is_non_fatal_by_default() {
     let dir = make_temp_dir("warning-default");
     let main = dir.join("main.kooix");
