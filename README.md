@@ -24,6 +24,7 @@ Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标�
 | Bootstrap | 已落地 | `bootstrap_v0_13.sh` 产出 `dist/kooixc1`，`bootstrap_heavy_gate.sh` 提供重载门禁 |
 | JSON 契约治理 | 已闭环 | `schema_version + summary` 统一、strict/window、fixture matrix、drift triage smoke、PR docs-sync gate |
 | CI 可观测性 | 已统一 | Summary 字段统一为 `state/schema/phase/log`，并配套 failure artifacts |
+| Release 分发 | 已落地 | `release.yml` 在 `v*` tag 产出 Linux/macOS binary tarball 与 `SHA256SUMS` |
 
 ## 目录速览
 
@@ -31,7 +32,7 @@ Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标�
 - `examples/`: CLI / gate 覆盖用样例
 - `scripts/`: 契约门禁、自举、CI smoke 脚本
 - `docs/`: 契约策略、路线图、语法文档
-- `.github/workflows/`: 主 CI 与 heavy gate workflow
+- `.github/workflows/`: 主 CI、heavy gate、release workflow
 
 ## 快速开始
 
@@ -40,6 +41,20 @@ Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标�
 - Rust toolchain（`cargo` / `rustc`）
 - `native` / `native-llvm` 需要系统安装 `llc` 与 `clang`
 - 契约脚本依赖 `jq`
+
+### 安装
+
+```bash
+# 方式 1：直接从 GitHub 安装 CLI
+cargo install --git https://github.com/telagod/Kooix.git --locked kooixc
+
+# 方式 2：从 GitHub Releases 下载预编译包
+# tag v* 会生成：
+#   kooixc-<version>-x86_64-unknown-linux-gnu.tar.gz
+#   kooixc-<version>-x86_64-apple-darwin.tar.gz
+#   kooixc-<version>-aarch64-apple-darwin.tar.gz
+# 并附带 SHA256SUMS
+```
 
 ### 常用命令
 
@@ -147,6 +162,11 @@ CARGO_BUILD_JOBS=1 KX_HEAVY_STRICT_LOCAL=1 ./scripts/bootstrap_heavy_gate.sh
 - 上传关键 artifacts：
   - `bootstrap-heavy-artifacts`
   - `bootstrap-heavy-schema-drift-triage-logs`
+
+发布 workflow：`.github/workflows/release.yml`
+
+- `push tag v*` 时先跑 `fmt/test/JSON contract smoke`，再构建多平台 release binary。
+- 上传 `kooixc-<version>-<target>.tar.gz` 与 `SHA256SUMS` 到 GitHub Release。
 
 Summary 字段约定（主 CI 与 heavy 一致）：
 

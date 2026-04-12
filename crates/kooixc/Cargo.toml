@@ -1,8 +1,17 @@
 [package]
 name = "kooixc"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Kooix language checker MVP (AI-native strong typing)"
+readme = "README.md"
+repository = "https://github.com/telagod/Kooix"
+homepage = "https://github.com/telagod/Kooix"
+documentation = "https://github.com/telagod/Kooix/blob/main/README.en.md"
+keywords = ["compiler", "language", "cli", "ai"]
+categories = ["compilers", "command-line-utilities"]
+rust-version = "1.78"
 
 [lib]
 name = "kooixc"
@@ -11,4 +20,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "kooixc"
 path = "src/main.rs"
-

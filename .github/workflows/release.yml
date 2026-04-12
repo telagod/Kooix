@@ -1,0 +1,150 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  BIN_NAME: kooixc
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM tools (llc) + clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm clang jq
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Test
+        env:
+          KX_DETERMINISM: "1"
+          KX_GOLDEN: "1"
+        run: cargo test -p kooixc -j 2 -- --test-threads=1
+
+      - name: Check JSON contract smoke
+        run: ./scripts/check_json_contract.sh --assert
+
+  build:
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build -p kooixc --release --locked --target ${{ matrix.target }}
+
+      - name: Package archive
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "kooixc") | .version')"
+          fi
+
+          package_dir="dist/${BIN_NAME}-${version}-${TARGET}"
+          archive_path="dist/${BIN_NAME}-${version}-${TARGET}.tar.gz"
+
+          rm -rf "$package_dir" "$archive_path"
+          mkdir -p "$package_dir"
+
+          cp "target/${TARGET}/release/${BIN_NAME}" "$package_dir/"
+          cp README.md README.en.md LICENSE "$package_dir/"
+
+          tar -C dist -czf "$archive_path" "$(basename "$package_dir")"
+          echo "archive_path=$archive_path" >> "$GITHUB_ENV"
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ env.archive_path }}
+          if-no-files-found: error
+
+  checksum:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./*.tar.gz > SHA256SUMS
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - build
+      - checksum
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release payload
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS

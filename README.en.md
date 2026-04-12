@@ -24,6 +24,7 @@ Kooix is an **AI-native, strongly typed** language prototype (MVP). The project 
 | Bootstrap path | Landed | `bootstrap_v0_13.sh` builds `dist/kooixc1`; heavy gate via `bootstrap_heavy_gate.sh` |
 | JSON contract governance | Closed loop | unified `schema_version + summary`, strict/window ranges, fixture matrix, drift triage smoke, PR docs-sync gate |
 | CI observability | Unified | summary fields standardized as `state/schema/phase/log` with failure artifacts |
+| Release distribution | Landed | `release.yml` publishes Linux/macOS binary tarballs and `SHA256SUMS` on `v*` tags |
 
 ## Repository Map
 
@@ -31,7 +32,7 @@ Kooix is an **AI-native, strongly typed** language prototype (MVP). The project 
 - `examples/`: CLI and gate fixtures
 - `scripts/`: contract gates, bootstrap, CI smoke scripts
 - `docs/`: contract policy, roadmap, grammar docs
-- `.github/workflows/`: main CI and heavy workload workflows
+- `.github/workflows/`: main CI, heavy workload, and release workflows
 
 ## Quick Start
 
@@ -40,6 +41,20 @@ Kooix is an **AI-native, strongly typed** language prototype (MVP). The project 
 - Rust toolchain (`cargo` / `rustc`)
 - `llc` and `clang` for `native` / `native-llvm`
 - `jq` for contract scripts
+
+### Installation
+
+```bash
+# Option 1: install the CLI directly from GitHub
+cargo install --git https://github.com/telagod/Kooix.git --locked kooixc
+
+# Option 2: download prebuilt binaries from GitHub Releases
+# Every v* tag publishes:
+#   kooixc-<version>-x86_64-unknown-linux-gnu.tar.gz
+#   kooixc-<version>-x86_64-apple-darwin.tar.gz
+#   kooixc-<version>-aarch64-apple-darwin.tar.gz
+# plus SHA256SUMS
+```
 
 ### Common Commands
 
@@ -147,6 +162,11 @@ Heavy workflow: `.github/workflows/bootstrap-heavy.yml`
 - Key artifacts:
   - `bootstrap-heavy-artifacts`
   - `bootstrap-heavy-schema-drift-triage-logs`
+
+Release workflow: `.github/workflows/release.yml`
+
+- `push tag v*` runs `fmt/test/JSON contract smoke` before packaging release binaries.
+- Publishes `kooixc-<version>-<target>.tar.gz` and `SHA256SUMS` to GitHub Releases.
 
 Unified summary field contract:
 

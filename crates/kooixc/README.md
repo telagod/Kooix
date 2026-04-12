@@ -2,6 +2,16 @@
 
 `kooixc` 是 Kooix 语言 MVP 的前端检查器。
 
+## 安装
+
+```bash
+# 从 GitHub 直接安装
+cargo install --git https://github.com/telagod/Kooix.git --locked kooixc
+
+# 或从 Release 下载预编译 binary（tag: v*）
+# 资产名：kooixc-<version>-<target>.tar.gz
+```
+
 ## 模块职责
 
 - 源码加载（`loader`：`import` 多文件拼接）
