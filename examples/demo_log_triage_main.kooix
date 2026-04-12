@@ -1,0 +1,32 @@
+import "../stdlib/prelude";
+import "demo_log_triage_lib" as Demo;
+
+fn main() -> Int {
+  if Demo::int_ge(args_len(), 3) {
+    let input_path: Text = args_get(1);
+    let output_path: Text = args_get(2);
+    match fs_read_text(input_path) {
+      Err(message) => {
+        host_eprintln(message);
+        3
+      };
+      Ok(content) => {
+        let stats: Demo::ScanStats = Demo::classify_log(content);
+        let report: Text = Demo::render_report(stats);
+        match fs_write_text(output_path, report) {
+          Err(message) => {
+            host_eprintln(message);
+            4
+          };
+          Ok(_n) => {
+            host_eprintln(text_concat("report written: ", output_path));
+            0
+          };
+        }
+      };
+    }
+  } else {
+    host_eprintln("usage: demo_log_triage_main <input.log> <output.report>");
+    2
+  }
+};

@@ -1,0 +1,6 @@
+INFO boot complete
+WARN cache fallback engaged
+ERROR worker timeout while loading model
+INFO retry scheduled
+CRITICAL payments pipeline unavailable
+INFO pager notified

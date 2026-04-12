@@ -1,0 +1,44 @@
+import "../stdlib/prelude";
+
+fn score_line(line: Text) -> Int {
+  if text_starts_with(line, "CRITICAL") {
+    10
+  } else {
+    if text_starts_with(line, "ERROR") {
+      5
+    } else {
+      if text_starts_with(line, "WARN") {
+        2
+      } else {
+        if text_starts_with(line, "INFO") {
+          1
+        } else {
+          0
+        }
+      }
+    }
+  }
+};
+
+fn main() -> Int {
+  let iterations: Int = 250000;
+  let i: Int = 0;
+  let total: Int = 0;
+  let done: Bool = false;
+
+  while done == false {
+    if i == iterations {
+      done = true;
+      0
+    } else {
+      total = total + score_line("CRITICAL database unavailable");
+      total = total + score_line("ERROR cache miss storm detected");
+      total = total + score_line("WARN background queue delay");
+      total = total + score_line("INFO worker heartbeat ok");
+      i = i + 1;
+      0
+    }
+  };
+
+  if total == 4500000 { 0 } else { 1 }
+};

@@ -100,6 +100,44 @@ cargo run -p kooixc -- --version
 ./scripts/bootstrap_ci_sanity_smoke.sh
 ```
 
+## Demo and Benchmark
+
+### Demo: log triage and report generation
+
+The Kooix demo application lives in:
+
+- `examples/demo_log_triage_lib.kooix`
+- `examples/demo_log_triage_main.kooix`
+- `examples/demo_log_triage_sample.log`
+
+Run it with:
+
+```bash
+cargo run -p kooixc -- native examples/demo_log_triage_main.kooix /tmp/kx-demo-log-triage --run -- \
+  examples/demo_log_triage_sample.log /tmp/kx-demo-log-triage.report
+
+cat /tmp/kx-demo-log-triage.report
+```
+
+It showcases:
+
+- module-aware imports
+- typed records / enums / `match`
+- deterministic scanning with `while` + `Text` intrinsics
+- explicit host boundaries via `fs_read_text`, `fs_write_text`, and `args_get`
+
+### Benchmark: same Kooix source, interpreter vs native
+
+```bash
+./scripts/benchmark_text_scan.sh
+```
+
+Current baseline from this session:
+
+- interpreter_avg_s ≈ `4.41`
+- native_avg_s ≈ `0.01`
+- native speedup ≈ `441x`
+
 ## JSON Contract and Gate Strategy
 
 Core contract fields:
@@ -204,4 +242,5 @@ Recommended local regression before push:
 - Bootstrap and heavy gates: `BOOTSTRAP.md`
 - JSON contract policy: `docs/CHECK-JSON-CONTRACT.md`
 - Self-host roadmap: `docs/ROADMAP-SELFHOST.md`
+- showcase: `docs/SHOWCASE.md`
 - Grammar and examples: `docs/Grammar-Core-v0.ebnf`, `docs/Grammar-AI-v1.ebnf`, `docs/Grammar-Examples.md`

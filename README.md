@@ -100,6 +100,44 @@ cargo run -p kooixc -- --version
 ./scripts/bootstrap_ci_sanity_smoke.sh
 ```
 
+## Demo 与 Benchmark
+
+### Demo：日志分级与报告生成
+
+Kooix 版本的 demo 应用位于：
+
+- `examples/demo_log_triage_lib.kooix`
+- `examples/demo_log_triage_main.kooix`
+- `examples/demo_log_triage_sample.log`
+
+运行：
+
+```bash
+cargo run -p kooixc -- native examples/demo_log_triage_main.kooix /tmp/kx-demo-log-triage --run -- \
+  examples/demo_log_triage_sample.log /tmp/kx-demo-log-triage.report
+
+cat /tmp/kx-demo-log-triage.report
+```
+
+它展示了：
+
+- module-aware imports
+- typed records / enums / `match`
+- `while` + `Text` intrinsics 做确定性扫描
+- `fs_read_text` / `fs_write_text` / `args_get` 的宿主边界
+
+### Benchmark：同一份 Kooix 源码，解释执行 vs native
+
+```bash
+./scripts/benchmark_text_scan.sh
+```
+
+当前基线（本次会话实测）：
+
+- interpreter_avg_s ≈ `4.41`
+- native_avg_s ≈ `0.01`
+- native speedup ≈ `441x`
+
 ## JSON 契约与门禁策略
 
 统一契约核心字段：
@@ -204,4 +242,5 @@ Summary 字段约定（主 CI 与 heavy 一致）：
 - 自举与重载细节：`BOOTSTRAP.md`
 - JSON 契约策略：`docs/CHECK-JSON-CONTRACT.md`
 - 自举路线图：`docs/ROADMAP-SELFHOST.md`
+- showcase：`docs/SHOWCASE.md`
 - 语法与示例：`docs/Grammar-Core-v0.ebnf`、`docs/Grammar-AI-v1.ebnf`、`docs/Grammar-Examples.md`

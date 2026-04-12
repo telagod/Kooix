@@ -1,0 +1,219 @@
+import "../stdlib/prelude";
+
+record ScanStats {
+  lines: Int;
+  errors: Int;
+  warnings: Int;
+  infos: Int;
+  critical: Int;
+  score: Int;
+};
+
+enum Health { Healthy; Degraded; Critical; };
+
+fn dec1(x: Int) -> Int {
+  let prev: Int = 0;
+  let cur: Int = 0;
+  let done: Bool = false;
+  while done == false {
+    if cur == x {
+      done = true;
+      0
+    } else {
+      prev = cur;
+      cur = cur + 1;
+      0
+    }
+  };
+  prev
+};
+
+fn int_ge(a: Int, b: Int) -> Bool {
+  if a == b {
+    true
+  } else {
+    let i: Int = 0;
+    let done: Bool = false;
+    let out: Bool = false;
+    while done == false {
+      if i == a {
+        done = true;
+        out = false;
+        0
+      } else {
+        if i == b {
+          done = true;
+          out = true;
+          0
+        } else {
+          i = i + 1;
+          0
+        }
+      }
+    };
+    out
+  }
+};
+
+fn classify_log(content: Text) -> ScanStats {
+  let i: Int = 0;
+  let n: Int = text_len(content);
+  let lines: Int = 0;
+  let errors: Int = 0;
+  let warnings: Int = 0;
+  let infos: Int = 0;
+  let critical: Int = 0;
+  let score: Int = 0;
+  let at_line_start: Bool = true;
+  let done: Bool = false;
+
+  while done == false {
+    if i == n {
+      done = true;
+      0
+    } else {
+      match text_byte_at(content, i) {
+        None => {
+          done = true;
+          0
+        };
+        Some(b) => {
+          if at_line_start == true {
+            match text_slice(content, i, n) {
+              None => 0;
+              Some(rest) => {
+                if text_starts_with(rest, "CRITICAL") {
+                  critical = critical + 1;
+                  errors = errors + 1;
+                  score = score + 10;
+                  0
+                } else {
+                  if text_starts_with(rest, "ERROR") {
+                    errors = errors + 1;
+                    score = score + 5;
+                    0
+                  } else {
+                    if text_starts_with(rest, "WARN") {
+                      warnings = warnings + 1;
+                      score = score + 2;
+                      0
+                    } else {
+                      if text_starts_with(rest, "INFO") {
+                        infos = infos + 1;
+                        score = score + 1;
+                        0
+                      } else {
+                        0
+                      }
+                    }
+                  }
+                }
+              };
+            };
+            at_line_start = false;
+            0
+          } else {
+            0
+          };
+
+          if b == 10 {
+            lines = lines + 1;
+            at_line_start = true;
+            0
+          } else {
+            0
+          };
+
+          i = i + 1;
+          0
+        };
+      }
+    }
+  };
+
+  if n == 0 {
+    0
+  } else {
+    match text_byte_at(content, dec1(n)) {
+      None => 0;
+      Some(last) => {
+        if last == 10 { 0 } else {
+          lines = lines + 1;
+          0
+        }
+      };
+    }
+  };
+
+  ScanStats {
+    lines: lines;
+    errors: errors;
+    warnings: warnings;
+    infos: infos;
+    critical: critical;
+    score: score;
+  }
+};
+
+fn health_from_stats(stats: ScanStats) -> Health {
+  if stats.critical != 0 {
+    Health.Critical
+  } else {
+    if int_ge(stats.errors, 3) {
+      Health.Critical
+    } else {
+      if stats.errors != 0 {
+        Health.Degraded
+      } else {
+        if int_ge(stats.warnings, 5) {
+          Health.Degraded
+        } else {
+          Health.Healthy
+        }
+      }
+    }
+  }
+};
+
+fn health_text(level: Health) -> Text {
+  match level {
+    Healthy => "healthy";
+    Degraded => "degraded";
+    Critical => "critical";
+  }
+};
+
+fn render_report(stats: ScanStats) -> Text {
+  let report: Text = "Kooix Demo: log triage report\n";
+  let level: Health = health_from_stats(stats);
+
+  report = text_concat(report, "status=");
+  report = text_concat(report, health_text(level));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "lines=");
+  report = text_concat(report, int_to_text(stats.lines));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "errors=");
+  report = text_concat(report, int_to_text(stats.errors));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "warnings=");
+  report = text_concat(report, int_to_text(stats.warnings));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "infos=");
+  report = text_concat(report, int_to_text(stats.infos));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "critical=");
+  report = text_concat(report, int_to_text(stats.critical));
+  report = text_concat(report, "\n");
+
+  report = text_concat(report, "score=");
+  report = text_concat(report, int_to_text(stats.score));
+  report = text_concat(report, "\n");
+
+  report
+};
