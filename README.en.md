@@ -8,6 +8,23 @@ Kooix is a strongly typed language and toolchain for **AI-native automation, wor
 
 > Current stable release: [`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
 
+```text
+Kooix Demo: log triage report
+status=critical
+lines=6
+errors=2
+warnings=1
+infos=3
+critical=1
+score=20
+```
+
+| Scenario | Path | Result |
+| --- | --- | --- |
+| Validate logic quickly | `kooixc run` | interpreter-first iteration |
+| Ship real execution | `kooixc native` | compile to a runnable native binary |
+| Hot-path text scan benchmark | same Kooix source | native vs interpreter ≈ `441x` |
+
 ## Capability Highlights
 
 - statically check multi-file Kooix programs with `kooixc check` / `check-modules`
@@ -164,6 +181,19 @@ It showcases:
 - typed records / enums / `match`
 - deterministic scanning with `while` + `Text` intrinsics
 - explicit host boundaries via `fs_read_text`, `fs_write_text`, and `args_get`
+
+Example output:
+
+```text
+Kooix Demo: log triage report
+status=critical
+lines=6
+errors=2
+warnings=1
+infos=3
+critical=1
+score=20
+```
 
 ### Benchmark: same Kooix source, interpreter vs native
 

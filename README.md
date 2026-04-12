@@ -8,6 +8,23 @@ Kooix 是一个面向 **AI-native automation / workflow / agent tooling** 的强
 
 > 当前正式版本：[`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
 
+```text
+Kooix Demo: log triage report
+status=critical
+lines=6
+errors=2
+warnings=1
+infos=3
+critical=1
+score=20
+```
+
+| 场景 | 路径 | 结果 |
+| --- | --- | --- |
+| 快速验证逻辑 | `kooixc run` | 解释执行，迭代快 |
+| 真实部署执行 | `kooixc native` | 编译为本地二进制 |
+| 热路径文本扫描 benchmark | 同一份 Kooix 源码 | native 相比 interpreter ≈ `441x` |
+
 ## 能力亮点
 
 - 用 `kooixc check` / `check-modules` 做多文件 Kooix 程序的静态检查
@@ -164,6 +181,19 @@ cat /tmp/kx-demo-log-triage.report
 - typed records / enums / `match`
 - `while` + `Text` intrinsics 做确定性扫描
 - `fs_read_text` / `fs_write_text` / `args_get` 的宿主边界
+
+示例输出：
+
+```text
+Kooix Demo: log triage report
+status=critical
+lines=6
+errors=2
+warnings=1
+infos=3
+critical=1
+score=20
+```
 
 ### Benchmark：同一份 Kooix 源码，解释执行 vs native
 
