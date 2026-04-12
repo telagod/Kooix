@@ -4,7 +4,23 @@
 
 [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
-Kooix is an **AI-native, strongly typed** language prototype (MVP). The project focuses on moving AI capability constraints, workflow constraints, and auditability signals as early as possible into compile-time checks.
+Kooix is a strongly typed language and toolchain for **AI-native automation, workflow, and agent tooling**. Its goal is not to be “just another scripting language”, but to move capability boundaries, workflow constraints, evidence, and diagnostics as early as possible into compile-time checks and auditable runtime boundaries.
+
+> Current stable release: [`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
+
+## What you can do today
+
+- statically check multi-file Kooix programs with `kooixc check` / `check-modules`
+- prototype with the interpreter via `kooixc run`
+- compile to runnable native binaries via `kooixc native` / `native-llvm`
+- distribute the CLI through Linux / macOS release bundles
+- build small file-processing and automation tools with the current stdlib + host intrinsics
+
+## Who this is for
+
+- language / platform engineers who want explicit capability boundaries for AI and agent systems
+- teams that want a clear “interpreter first, native later” path for deterministic automation tools
+- contributors pushing the self-hosting / bootstrap roadmap forward
 
 ## Project Positioning
 
@@ -13,18 +29,34 @@ Kooix is an **AI-native, strongly typed** language prototype (MVP). The project 
 - Evidence-first: critical paths carry `evidence` for trace/metrics auditing.
 - Workflow/Agent as first-class: `workflow` / `agent` are semantically checked constructs.
 
-## Current Development Status (as of 2026-03-01)
+## Current Product Status (as of 2026-04-13)
 
 | Area | Status | Evidence |
 | --- | --- | --- |
+| Stable release | Shipped | `v0.1.0` publishes Linux/macOS release bundles |
 | Compiler pipeline | Operational | `Source -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic -> LLVM IR -> llc+clang` |
 | Language subset | Usable | `cap/record/enum/fn/workflow/agent`, `match`, record projection, enum variant namespacing, explicit generic type args |
-| CLI surface | Usable | `check`, `check-modules`, `ast/hir/mir/llvm`, `run`, `native`, `native-llvm` |
+| CLI surface | Usable | `check`, `check-modules`, `ast/hir/mir/llvm`, `run`, `native`, `native-llvm`, `--help`, `--version` |
+| Demo / showcase | Landed | `demo_log_triage` + `benchmark_text_scan` are in-tree and validated |
 | Module-aware gate | Landed | `check-modules --json --pretty --strict-warnings` in CI |
-| Bootstrap path | Landed | `bootstrap_v0_13.sh` builds `dist/kooixc1`; heavy gate via `bootstrap_heavy_gate.sh` |
+| Bootstrap path | Landed | `bootstrap_v0_13.sh` builds `dist/kooixc1`; manual `bootstrap-heavy` gate is green |
 | JSON contract governance | Closed loop | unified `schema_version + summary`, strict/window ranges, fixture matrix, drift triage smoke, PR docs-sync gate |
-| CI observability | Unified | summary fields standardized as `state/schema/phase/log` with failure artifacts |
 | Release distribution | Landed | `release.yml` publishes Linux/macOS binary tarballs and `SHA256SUMS` on `v*` tags |
+
+## Current Boundaries
+
+This is already usable as a productized CLI and release pipeline, but it is not yet a “finished general-purpose language”. Today it is best suited for:
+
+- small deterministic automation and scanner-style tools
+- AI workflow / capability modeling experiments
+- self-hosting and bootstrap validation work
+
+Current explicit limitations:
+
+- `native` / `native-llvm` still require host `llc` and `clang`
+- release bundles currently cover Linux + macOS, not Windows
+- the implemented language subset is practical, but not a full general-purpose language
+- self-hosting is in the runnable stage, but still short of complete L2/L3 closure
 
 ## Repository Map
 
@@ -45,15 +77,36 @@ Kooix is an **AI-native, strongly typed** language prototype (MVP). The project 
 ### Installation
 
 ```bash
-# Option 1: install the CLI directly from GitHub
+# Option 1: download the stable release bundle (recommended)
+# https://github.com/telagod/Kooix/releases/tag/v0.1.0
+
+# Option 2: install the CLI directly from GitHub
 cargo install --git https://github.com/telagod/Kooix.git --locked kooixc
 
-# Option 2: download prebuilt binaries from GitHub Releases
-# Every v* tag publishes:
-#   kooixc-<version>-x86_64-unknown-linux-gnu.tar.gz
-#   kooixc-<version>-x86_64-apple-darwin.tar.gz
-#   kooixc-<version>-aarch64-apple-darwin.tar.gz
-# plus SHA256SUMS
+# Verify the install
+kooixc --version
+kooixc --help
+```
+
+The current stable release ships:
+
+- `kooixc-0.1.0-x86_64-unknown-linux-gnu.tar.gz`
+- `kooixc-0.1.0-x86_64-apple-darwin.tar.gz`
+- `kooixc-0.1.0-aarch64-apple-darwin.tar.gz`
+- `SHA256SUMS`
+
+## 3-Minute Quickstart
+
+```bash
+# 1) Inspect the CLI
+kooixc --version
+kooixc --help
+
+# 2) Run a minimal program
+kooixc run examples/run.kooix
+
+# 3) Perform a static check
+kooixc check examples/valid.kooix
 ```
 
 ### Common Commands
@@ -137,6 +190,21 @@ Current baseline from this session:
 - interpreter_avg_s ≈ `4.41`
 - native_avg_s ≈ `0.01`
 - native speedup ≈ `441x`
+
+The important point is not “peak benchmark glory”, but that the same Kooix source can:
+
+- start in interpreter mode for fast iteration
+- move to native mode once the path stabilizes
+- deliver materially lower runtime overhead for deterministic scanner / rule-processing workloads
+
+## Why this reads like a product now
+
+- **Stable release**: `v0.1.0`
+- **Binary distribution**: Linux / macOS bundles
+- **Post-install smoke path**: `--version`, `--help`, `check`, `run`
+- **Showcase included**: demo app + benchmark
+- **Quality gates**: `ci`, `bootstrap-heavy`, JSON contract, docs-sync
+- **Engineering path forward**: release pipeline, artifacts, bootstrap, roadmap
 
 ## JSON Contract and Gate Strategy
 

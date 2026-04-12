@@ -4,7 +4,23 @@
 
 [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security](SECURITY.md)
 
-Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标是把 AI 系统中的 capability 约束、workflow 约束和可审计信息尽可能前移到 compile-time。
+Kooix 是一个面向 **AI-native automation / workflow / agent tooling** 的强类型语言与工具链。它的目标不是做另一门通用脚本语言，而是把 capability、workflow、evidence、diagnostics 这些 AI 系统里最容易失控的部分，尽可能前移到 compile-time 和可审计的运行边界。
+
+> 当前正式版本：[`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
+
+## 这版能做什么
+
+- 用 `kooixc check` / `check-modules` 做多文件 Kooix 程序的静态检查
+- 用 `kooixc run` 快速解释执行 Kooix-Core 子集
+- 用 `kooixc native` / `native-llvm` 生成可运行的本地二进制
+- 用 release 包直接分发 Linux / macOS CLI
+- 用现有 stdlib + host intrinsics 写出小型文件处理与自动化工具
+
+## 适合谁
+
+- 想把 AI/Agent 工具链里的能力边界显式化的语言/平台开发者
+- 想用一门小语言快速验证“解释执行 → native 编译”双路径的工程团队
+- 想沿着 self-host / bootstrap 路线继续推进编译器演化的贡献者
 
 ## 项目定位
 
@@ -13,18 +29,34 @@ Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标�
 - Evidence-first：关键链路声明 `evidence`，为 trace/metrics 审计提供结构化入口。
 - Workflow/Agent first-class：`workflow` / `agent` 是语义对象，不是脚本拼接。
 
-## 当前开发状态（截至 2026-03-01）
+## 当前产品状态（截至 2026-04-13）
 
 | 维度 | 状态 | 依据 |
 | --- | --- | --- |
+| 正式发布 | 已发布 | `v0.1.0` 已提供 Linux/macOS release 包 |
 | Compiler 主链路 | 可运行 | `Source -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic -> LLVM IR -> llc+clang` |
 | 语言子集 | 可用 | `cap/record/enum/fn/workflow/agent`、`match`、record projection、enum variant namespacing、显式 generic type args |
-| CLI 命令 | 可用 | `check`、`check-modules`、`ast/hir/mir/llvm`、`run`、`native`、`native-llvm` |
+| CLI 命令 | 可用 | `check`、`check-modules`、`ast/hir/mir/llvm`、`run`、`native`、`native-llvm`、`--help`、`--version` |
+| Demo / Showcase | 已落地 | `demo_log_triage` + `benchmark_text_scan` 已入仓并实测 |
 | Module-aware gate | 已落地 | `check-modules --json --pretty --strict-warnings` 已进入 CI |
-| Bootstrap | 已落地 | `bootstrap_v0_13.sh` 产出 `dist/kooixc1`，`bootstrap_heavy_gate.sh` 提供重载门禁 |
+| Bootstrap | 已落地 | `bootstrap_v0_13.sh` 产出 `dist/kooixc1`，`bootstrap-heavy` 手动 gate 已转绿 |
 | JSON 契约治理 | 已闭环 | `schema_version + summary` 统一、strict/window、fixture matrix、drift triage smoke、PR docs-sync gate |
-| CI 可观测性 | 已统一 | Summary 字段统一为 `state/schema/phase/log`，并配套 failure artifacts |
 | Release 分发 | 已落地 | `release.yml` 在 `v*` tag 产出 Linux/macOS binary tarball 与 `SHA256SUMS` |
+
+## 当前边界
+
+这不是“所有场景都成熟”的 1.0 通用语言，当前更适合：
+
+- 小型 deterministic automation / scanner / tool
+- AI workflow / capability 建模实验
+- self-host/bootstrap 路线验证
+
+当前仍明确依赖或限制：
+
+- `native` / `native-llvm` 仍要求宿主机提供 `llc` 与 `clang`
+- release 包当前提供 Linux + macOS，尚未提供 Windows 正式产物
+- 语言子集已能覆盖 records/enums/match/while/text/file IO 等核心路径，但还不是完整通用语言
+- self-host 路线已进入可运行阶段，但距离完整 L2/L3 仍有 stdlib/runtime 与更完整模块系统差距
 
 ## 目录速览
 
@@ -45,15 +77,36 @@ Kooix 是一个 **AI-native、强类型** 语言原型（MVP），核心目标�
 ### 安装
 
 ```bash
-# 方式 1：直接从 GitHub 安装 CLI
+# 方式 1：从正式 release 下载预编译包（推荐）
+# https://github.com/telagod/Kooix/releases/tag/v0.1.0
+
+# 方式 2：直接从 GitHub 安装 CLI
 cargo install --git https://github.com/telagod/Kooix.git --locked kooixc
 
-# 方式 2：从 GitHub Releases 下载预编译包
-# tag v* 会生成：
-#   kooixc-<version>-x86_64-unknown-linux-gnu.tar.gz
-#   kooixc-<version>-x86_64-apple-darwin.tar.gz
-#   kooixc-<version>-aarch64-apple-darwin.tar.gz
-# 并附带 SHA256SUMS
+# 安装后校验
+kooixc --version
+kooixc --help
+```
+
+正式 release 当前提供：
+
+- `kooixc-0.1.0-x86_64-unknown-linux-gnu.tar.gz`
+- `kooixc-0.1.0-x86_64-apple-darwin.tar.gz`
+- `kooixc-0.1.0-aarch64-apple-darwin.tar.gz`
+- `SHA256SUMS`
+
+## 3 分钟上手
+
+```bash
+# 1) 查看 CLI
+kooixc --version
+kooixc --help
+
+# 2) 跑一个最小程序
+kooixc run examples/run.kooix
+
+# 3) 做一次静态检查
+kooixc check examples/valid.kooix
 ```
 
 ### 常用命令
@@ -137,6 +190,21 @@ cat /tmp/kx-demo-log-triage.report
 - interpreter_avg_s ≈ `4.41`
 - native_avg_s ≈ `0.01`
 - native speedup ≈ `441x`
+
+这组结果的意义不是“语言已经极限优化”，而是：
+
+- 同一份 Kooix 源码可以先走解释执行快速迭代
+- 当路径稳定后，可直接切到 native 得到数量级更低的运行开销
+- 对日志扫描、规则匹配、确定性自动化这类 workload，当前模型已经足够有展示价值
+
+## 为什么它像一个产品，而不只是实验代码
+
+- **有正式 release**：`v0.1.0`
+- **有二进制分发**：Linux / macOS
+- **有安装后 smoke 路径**：`--version` / `--help` / `check` / `run`
+- **有 showcase**：demo + benchmark
+- **有门禁**：`ci`、`bootstrap-heavy`、JSON contract、docs-sync
+- **有工程化演进线**：release、artifacts、bootstrap、roadmap
 
 ## JSON 契约与门禁策略
 
