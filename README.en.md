@@ -8,13 +8,13 @@ Kooix is a strongly typed language and toolchain for **AI-native automation, wor
 
 > Current stable release: [`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
 
-## What you can do today
+## Capability Highlights
 
 - statically check multi-file Kooix programs with `kooixc check` / `check-modules`
 - prototype with the interpreter via `kooixc run`
 - compile to runnable native binaries via `kooixc native` / `native-llvm`
-- distribute the CLI through Linux / macOS release bundles
-- build small file-processing and automation tools with the current stdlib + host intrinsics
+- build log scanners, rule matchers, file processors, and automation tools with the current stdlib + host intrinsics
+- move the same source along a `run -> native` path as it matures
 
 ## Who this is for
 
@@ -29,19 +29,21 @@ Kooix is a strongly typed language and toolchain for **AI-native automation, wor
 - Evidence-first: critical paths carry `evidence` for trace/metrics auditing.
 - Workflow/Agent as first-class: `workflow` / `agent` are semantically checked constructs.
 
-## Current Product Status (as of 2026-04-13)
+## Current Showcase Status (as of 2026-04-13)
 
 | Area | Status | Evidence |
 | --- | --- | --- |
-| Stable release | Shipped | `v0.1.0` publishes Linux/macOS release bundles |
 | Compiler pipeline | Operational | `Source -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic -> LLVM IR -> llc+clang` |
 | Language subset | Usable | `cap/record/enum/fn/workflow/agent`, `match`, record projection, enum variant namespacing, explicit generic type args |
 | CLI surface | Usable | `check`, `check-modules`, `ast/hir/mir/llvm`, `run`, `native`, `native-llvm`, `--help`, `--version` |
 | Demo / showcase | Landed | `demo_log_triage` + `benchmark_text_scan` are in-tree and validated |
-| Module-aware gate | Landed | `check-modules --json --pretty --strict-warnings` in CI |
-| Bootstrap path | Landed | `bootstrap_v0_13.sh` builds `dist/kooixc1`; manual `bootstrap-heavy` gate is green |
-| JSON contract governance | Closed loop | unified `schema_version + summary`, strict/window ranges, fixture matrix, drift triage smoke, PR docs-sync gate |
-| Release distribution | Landed | `release.yml` publishes Linux/macOS binary tarballs and `SHA256SUMS` on `v*` tags |
+| Stable release | Shipped | `v0.1.0` publishes Linux/macOS release bundles |
+
+## Why it is worth trying now
+
+- **AI/automation-first semantics**: capability, workflow, and evidence concepts are modeled in the language rather than added later as comments
+- **Practical small-tool surface**: records, enums, `match`, `while`, `Text`, file IO, and args handling already cover real workloads
+- **Iteration path built in**: validate in interpreter mode first, then switch the same source to native mode for real runtime gains
 
 ## Current Boundaries
 
@@ -137,22 +139,6 @@ cargo run -p kooixc -- --help
 cargo run -p kooixc -- --version
 ```
 
-### 10-Minute Regression Baseline
-
-```bash
-# 1) Core JSON contract assertions
-./scripts/check_json_contract.sh --assert
-
-# 2) Schema rollback matrix (v1/v2 + strict/window)
-./scripts/check_json_schema_fixture_matrix.sh --assert
-
-# 3) Drift triage smoke (range-pass/range-fail/shape-pass)
-./scripts/check_json_schema_drift_triage_smoke.sh
-
-# 4) CI-equivalent lightweight bootstrap smoke
-./scripts/bootstrap_ci_sanity_smoke.sh
-```
-
 ## Demo and Benchmark
 
 ### Demo: log triage and report generation
@@ -197,16 +183,22 @@ The important point is not “peak benchmark glory”, but that the same Kooix s
 - move to native mode once the path stabilizes
 - deliver materially lower runtime overhead for deterministic scanner / rule-processing workloads
 
-## Why this reads like a product now
+## Language Advantages
 
-- **Stable release**: `v0.1.0`
-- **Binary distribution**: Linux / macOS bundles
-- **Post-install smoke path**: `--version`, `--help`, `check`, `run`
-- **Showcase included**: demo app + benchmark
-- **Quality gates**: `ci`, `bootstrap-heavy`, JSON contract, docs-sync
-- **Engineering path forward**: release pipeline, artifacts, bootstrap, roadmap
+- **Explicit host boundary**: file IO, argv, and capability edges are visible in source instead of hidden in ambient runtime state
+- **Static validation first**: structure and constraints can be checked before execution
+- **Dual execution model**: the same source runs in interpreter mode and compiles to native
+- **Strong fit for deterministic tooling**: text scanning, rule classification, and report generation map well to the current language/runtime surface
 
-## JSON Contract and Gate Strategy
+## Further Reading
+
+- showcase: `docs/SHOWCASE.md`
+- architecture: `DESIGN.md`
+- self-host roadmap: `docs/ROADMAP-SELFHOST.md`
+- JSON contract policy: `docs/CHECK-JSON-CONTRACT.md`
+- bootstrap details: `BOOTSTRAP.md`
+
+## Engineering and Gates (for contributors)
 
 Core contract fields:
 
@@ -304,11 +296,4 @@ Recommended local regression before push:
 ./scripts/check_json_schema_drift_triage_smoke.sh
 ```
 
-## Documentation Map
-
-- Architecture: `DESIGN.md`
-- Bootstrap and heavy gates: `BOOTSTRAP.md`
-- JSON contract policy: `docs/CHECK-JSON-CONTRACT.md`
-- Self-host roadmap: `docs/ROADMAP-SELFHOST.md`
-- showcase: `docs/SHOWCASE.md`
 - Grammar and examples: `docs/Grammar-Core-v0.ebnf`, `docs/Grammar-AI-v1.ebnf`, `docs/Grammar-Examples.md`

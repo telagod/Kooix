@@ -8,13 +8,13 @@ Kooix 是一个面向 **AI-native automation / workflow / agent tooling** 的强
 
 > 当前正式版本：[`v0.1.0`](https://github.com/telagod/Kooix/releases/tag/v0.1.0)
 
-## 这版能做什么
+## 能力亮点
 
 - 用 `kooixc check` / `check-modules` 做多文件 Kooix 程序的静态检查
 - 用 `kooixc run` 快速解释执行 Kooix-Core 子集
 - 用 `kooixc native` / `native-llvm` 生成可运行的本地二进制
-- 用 release 包直接分发 Linux / macOS CLI
-- 用现有 stdlib + host intrinsics 写出小型文件处理与自动化工具
+- 用现有 stdlib + host intrinsics 写出日志扫描、规则匹配、文件处理、自动化工具
+- 同一份源码可沿着 `run -> native` 路径逐步提速
 
 ## 适合谁
 
@@ -29,23 +29,25 @@ Kooix 是一个面向 **AI-native automation / workflow / agent tooling** 的强
 - Evidence-first：关键链路声明 `evidence`，为 trace/metrics 审计提供结构化入口。
 - Workflow/Agent first-class：`workflow` / `agent` 是语义对象，不是脚本拼接。
 
-## 当前产品状态（截至 2026-04-13）
+## 当前可展示能力（截至 2026-04-13）
 
 | 维度 | 状态 | 依据 |
 | --- | --- | --- |
-| 正式发布 | 已发布 | `v0.1.0` 已提供 Linux/macOS release 包 |
 | Compiler 主链路 | 可运行 | `Source -> Lexer -> Parser(AST) -> HIR -> MIR -> Semantic -> LLVM IR -> llc+clang` |
 | 语言子集 | 可用 | `cap/record/enum/fn/workflow/agent`、`match`、record projection、enum variant namespacing、显式 generic type args |
 | CLI 命令 | 可用 | `check`、`check-modules`、`ast/hir/mir/llvm`、`run`、`native`、`native-llvm`、`--help`、`--version` |
 | Demo / Showcase | 已落地 | `demo_log_triage` + `benchmark_text_scan` 已入仓并实测 |
-| Module-aware gate | 已落地 | `check-modules --json --pretty --strict-warnings` 已进入 CI |
-| Bootstrap | 已落地 | `bootstrap_v0_13.sh` 产出 `dist/kooixc1`，`bootstrap-heavy` 手动 gate 已转绿 |
-| JSON 契约治理 | 已闭环 | `schema_version + summary` 统一、strict/window、fixture matrix、drift triage smoke、PR docs-sync gate |
-| Release 分发 | 已落地 | `release.yml` 在 `v*` tag 产出 Linux/macOS binary tarball 与 `SHA256SUMS` |
+| 发布可用 | 已发布 | `v0.1.0` 已提供 Linux/macOS release 包 |
+
+## 为什么现在值得看
+
+- **对 AI/automation 友好**：capability、workflow、evidence 这些概念不是后补注释，而是语言对象
+- **对小工具友好**：records / enums / `match` / `while` / `Text` / file IO 已能覆盖一批真实任务
+- **对演进友好**：可以先解释执行验证逻辑，再切到 native 看真实性能收益
 
 ## 当前边界
 
-这不是“所有场景都成熟”的 1.0 通用语言，当前更适合：
+这不是“所有场景都成熟”的通用语言，当前更适合：
 
 - 小型 deterministic automation / scanner / tool
 - AI workflow / capability 建模实验
@@ -137,22 +139,6 @@ cargo run -p kooixc -- --help
 cargo run -p kooixc -- --version
 ```
 
-### 10 分钟回归（推荐）
-
-```bash
-# 1) JSON 契约主断言
-./scripts/check_json_contract.sh --assert
-
-# 2) schema rollback matrix（v1/v2 + strict/window）
-./scripts/check_json_schema_fixture_matrix.sh --assert
-
-# 3) schema drift triage smoke（range-pass/range-fail/shape-pass）
-./scripts/check_json_schema_drift_triage_smoke.sh
-
-# 4) CI 同款 bootstrap 轻量链路
-./scripts/bootstrap_ci_sanity_smoke.sh
-```
-
 ## Demo 与 Benchmark
 
 ### Demo：日志分级与报告生成
@@ -197,16 +183,22 @@ cat /tmp/kx-demo-log-triage.report
 - 当路径稳定后，可直接切到 native 得到数量级更低的运行开销
 - 对日志扫描、规则匹配、确定性自动化这类 workload，当前模型已经足够有展示价值
 
-## 为什么它像一个产品，而不只是实验代码
+## 语言优势
 
-- **有正式 release**：`v0.1.0`
-- **有二进制分发**：Linux / macOS
-- **有安装后 smoke 路径**：`--version` / `--help` / `check` / `run`
-- **有 showcase**：demo + benchmark
-- **有门禁**：`ci`、`bootstrap-heavy`、JSON contract、docs-sync
-- **有工程化演进线**：release、artifacts、bootstrap、roadmap
+- **显式宿主边界**：文件、argv、能力边界都在源码里可见，不是隐藏副作用
+- **静态检查先行**：在真正跑起来之前就能对结构与约束做检查
+- **双执行路径**：同一份源码既能解释执行，也能 native 化
+- **对 deterministic tooling 友好**：文本扫描、规则判断、报告生成这类工作负载非常贴合当前能力面
 
-## JSON 契约与门禁策略
+## 深入资料
+
+- showcase：`docs/SHOWCASE.md`
+- 架构设计：`DESIGN.md`
+- 自举路线图：`docs/ROADMAP-SELFHOST.md`
+- JSON 契约策略：`docs/CHECK-JSON-CONTRACT.md`
+- 自举与重载细节：`BOOTSTRAP.md`
+
+## 工程与门禁（给贡献者）
 
 统一契约核心字段：
 
@@ -304,11 +296,4 @@ Summary 字段约定（主 CI 与 heavy 一致）：
 ./scripts/check_json_schema_drift_triage_smoke.sh
 ```
 
-## 文档地图
-
-- 架构设计：`DESIGN.md`
-- 自举与重载细节：`BOOTSTRAP.md`
-- JSON 契约策略：`docs/CHECK-JSON-CONTRACT.md`
-- 自举路线图：`docs/ROADMAP-SELFHOST.md`
-- showcase：`docs/SHOWCASE.md`
 - 语法与示例：`docs/Grammar-Core-v0.ebnf`、`docs/Grammar-AI-v1.ebnf`、`docs/Grammar-Examples.md`
